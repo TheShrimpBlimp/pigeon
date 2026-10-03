@@ -10,6 +10,22 @@ to the official firmware.
 
 Multi-engine synthesizer firmware for the M-VAVE FM-1.
 
+## Features
+
+- **Six engines:** ANALOG (virtual analog), DIGITAL (4-operator FM), PHASE (CZ-style phase
+  distortion), LOFI (chiptune), SAMPLE (multisampled instruments + 3 user slots), VOICE
+  (formant oscillator, sung vowels)
+- **Four tracks:** three synth parts, each with its own engine and sound, plus a GM drum track;
+  8 voices shared between the parts
+- **Sequencer:** 64 steps per track with chords, ties, accent and slide; live loop recording
+  with overdub; each track loops on its own length
+- **Arpeggiator**, scales and quantize, glide, MONO / LEGATO / UNISON voice modes
+- **Effects:** distortion, chorus, delay and reverb sends, master limiter
+- **Presets:** factory presets with their own patterns, 32 user preset slots, 4 project slots
+- **Web editor:** every parameter, step grid, track mixer, preset library, sample upload
+- **USB:** class-compliant MIDI in and out (channels 1–3 for the parts, 10 for drums);
+  updates over the same USB cable
+
 - Install: [web installer](https://hugelton.github.io/Felucca/) (Chrome or Edge, USB), or `tools/fm1_install.py` from a terminal
 - Editor: [web editor](https://hugelton.github.io/Felucca/webapp/editor/)
 - Build: [BUILDING.md](BUILDING.md)
