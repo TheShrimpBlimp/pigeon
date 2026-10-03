@@ -14,7 +14,10 @@
 enum { V_POLY, V_MONO, V_LEGATO, V_UNISON };   /* P_VOICE */
 #define NSTEP 64
 #define HALF_FRAMES 256          /* I2S half buffer: 5.8 ms at 44.1 kHz */
-#define NENGINES 6
+#ifndef FELUCCA_SLICE
+#define FELUCCA_SLICE 0          /* the SLICE engine (eng_slice.c): kept in the tree, not built by default */
+#endif
+#define NENGINES (9 + FELUCCA_SLICE)   /* SLICE, when built, comes last: the other engines keep their numbers */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 
 /* ------------------------------------------------------- parameters --- */
@@ -44,6 +47,8 @@ enum {                          /* per-track parameters */
     P_DIST, P_CHOR, P_DLY, P_REV,
     P_VOICE, P_GLIDE, P_PAN, P_MUTE,
     P_GLMODE, P_PRIO, P_ALLOC, P_DETUNE,
+    P_SLCR, P_SLPAT, P_SLRATE, P_SLDEPTH,      /* SLICER insert (slicer.c); new common parameters go just
+                                                * before P_E0 (user presets and projects map by count) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -85,7 +90,7 @@ typedef struct {                 /* per-voice control-rate modulation, computed 
 
 typedef struct {
     const char *name;
-    uint8_t e[8];                /* P_E0..P_E7 */
+    int8_t e[8];                 /* P_E0..P_E7 (signed: an interval below the note; every value fits) */
     uint8_t env[4];              /* ATK DEC SUS REL */
     int8_t fenv;                 /* ENV -> FILTER amount (-64..63) */
     uint8_t mono;                /* 1 = MONO (bass / lead), 0 = POLY */
@@ -93,12 +98,10 @@ typedef struct {
     uint8_t fx[4];               /* DIST, CHORUS, DELAY, REVERB sends */
     uint8_t arp[4];              /* MODE, RATE, OCT, GATE */
     uint8_t pat;                 /* sequence pattern (PATTERNS[pat - 1]), loaded only into an empty sequencer */
-    int8_t mac[4];               /* ALGORITHM macro (VOICE): engine param E index + 1, step per detent; x2, 0 = none */
 } preset_t;
 #define FX(d, c, dl, r) .fx = {(d) + 1, (c) + 1, (dl) + 1, (r) + 1}
 #define ARP(m, rt, o, g) .arp = {(m) + 1, (rt) + 1, (o) + 1, (g) + 1}
 #define PAT(n) .pat = (n)
-#define MAC(t1, d1, t2, d2) .mac = {(t1) + 1, (d1), (t2) + 1, (d2)}
 
 struct track;
 typedef struct {
@@ -113,13 +116,21 @@ typedef struct {
     uint16_t color;              /* accent colour of the engine (RGB565) */
     uint8_t macro[4];            /* HOME: the four parameters on KNOB 1..4 */
     uint8_t poly;                /* voice cap for POLY and UNISON, 0 = NVOICE */
+    /* optional (0 = none): the voice amplitude instead of the ADSR curve, once per control tick;
+     * gets the ADSR value (Q15, env_tick already ran: it still gates the voice), returns Q15 */
+    int32_t (*amp)(struct track *t, voice_t *v, int32_t adsr);
+    /* optional: a mode-dependent descriptor of EDIT k (the same range and default as edit[k],
+     * another label / value names), 0 = edit[k] */
+    const param_desc_t *(*desc)(const struct track *t, uint32_t k);
+    /* optional: once per block and part, before its voices (also with no voice sounding) */
+    void (*block)(struct track *t);
 } engine_t;
 
 /* ------------------------------------------------------------ track --- */
 enum { ST_NOTE, ST_TIE, ST_REST };
 #define SF_ACCENT 1u
 #define SF_SLIDE 2u
-typedef struct {                 /* 303-style step: up to 4 notes (POLY), time, accent, slide */
+typedef struct {                 /* acid-style step: up to 4 notes (POLY), time, accent, slide */
     uint8_t note[4];
     uint8_t n;                   /* notes in use, 0 = empty */
     uint8_t time;                /* ST_NOTE / ST_TIE / ST_REST */
@@ -160,6 +171,12 @@ typedef struct track {
     uint8_t seq_active;          /* any step programmed */
     uint8_t rskip_idx;           /* live recording put notes into the step about to play: */
     uint8_t rskip_n, rskip[4];   /* do not trigger them again there (they sound already) */
+    /* live recording of held notes (seq.c rec_hold): the steps they are held into become TIEs */
+    uint8_t rh_n, rh_note[4];    /* recorded notes still held, 0 = none */
+    uint8_t rh_start;            /* the step they were recorded into */
+    uint8_t rh_ties;             /* TIE steps written after it */
+    uint8_t rh_last;             /* the last of them; rh_bak: what it held (an early release puts it back) */
+    step_t rh_bak;
     /* mono */
     uint8_t mono_stack[8];
     uint8_t nmono;
@@ -170,6 +187,10 @@ typedef struct track {
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST insert state (fx.c) */
     uint8_t tail;                /* blocks to mix after the last voice (the DIST tail) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
+    /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
+    uint8_t xf_on, xf;           /* fading; blocks of the fade still to render */
+    int16_t pe_old[8];           /* P_E0..P_E7 of the sounding engine: the fade renders with these */
+    uint8_t xp_n, xp_note[4], xp_vel[4];   /* note-ons during the fade, played on the new engine */
 } track_t;
 
 typedef struct {

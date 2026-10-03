@@ -64,17 +64,29 @@ static void draw_head(void)
     if (rec)                                          /* recording armed: white = this track, gray = another */
         cv_rect(18, 6, 6, 6, rec == 2u ? C_WHITE : C_GRAY);
     fmt_int(b, song.g[G_BPM]);
-    x = cv_text(32, 1, &FONT_S, b, ui.bpm_t ? C_WHITE : C_HI);   /* white while SELECT turns it */
+    x = 32;
+    if (FELUCCA_ICONS) {                              /* metronome, then the BPM */
+        cv_icon(x, 2, ICON_TEMPO, C_GRAY);
+        x += 14;
+    }
+    x = cv_text(x, 1, &FONT_S, b, ui.bpm_t ? C_WHITE : C_HI);   /* white while SELECT turns it */
     if (song.octave) {
         str_cpy(b, song.octave > 0 ? "+" : "", 4);
         fmt_int(b + str_len(b), song.octave);
         cv_text(x + 12, 1, &FONT_S, "OCT", C_GRAY);
         cv_text(x + 40, 1, &FONT_S, b, C_HI);
     }
-    b[0] = 'T';                                       /* the selected track */
-    b[1] = (char)('1' + song.sel);
-    b[2] = 0;
-    cv_text(158, 1, &FONT_S, b, C_HI);
+    if (FELUCCA_ICONS) {                              /* the selected track: tape + number */
+        cv_icon(156, 2, ICON_TAPE, C_GRAY);
+        b[0] = (char)('1' + song.sel);
+        b[1] = 0;
+        cv_text(170, 1, &FONT_S, b, C_HI);
+    } else {
+        b[0] = 'T';
+        b[1] = (char)('1' + song.sel);
+        b[2] = 0;
+        cv_text(158, 1, &FONT_S, b, C_HI);
+    }
     {   /* battery, 3 bars; USB when a host is there */
         int32_t lvl = batt_shown(), k;
         int32_t bx = 236 - 19;                          /* right edge (the CPU figure is in the console) */
@@ -295,6 +307,30 @@ static void graph_fx(const track_t *t, uint16_t c)
         cv_rect(x - 3, 90 - h, 7, 1, c);
     }
 }
+/* SLICER page: the pattern's 16 steps, a 'x' step a full bar; a '.' step: GATE a bar as high as
+ * it stays open (DEPTH), STUT hatched (it repeats the last 'x'); the step playing underlined.
+ * Grey when the SLICER is OFF. */
+static void graph_slicer(const track_t *t, uint16_t c)
+{
+    uint32_t i, pat = sl_pattern(t), mode = (uint32_t)t->p[P_SLCR], cur = sl[t - trk].idx;
+    int32_t open = 70 - t->p[P_SLDEPTH] * 70 / 127;      /* px a closed GATE step keeps */
+    uint16_t col = mode == SL_OFF ? C_DIM : c;
+    for (i = 0; i < 16u; i++) {
+        int32_t x = 4 + (int32_t)i * 14 + (int32_t)(i / 4u) * 2, y;
+        if ((pat >> i) & 1u) {
+            cv_rect(x, 10, 11, 70, col);
+        } else if (mode == SL_STUT) {
+            for (y = 10; y < 80; y += 4)
+                cv_rect(x, y, 11, 1, col);
+        } else {
+            cv_rect(x, 79, 11, 1, C_LINE);
+            if (open)
+                cv_rect(x, 80 - open, 11, open, C_DIM);
+        }
+        if (mode != SL_OFF && i == cur)
+            cv_rect(x, 85, 11, 3, C_WHITE);
+    }
+}
 static uint32_t steps_hash(const track_t *t)
 {
     uint32_t h = 2166136261u, i;
@@ -326,6 +362,8 @@ static uint32_t graph_signature(void)
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
     h ^= (uint32_t)TSEL->preset * 7u + (uint32_t)song.g[G_SLOT] * 13u + TSEL->user * 257u + up_gen * 7919u + ui.uslot * 104729u;
+    if (pg->graph == GR_SLCR && t->p[P_SLCR])        /* the SLICER's step playing */
+        h ^= (sl[song.sel].idx + 1u) * 2654435761u;
     if (pg->graph == GR_SLOTS)                       /* (a checksum over each slot) */
         for (i = 0; i < 4u; i++)
             h ^= (uint32_t)project_used(i) << (20u + i);
@@ -630,6 +668,9 @@ static void draw_graph(void)
         case GR_FX:
             graph_fx(t, c);
             break;
+        case GR_SLCR:
+            graph_slicer(t, c);
+            break;
         case GR_BROWSE:
             cv_oy = 0;
             graph_browse();
@@ -726,8 +767,13 @@ static void draw_foot(void)
                 cv_rect(sx - 1, 13, 3, 3, C_WHITE);
         }
     }
-    fit(en, ename, &FONT_S, 90);
-    x = cv_text(4, 20, &FONT_S, en, C_HI);            /* row 2: engine, preset, page */
+    x = 4;
+    if (FELUCCA_ICONS) {                              /* row 2: engine icon + name, preset, page */
+        cv_icon(x, 21, engine_icon(ename), C_GRAY);
+        x += 14;
+    }
+    fit(en, ename, &FONT_S, 90 - (x - 4));
+    x = cv_text(x, 20, &FONT_S, en, C_HI);
     {
         char pf[16];
         int32_t room = 236 - text_w(&FONT_S, ti) - 10 - (x + 10);
@@ -785,9 +831,9 @@ static void draw_columns(void)
         fmt_int(val, (int32_t)cur + 1);
         str_cpy(u, "/", 8);
         fmt_int(u + 1, (int32_t)total);
-        draw_column(0, "ENG", ENGINES[TSEL->eng_req]->name, "", VAL(0u), -1, ICON_AUTO);
-        draw_column(1, "NO", val, u, C_HI, -1, ICON_AUTO);
-        draw_column(2, "PRST", "MOVE", "", C_DIM, -1, ICON_AUTO);
+        draw_column(0, "No.", val, u, VAL(0u), -1, ICON_NONE);
+        draw_column(1, "ENG", ENGINES[TSEL->eng_req]->name, "", VAL(1u), -1, engine_icon(ENGINES[TSEL->eng_req]->name));
+        draw_column(2, "", "", "", C_HI, -1, ICON_AUTO);
         draw_column(3, "", "", "", C_HI, -1, ICON_AUTO);
         return;
     }
@@ -815,10 +861,18 @@ static void draw_columns(void)
             str_cpy(val, "--", 12);
             u[0] = 0;
         }
-        draw_column(0, "NOTE", val, u, step_on(st) ? VAL(0u) : C_DIM, -1, ICON_AUTO);
-        draw_column(1, "TIME", TIME_N[st->time % 3u], "", VAL(1u), -1, ICON_AUTO);
-        draw_column(2, "ACC", (st->flags & SF_ACCENT) ? "ON" : "OFF", "", VAL(2u), -1, ICON_AUTO);
-        draw_column(3, "SLD", (st->flags & SF_SLIDE) ? "ON" : "OFF", "", VAL(3u), -1, ICON_AUTO);
+        {
+            static const char *const FLAG_N[4] = {"-", "ACC", "SLD", "A+S"};
+            char sn[8], sl[8];
+            fmt_int(sn, (int32_t)ui.cursor + 1);
+            str_cpy(sl, "/", 8);
+            fmt_int(sl + 1, TSEL->p[P_SLEN]);
+            draw_column(0, "STEP", sn, sl, VAL(0u), -1, ICON_AUTO);
+            draw_column(1, "NOTE", val, u, step_on(st) ? VAL(1u) : C_DIM, -1, ICON_AUTO);
+            draw_column(2, "TIME", TIME_N[st->time % 3u], "", VAL(2u), -1, ICON_AUTO);
+            draw_column(3, "FLAG", FLAG_N[(st->flags & SF_ACCENT ? 1u : 0u) | (st->flags & SF_SLIDE ? 2u : 0u)], "",
+                        VAL(3u), -1, ICON_AUTO);
+        }
         return;
     }
     for (c = 0; c < 4u; c++) {

@@ -133,7 +133,23 @@ int main(void)
     for (i = 0; i < 8u; i++)
         ok &= v[P_E0 + i] == (int16_t)(P_E0 - 2u + i);
     bad += check("np < P_COUNT: mapped by count", ok);
+    /* a record saved before the SLICER (P_COUNT 53, P_E0 45): the four SLICER parameters (just
+     * before P_E0) take their defaults, everything else keeps its id */
+    r.np = 53;
+    for (i = 0; i < 53u; i++)
+        r.p[i] = (int16_t)(2000 + i);
+    up_params(&r, v, def);
+    ok = P_SLCR == 45 && P_SLDEPTH + 1 == P_E0 && P_E0 == 49;
+    for (i = 0; i < 45u; i++)
+        ok &= v[i] == (int16_t)(2000 + i);
+    for (i = P_SLCR; i <= P_SLDEPTH; i++)
+        ok &= v[i] == def[i];
+    for (i = 0; i < 8u; i++)
+        ok &= v[P_E0 + i] == (int16_t)(2000 + 45 + i);
+    bad += check("old record (np 53): SLICER defaults, E0..E7 kept", ok);
     r.np = P_COUNT;
+    for (i = 0; i < P_COUNT; i++)
+        r.p[i] = (int16_t)i;
     up_params(&r, v, def);
     ok = 1;
     for (i = 0; i < P_COUNT; i++)

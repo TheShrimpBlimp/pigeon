@@ -37,6 +37,7 @@ static uint32_t pow2_q16(int32_t d16)
  * 3 slots of 80 KiB at flash 0xA0000.. (Felucca data region), read through the plain XIP
  * window. Slot = header (magic, count, name, data length, CRC32) + up to 16 zones in the
  * smp_zone_t layout (off relative to the slot's data at +512) + IMA ADPCM data. */
+#include "../hal/fm1_xip.h"   /* relative: hostsim includes this file too */
 #define SMP_USER_SLOTS 3
 #define SMP_USER_BASE 0xA0000u
 #define SMP_USER_SIZE 0x14000u
@@ -55,14 +56,26 @@ static smp_zone_t usr_zone[SMP_USER_SLOTS][16];     /* RAM copy, off rebased ont
 static uint8_t usr_nz[SMP_USER_SLOTS];
 static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3"};
 
-static const uint8_t *smp_user_xip(uint32_t k) { return (const uint8_t *)(0x02000000u + SMP_USER_BASE + k * SMP_USER_SIZE - 0x4000u); }
+#ifndef SMP_USER_XIP                                /* host tests: a RAM image of the slots */
+#define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)
+#endif
+static const uint8_t *smp_user_xip(uint32_t k) { return SMP_USER_XIP(k); }
+#if FELUCCA_SLICE
+static void slc_user_scan(uint32_t k, int valid);   /* eng_slice.c: SLICE's slice table of the slot */
+#else
+#define slc_user_scan(k, valid) ((void)0)
+#endif
+static uint32_t smp_user_gen;                       /* + 1 per slot scan (GRAIN: its seek index follows uploads) */
 
-/* (re)read slot k from flash: valid header -> zones usable; call after boot and after an upload */
+/* (re)read slot k from flash: valid header -> zones usable; call after boot and after an upload
+ * (main loop: SLICE scans the slot's audio here) */
 static void smp_user_scan(uint32_t k)
 {
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
     uint32_t i, base;
+    smp_user_gen++;
     usr_nz[k] = 0;
+    slc_user_scan(k, 0);
     if (h->magic != SMP_USER_MAGIC || h->version != 1 || !h->nz || h->nz > 16u ||
         h->data_len > SMP_USER_SIZE - SMP_USER_DATA)
         return;
@@ -76,6 +89,7 @@ static void smp_user_scan(uint32_t k)
         z->off += base;
     }
     usr_nz[k] = h->nz;
+    slc_user_scan(k, 1);
 }
 
 /* zone index in a voice: < 0x8000 built-in, else 0x8000 | slot << 5 | zone */

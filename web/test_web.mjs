@@ -40,10 +40,30 @@ async function editorMock() {
   inp.onmidimessage = (e) => link.receive(e.data);
   const rq = async (r, o) => link.request(r, o);
   const info = E.parse[E.CMD.INFO](await rq(E.req.info()));
-  ok(info.nengines === 6 && info.engines[5] === "VOICE" && info.pcount === 53 && info.engines[4] === "SAMPLE", "editor: INFO");
+  ok(info.nengines === 9 && info.engines[5] === "VOICE" && info.engines[6] === "TRIO" && info.engines[7] === "WHEEL" && info.engines[8] === "GRAIN" && info.pcount === 57 && info.pe0 === 49 && info.engines[4] === "SAMPLE",
+    "editor: INFO");
   let descs = 0;
   for (let i = 0; i < info.pcount; i++) if (E.parse[E.CMD.DESC](await rq(E.req.desc(0, i))).label) descs++;
   ok(descs === info.pcount, "editor: DESC for every parameter");
+  {
+    /* the SLICER (core.h P_SLCR..P_SLDEPTH = 45..48, just before P_E0): the mock as params.c has it,
+       and a factory preset turns it off as ui.c apply_preset_to does */
+    const pc = readFileSync(join(HERE, "../firmware/src/params.c"), "utf8");
+    const sd = [];
+    for (let i = 45; i < 49; i++) sd.push(E.parse[E.CMD.DESC](await rq(E.req.desc(0, i))));
+    ok(sd.map((d) => d.label).join() === "SLCR,PAT,RATE,DEPTH" && sd[0].names.join() === "OFF,GATE,STUT"
+      && sd[2].names.join() === "1/8,1/16,1/32,8T,16T,32T" && sd[2].def === 1 && sd[1].min === 1 && sd[1].max === 16 && sd[3].def === 127
+      && /\[P_SLCR\] = PE\("SLCR", N_SLCR, 0\)/.test(pc) && /\[P_SLPAT\] = PD\("PAT", F_INT, 1, 16, 1\)/.test(pc)
+      && /\[P_SLRATE\] = PE\("RATE", N_SLDIV, 1\)/.test(pc) && /\[P_SLDEPTH\] = PD\("DEPTH", F_PCT, 0, 127, 127\)/.test(pc)
+      && /N_SLDIV\[\] = \{"1\/8", "1\/16", "1\/32", "8T", "16T", "32T"\}/.test(pc),
+      "editor: SLICER parameters 45..48 (mock == params.c)");
+    await rq(E.req.set(0, 45, 2));
+    await rq(E.req.set(0, 46, 7));
+    const on = E.parse[E.CMD.DUMP](await rq(E.req.dump()), info);
+    await rq(E.req.preset(0, 1));
+    const off = E.parse[E.CMD.DUMP](await rq(E.req.dump()), info);
+    ok(on.p[45] === 2 && on.p[46] === 7 && off.p[45] === 0 && off.p[46] === 1, "editor: a factory preset turns the SLICER off");
+  }
   const dump = E.parse[E.CMD.DUMP](await rq(E.req.dump()), info);
   ok(dump.p.length === info.pcount && dump.g.length === info.gcount, "editor: DUMP");
   const set = E.parse[E.CMD.SET](await rq(E.req.set(0, 3, 500)));
@@ -163,7 +183,7 @@ async function editorLibrarian() {
   const ctx = { keys, engines: info.engines, firmware: info.version, pe0: info.pe0 };
   const pts = [cap, { ...bass, engineName: info.engines[bass.engine], tags: ["bass", "device"] }];
   const file = JSON.parse(JSON.stringify(E.libraryFile("library", pts, ctx)));
-  ok(file.format === "felucca-library" && file.version === 1 && file.pCount === 53 && file.paramLabels.length === 53 && file.engines.length === 6,
+  ok(file.format === "felucca-library" && file.version === 1 && file.pCount === 57 && file.paramLabels.length === 57 && file.engines.length === 9,
     "library file: versioned, with P_COUNT, labels and engines");
   const back = E.readLibraryFile(file, ctx);
   ok(back.patches.length === 2 && !back.skipped && eq(back.patches[0].p, cap.p) && eq(back.patches[1].p, bass.p)
@@ -174,7 +194,7 @@ async function editorLibrarian() {
   const eng2 = ["PHASE", "ANALOG", "SAMPLE"];
   const fut = E.readLibraryFile(file, { keys: keys2, engines: eng2 });
   const p0 = fut.patches[0].p;
-  ok(fut.patches.length === 2 && p0.length === 54 && p0[5] === null && p0[6] === cap.p[5] && p0[53] === cap.p[52]
+  ok(fut.patches.length === 2 && p0.length === 58 && p0[5] === null && p0[6] === cap.p[5] && p0[57] === cap.p[56]
     && fut.patches[0].engine === 1 && fut.patches[1].engine === 0, "library file: other ids / engine order mapped by label and name");
   const lost = E.readLibraryFile({ ...file, patches: [{ ...file.patches[0], engineName: "WAVETABLE" }] }, ctx);
   ok(lost.patches.length === 0 && lost.skipped === 1, "library file: a patch for an unknown engine is skipped");
@@ -200,7 +220,7 @@ async function editorLive() {
   const dump = E.parse[C.DUMP](await pend, info);
   const ch = ev.pushes.find((f) => f.cmd === C.CHANGED);
   const cv = ch && E.parse[C.CHANGED](ch.a);
-  ok(dump.p.length === 53 && ch && ch.pending === C.DUMP && cv.scope === 0 && cv.id === 9 && cv.value === kn.value && !ev.unknown.length,
+  ok(dump.p.length === 57 && ch && ch.pending === C.DUMP && cv.scope === 0 && cv.id === 9 && cv.value === kn.value && !ev.unknown.length,
     "live: CHANGED while DUMP waits -> push handler, reply still matched");
   const rl = m.sim.reload();
   m.sim.step(3);
@@ -327,6 +347,7 @@ async function editorMixer() {
   /* pan of another track: selected for the SET, the selection put back, no RELOAD pushed */
   ok(await E.startWatch(rq), "mixer: WATCH on");
   const pushes = ev.pushes.length;
+  /* (the v3 path: firmware 0.8 has no TRACK_PARAM) */
   const p2 = await E.mixer.setPan(rq, 2, 0, PAN, -40);
   const p0 = await E.mixer.setPan(rq, 0, 0, PAN, 99);
   await sleep(10);
@@ -356,6 +377,50 @@ async function editorMixer() {
   ok(JSON.stringify(E.parseNotes("kick CHH 49")) === "[36,42,49]" && JSON.stringify(E.parseNotes("C4 SNARE")) === "[60,38]" && E.parseNotes("KICKS") === null
     && Object.keys(E.GM_DRUM).length === 47 && new Set(Object.values(E.GM_DRUM)).size === 47, "mixer: GM drum names parse (unique, 35..81)");
   done();
+}
+
+/* ------------------------------------- editor v4: TRACK_PARAM and TRACK_CHANGED --- */
+async function editorTrackParam() {
+  const C = E.CMD, PAN = 39, MUTE = 40;
+  const { m, rq, sent, ev, done } = attachMock({ watchMs: 1000 });
+  const info = E.parse[C.INFO](await rq(E.req.info()));
+  const w1 = E.parse[C.WATCH](await rq(E.req.watch(1)));
+  m.sim.param(2, PAN, 11);
+  await sleep(10);
+  ok(w1.on === 1 && !ev.pushes.some((f) => f.cmd === C.TRACK_CHANGED), "v4: WATCH 1 answers 1 as before (no TRACK_CHANGED pushes)");
+  ok(await E.startWatch(rq) === 3, "v4: WATCH 3 -> 3 (TRACK_PARAM / TRACK_CHANGED known)");
+  const tracks0 = sent[C.TRACK] || 0, pushes = ev.pushes.length;
+  const g = E.parse[C.TRACK_PARAM](await rq(E.req.trackParam(1, PAN)));
+  const p2 = await E.mixer.setPan(rq, 2, 0, PAN, -40, true);
+  const p1 = await E.mixer.setPan(rq, 1, 0, PAN, 99, true);
+  const alg = E.parse[C.TRACK_PARAM](await rq(E.req.trackParam(1, info.pe0, 50)));   /* track 2 is DIGITAL: ALG 0..7 */
+  const lv = E.parse[C.TRACK_PARAM](await rq(E.req.trackParam(3, 0, -5)));
+  const sel = E.parse[C.TRACK](await rq(E.req.track()));
+  const td2 = E.parse[C.TRACK_DUMP](await rq(E.req.trackDump(2)), info);
+  await sleep(10);
+  ok(g.track === 1 && g.id === PAN && g.value === -24 && p2 === -40 && p1 === 63 && alg.value === 7 && lv.value === 0 && td2.p[PAN] === -40
+    && sel.sel === 0 && (sent[C.TRACK] || 0) === tracks0 + 1 && ev.pushes.length === pushes,
+    "v4: TRACK_PARAM get / set on other tracks (clamped as SET, selection kept, no push)");
+  const bad = await rq(E.req.trackParam(4, PAN), { timeout: 60, retries: 0, quiet: true }).then(() => "reply", () => "none");
+  ok(bad === "none", "v4: TRACK_PARAM of track 5: no reply");
+  /* device-side changes: CHANGED for the selected track, TRACK_CHANGED for the others */
+  m.sim.param(2, PAN, 30);
+  m.sim.param(3, MUTE, 1);
+  m.sim.param(0, PAN, -7);
+  await sleep(10);
+  const tc = ev.pushes.filter((f) => f.cmd === C.TRACK_CHANGED).map((f) => E.parse[C.TRACK_CHANGED](f.a));
+  const ch = ev.pushes.filter((f) => f.cmd === C.CHANGED).map((f) => E.parse[C.CHANGED](f.a)).pop();
+  ok(tc.length === 2 && tc[0].track === 2 && tc[0].id === PAN && tc[0].value === 30 && tc[1].track === 3 && tc[1].id === MUTE && tc[1].value === 1
+    && ch && ch.scope === 0 && ch.id === PAN && ch.value === -7 && !ev.unknown.length, "v4: TRACK_CHANGED pushes for the other tracks, CHANGED for the selected one");
+  done();
+  /* firmware 0.8 (v3): WATCH 3 answers 1, TRACK_PARAM unanswered: the editor keeps the select / restore path */
+  const o = attachMock({ v3: true, watchMs: 1000 });
+  E.parse[C.INFO](await o.rq(E.req.info()));
+  const on = await E.startWatch(o.rq);
+  const tp = await o.rq(E.req.trackParam(1, PAN), { timeout: 60, retries: 0, quiet: true }).then(() => "reply", () => "none");
+  const pv = await E.mixer.setPan(o.rq, 2, 0, PAN, 5, false);
+  ok(on === 1 && tp === "none" && pv === 5 && o.ev.timeouts === 0 && !o.ev.unknown.length, "v4: v3 firmware -> WATCH 1, no TRACK_PARAM (pan by select / restore)");
+  o.done();
 }
 
 /* ------------------------------------------------- editor tabs and strings --- */
@@ -536,6 +601,7 @@ await editorLibrarian();
 await editorLive();
 await editorTracks();
 await editorMixer();
+await editorTrackParam();
 editorTabs();
 editorIcons();
 samplesMatch();

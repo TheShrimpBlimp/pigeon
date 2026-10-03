@@ -46,7 +46,7 @@ static struct {
     uint8_t page;                /* index into PAGES */
     uint8_t fam_last[FAM_COUNT]; /* last page used per family */
     uint8_t bank;                /* SEQ: 16-step bank (follows the cursor) */
-    uint8_t cursor;              /* SEQ: step being edited (ALGORITHM moves it) */
+    uint8_t cursor;              /* SEQ: step being edited (STEP page KNOB 1 moves it) */
     uint8_t entry_open;          /* SEQ: keys held since the first press of this entry */
     uint8_t hot_col, hot_t;      /* column whose knob was just turned (drawn white) */
     uint8_t menu;                /* 0 off, 1 list, 2 about (HOME held) */
@@ -180,6 +180,13 @@ static const struct {
      {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
     {{36, 0, 0, 0, 0, 0, 0, 36, 0, 0, 34, 0, 0, 0, 0, 0},                    /* 8 SUB: low, held */
      {1, T_, T_, T_, 0, 0, 0, 0, 0, 0, 0, T_, T_, T_, 0, 0}},
+    /* SLICE (eng_slice.c): note = C4 + slice */
+    {{60, 61, 62, 67, 64, 65, 60, 69, 68, 70, 62, 67, 72, 72, 74, 64},       /* 9 CHOP: 16 slices re-ordered */
+     {1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0}},
+    {{60, 60, 61, 61, 62, 0, 63, 63, 64, 65, 65, 0, 66, 66, 66, 67},         /* 10 STUTTER: 8 slices, repeats */
+     {1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0}},
+    {{60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75},       /* 11 SLICES: in order */
+     {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}},
 };
 #undef T_
 #define NPATTERNS (sizeof PATTERNS / sizeof PATTERNS[0])
@@ -234,7 +241,8 @@ static void track_defaults_steps(track_t *t)
 }
 
 /* what loading a sound (factory or user preset) leaves alone: the mix (LEVEL, PAN, MUTE:
- * the TRACKS faders) and the pattern parameters (LEN, DIV, SWING, GATE) */
+ * the TRACKS faders) and the pattern parameters (LEN, DIV, SWING, GATE). The SLICER is part
+ * of the sound: a factory preset turns it OFF (its defaults), a user preset brings its own */
 static int param_kept(uint32_t i)
 {
     return i == P_LEVEL || i == P_PAN || i == P_MUTE || (i >= P_SLEN && i <= P_SGATE);
@@ -278,16 +286,20 @@ static void apply_preset_to(track_t *t, uint32_t pi)
     }
 }
 
-static void set_engine_of(track_t *t, uint32_t ei)    /* the engine's defaults and its first preset */
+/* the engine's defaults and its first preset. With the audio IRQ off: the ISR sees the old engine with
+ * its values or the new one with its own (voice.c engine_block), never one with the other's */
+static void set_engine_of(track_t *t, uint32_t ei)
 {
     const engine_t *e = ENGINES[ei % NENGINES];
     uint32_t i;
     if (is_drum(t))
         return;
+    fm1_irq_off();
     t->eng_req = (uint8_t)(ei % NENGINES);
     for (i = 0; i < 8u; i++)
         t->p[P_E0 + i] = e->edit[i].def;
     apply_preset_to(t, 0);
+    fm1_irq_on();
 }
 
 static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }

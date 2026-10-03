@@ -126,6 +126,18 @@ int main(void)
             bad = 1;
         }
     bad += (uint32_t)check("uart: running status, realtime, SysEx, system common", !bad);
+    {   /* 4-track routing reads the channel from the packet as for USB-MIDI: cable 0, CIN = status >> 4 */
+        static const uint8_t chs[] = {0x90, 60, 1, 0x91, 61, 2, 0x92, 62, 3, 0x99, 36, 4, 0x9F, 63, 5, 0x89, 36, 0};
+        uint32_t w0 = mi_w, ok = 1;
+        for (i = 0; i < sizeof chs; i++)
+            um_byte(chs[i]);
+        for (i = 0; i < 6u; i++) {
+            uint32_t pkt = midi_in_q[(w0 + i) % MQ], st = chs[3u * i];
+            ok &= mi_w == w0 + 6u && (pkt & 0xFFu) == (st >> 4) && ((pkt >> 8) & 0xFFu) == st &&
+                  ((pkt >> 16) & 0x7Fu) == chs[3u * i + 1u] && (pkt >> 24) == chs[3u * i + 2u];
+        }
+        bad += (uint32_t)check("uart: channels 1, 2, 3, 10, 16 -> USB-MIDI packets", ok);
+    }
     bad += (uint32_t)test_usb_sysex();
     printf("%s\n", bad ? "MIDI PARSER TEST FAILED" : "midi parser test passed");
     return (int)bad;

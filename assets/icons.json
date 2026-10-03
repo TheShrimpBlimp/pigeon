@@ -80,6 +80,13 @@
   "w_spls",
   "w_rsaw",
   "w_rtri",
-  "w_rtrp"
+  "w_rtrp",
+  "tape",
+  "drum",
+  "mouth",
+  "trio",
+  "drawbar",
+  "slice",
+  "grain"
  ]
 }

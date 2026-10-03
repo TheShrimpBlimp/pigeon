@@ -22,9 +22,6 @@
 #include "../src/libc.c"
 #include "../src/usb.c"
 
-#define PWR_CON (*(volatile uint32_t *)0x10000u)
-#define UPDATA_PARM ((volatile uint8_t *)0x01C7FD88u)
-
 static uint32_t ldr_ms(void)   /* monotonic ms; survives the TIMER4 wrap (178.9 s) */
 {
     static uint32_t last, acc, ms;
@@ -72,9 +69,7 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
 }
 static void ldr_record_clear(void)
 {
-    uint32_t i;
-    for (i = 0; i < 112u; i++)
-        UPDATA_PARM[i] = 0;                         /* CRC 0: the SPL ignores it on a warm reset */
+    fm1_updata_parm_clear();                        /* CRC 0: the SPL ignores it on a warm reset */
 }
 static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; ldr_poll(); }
 #include "ldr_core.c"
@@ -101,9 +96,7 @@ void ldr_main(void)
                 fm1_delay_ms(200);                  /* the "success" reply leaves */
                 usb_detach();
                 fm1_delay_ms(30);
-                PWR_CON |= 0x10u;                   /* reset: the SPL boots the new app */
-                for (;;)
-                    ;
+                fm1_core_reset();                   /* the SPL boots the new app */
             }
         }
     }

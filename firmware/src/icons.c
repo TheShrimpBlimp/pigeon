@@ -53,12 +53,18 @@ static const icon_map_t ICON_MAP[] = {
     {"SWP", ICON_SWEEP}, {"VIB", ICON_VIBRATO}, {"ARP", ICON_ARP}, {"TONE", ICON_TONE},
     {"SET", ICON_SAMPLE}, {"BITS", ICON_BITS}, {"LOOP", ICON_LOOP}, {"WAVE2", ICON_WAVE},
     {"DCW", ICON_SHAPE}, {"ENV", ICON_ENV}, {"LINE", ICON_MIX}, {"SUB", ICON_SUB},
-    {"FOLD", ICON_FOLD},
-    {"VOWEL", ICON_VOICE}, {"VOWL2", ICON_VOICE}, {"TALK", ICON_SWEEP}, {"SHIFT", ICON_TRANSPOSE},
-    {"BUZZ", ICON_PULSE}, {"BRETH", ICON_NOISE}, {"Q", ICON_RESO}, {"RAND", ICON_PROB},
+    {"FOLD", ICON_FOLD}, {"WAV#", ICON_WAVE}, {"DCY", ICON_DECAY}, {"INT2", ICON_TRANSPOSE},
+    {"INT3", ICON_TRANSPOSE}, {"PW", ICON_PULSE},
+    {"REG", ICON_DRAWBAR}, {"BODY", ICON_LEVEL}, {"TOP", ICON_TONE}, {"PERC", ICON_DECAY},
+    {"CLICK", ICON_ATTACK}, {"ROTR", ICON_VIBRATO},
+    {"SRC", ICON_SAMPLE}, {"START", ICON_STEPS}, {"PTCH", ICON_PITCH}, {"DCAY", ICON_DECAY},
+    {"POS", ICON_PHASE}, {"DENS", ICON_GRAIN}, {"SPRD", ICON_NOISE},
+    {"VOWL", ICON_VOICE}, {"VOWL2", ICON_VOICE}, {"TALK", ICON_SWEEP}, {"SHIFT", ICON_TRANSPOSE},
+    {"BUZZ", ICON_PULSE}, {"BRTH", ICON_NOISE}, {"Q", ICON_RESO}, {"RAND", ICON_PROB},
     /* fixed columns drawn by ui_draw.c (STEP page, preset browser, SYSTEM) */
-    {"NOTE", ICON_PITCH}, {"ACC", ICON_ACCENT}, {"SLD", ICON_SLIDE}, {"USB", ICON_MIDI},
+    {"NOTE", ICON_PITCH}, {"STEP", ICON_STEPS}, {"FLAG", ICON_ACCENT}, {"ACC", ICON_ACCENT}, {"SLD", ICON_SLIDE}, {"USB", ICON_MIDI},
     {"TRACK", ICON_MIX},                  /* TRACKS page (LEVEL, LEN, PAN: above) */
+    {"SLCR", ICON_SLICE}, {"PAT", ICON_STEPS}, {"DEPTH", ICON_MIX},   /* SLICER page (RATE: param_icon) */
 };
 
 static uint32_t icon_for_label(const char *l)
@@ -92,9 +98,36 @@ static uint32_t param_icon(const param_desc_t *d, int32_t v)
                 return WAVE_ICON[i].icon;
     if (d == &TP[P_LWAVE])
         return ICON_LFO_WAVE;                 /* "WAVE" is also the oscillator wave */
-    if (d == &TP[P_ARATE])
-        return ICON_DIVISION;                 /* arp RATE is a note division, not Hz */
+    if (d == &TP[P_ARATE] || d == &TP[P_SLRATE])
+        return ICON_DIVISION;                 /* arp / SLICER RATE is a note division, not Hz */
+    if (d->names == N_TRIO_MODE)
+        return ICON_CUTOFF;                   /* TRIO's MODE is the filter type, not the arp mode */
+#if FELUCCA_SLICE
+    if (d->names == N_SLC_DIV)
+        return ICON_SLICE;                    /* SLICE: DIV is the slicing, MODE the gate, REV the direction */
+    if (d->names == N_SLC_MODE)
+        return ICON_GATE;
+    if (d->names == N_SLC_REV)
+        return ICON_ORDER;
+#endif
     return icon_for_label(d->label);
+}
+
+/* engine name (ENGINES[]->name, or "DRUM") -> icon */
+static uint32_t engine_icon(const char *name)
+{
+    static const icon_map_t M[] = {
+        {"ANALOG", ICON_WAVE}, {"DIGITAL", ICON_ALGORITHM}, {"PHASE", ICON_PHASE}, {"LOFI", ICON_BITS},
+        {"SAMPLE", ICON_SAMPLE}, {"VOICE", ICON_MOUTH}, {"TRIO", ICON_TRIO}, {"WHEEL", ICON_DRAWBAR},
+        {"SLICE", ICON_SLICE},
+        {"GRAIN", ICON_GRAIN},
+        {"DRUM", ICON_DRUM},
+    };
+    uint32_t i;
+    for (i = 0; i < sizeof M / sizeof M[0]; i++)
+        if (str_eq(name, M[i].label))
+            return M[i].icon;
+    return ICON_GENERIC;
 }
 
 /* 2-bit icon, ink levels 1..3 = a third .. all of colour c (blended onto black, like cv_text) */
@@ -118,5 +151,6 @@ static void cv_icon(int32_t x, int32_t y, uint32_t id, uint16_t c)
 #else
 static uint32_t icon_for_label(const char *l) { (void)l; return ICON_NONE; }
 static uint32_t param_icon(const param_desc_t *d, int32_t v) { (void)d; (void)v; return ICON_NONE; }
+static uint32_t engine_icon(const char *name) { (void)name; return ICON_NONE; }
 static void cv_icon(int32_t x, int32_t y, uint32_t id, uint16_t c) { (void)x; (void)y; (void)id; (void)c; }
 #endif

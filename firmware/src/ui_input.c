@@ -61,31 +61,6 @@ static int32_t accel(uint32_t role, int32_t s, int32_t range)
     return s;
 }
 
-/* ALGORITHM outside SEQ, VOICE engine only: a macro that moves up to two engine
- * parameters at once, defined per factory preset (preset_t.mac); a user preset or
- * a preset without one moves VOWEL */
-static void algo_macro(int32_t s)
-{
-    static const int8_t DEF[4] = {1, 4, 0, 0};
-    const engine_t *e = ENGINES[TSEL->eng_req];
-    const int8_t *mac = DEF;
-    uint32_t k;
-    if (e != &ENG_FORMANT || is_drum(TSEL))
-        return;
-    if (!TSEL->user && TSEL->preset < e->npresets && e->presets[TSEL->preset].mac[0])
-        mac = e->presets[TSEL->preset].mac;
-    s = accel(EN_ALGO, s, 127);
-    for (k = 0; k < 4u; k += 2u) {
-        const param_desc_t *d;
-        int16_t *vp;
-        if (mac[k] < 1 || mac[k] > 8)
-            continue;
-        d = &e->edit[mac[k] - 1];
-        vp = &TSEL->p[P_E0 + mac[k] - 1];
-        *vp = (int16_t)clamp(*vp + s * mac[k + 1], d->min, d->max);
-    }
-}
-
 /* TRACKS page: KNOB 1 TRACK, 2 LEVEL (0 = mute; the drum track: GLO > DRUMS LEVEL),
  * 3 LEN of its pattern, 4 PAN. A track muted with MUTE (VOICE 2, the editor): the first
  * turn of KNOB 2 unmutes it (the drum track has no VOICE 2 page to do that) */
@@ -133,7 +108,10 @@ static void step_edit(uint32_t slot, int32_t steps)
     step_t *st = &TSEL->step[ui.cursor];
     uint32_t i;
     switch (slot) {
-    case 0:                                               /* NOTE: transpose the step */
+    case 0:                                               /* STEP: the cursor */
+        cursor_set(ui.cursor + steps);
+        break;
+    case 1:                                               /* NOTE: transpose the step */
         if (!st->n) {
             st->note[0] = last_note;
             st->n = 1;
@@ -145,15 +123,15 @@ static void step_edit(uint32_t slot, int32_t steps)
         st->time = ST_NOTE;
         last_note = st->note[0];
         break;
-    case 1:
+    case 2:
         st->time = (uint8_t)clamp((int32_t)st->time + (steps > 0 ? 1 : -1), ST_NOTE, ST_REST);
         break;
-    case 2:
-        st->flags = (uint8_t)(steps > 0 ? (st->flags | SF_ACCENT) : (st->flags & ~SF_ACCENT));
+    default: {                                            /* FLAG: - / ACC / SLD / A+S */
+        uint32_t f = (st->flags & SF_ACCENT ? 1u : 0u) | (st->flags & SF_SLIDE ? 2u : 0u);
+        f = (uint32_t)clamp((int32_t)f + (steps > 0 ? 1 : -1), 0, 3);
+        st->flags = (uint8_t)((st->flags & ~(SF_ACCENT | SF_SLIDE)) | (f & 1u ? SF_ACCENT : 0u) | (f & 2u ? SF_SLIDE : 0u));
         break;
-    default:
-        st->flags = (uint8_t)(steps > 0 ? (st->flags | SF_SLIDE) : (st->flags & ~SF_SLIDE));
-        break;
+    }
     }
 }
 
@@ -174,9 +152,14 @@ static void edit_param(uint32_t slot, int32_t steps)
         tracks_edit(slot, steps);
         return;
     }
-    if (pg->graph == GR_BROWSE) {                         /* KNOB 1: jump to the next / previous engine */
-        if (slot == 0u)
+    if (pg->graph == GR_BROWSE) {                         /* KNOB 1: one preset, KNOB 2: the next / previous engine */
+        if (slot == 0u && !is_drum(TSEL)) {
+            uint32_t total, cur = preset_pos(&total);
+            if (total)
+                preset_go((cur + (steps > 0 ? 1u : total - 1u)) % total);
+        } else if (slot == 1u && !is_drum(TSEL)) {
             select_engine((TSEL->eng_req + (steps > 0 ? 1u : NENGINES - 1u)) % NENGINES);
+        }
         return;
     }
     if (pg->graph == GR_USER) {                           /* KNOB 1 slot; LOAD / ERASE / SAVE: GO buttons */
@@ -241,7 +224,7 @@ static void edit_param(uint32_t slot, int32_t steps)
     }
 }
 
-/* SEQ step entry, 303 style: the keys pressed together (POLY: up to 4, MONO:
+/* SEQ step entry, acid style: the keys pressed together (POLY: up to 4, MONO:
  * the last one) become the cursor step; releasing all keys moves on */
 static void seq_entry(uint32_t pressed)
 {
@@ -398,12 +381,8 @@ static void ui_input(void)
         if (total)
             preset_go((cur + (s > 0 ? 1u : total - 1u)) % total);   /* past the factory ones: user presets */
     }
-    if ((s = panel_enc(EN_ALGO)) != 0) {           /* ALGORITHM: the step cursor in SEQ, else the VOICE macro */
-        if (song.seq_mode)
-            cursor_set(ui.cursor + s);
-        else
-            algo_macro(s);
-    }
+    if ((s = panel_enc(EN_ALGO)) != 0)             /* ALGORITHM: the selected track, on every page */
+        track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0, NTRK - 1));
     if ((s = panel_enc(EN_SELECT)) != 0) {          /* SELECT knob = global tempo */
         song.g[G_BPM] = (int16_t)clamp(song.g[G_BPM] + accel(EN_SELECT, s, 200), GP[G_BPM].min, GP[G_BPM].max);
         ui.bpm_t = 40;                              /* the header's BPM lights up; no message over the header */

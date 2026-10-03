@@ -1,11 +1,15 @@
 # Felucca editor protocol (SysEx over USB-MIDI)
 
-The firmware side is `firmware/src/editor.c`. Commands 16-26 (user presets and live sync) form protocol v2; commands 27-30 (tracks) form protocol v3.
+The firmware side is `firmware/src/editor.c`. Commands 16-26 (user presets and live sync) form protocol v2; commands 27-30 (tracks) form protocol v3; commands 31-32 (any track's parameters) form protocol v4.
 
 **v3 (four tracks):** the device has four tracks: 1..3 are synth parts, 4 is the drum track. One
 of them is *selected* (the TRACKS page on the device, or `TRACK`). Every v1 / v2 command acts on the
 selected track (its parameters, engine, preset, steps, the user presets it stores or loads); `TRACK`,
 `TRACK_MIX`, `TRACK_DUMP` and `TRACK_STEP` reach any track. Command numbers 1-26 are unchanged.
+
+**v4 (any track's parameters):** `TRACK_PARAM` gets or sets a parameter of any track without changing
+the selection, and the `TRACK_CHANGED` push follows level, pan and mute of the tracks that are not
+selected. The v1-v3 commands are byte for byte as before; v4 is asked for with bit 1 of `WATCH`.
 
 ## Framing
 
@@ -55,7 +59,7 @@ after an engine change.
 | 19 UP_STORE | slot, name | slot, rc. Stores the current sound: engine, parameters, the first 16 sequencer steps as the pattern (TIE steps → flag 4) |
 | 20 UP_LOAD | slot | slot, rc (0 ok, 1 empty/invalid). Applies it |
 | 21 UP_ERASE | slot | slot, rc |
-| 22 WATCH | on (0/1) | on. While on, the device pushes cmds 23, 24, 26 |
+| 22 WATCH | on (0/1; v4: 3 = also `TRACK_CHANGED`) | on (0/1; v4 firmware: 3 when 3 was asked for). While on, the device pushes cmds 23, 24, 26 (and 32 with bit 1) |
 | 23 CHANGED (push) | — | scope, id, v14 |
 | 24 RELOAD (push) | — | engine, preset, then (v3) the selected track |
 | 25 PING | — | 0 |
@@ -67,6 +71,11 @@ after an engine change.
 | 28 TRACK_MIX | track (get), or track, level v14 (0..127), mute (set) | track, level v14, mute. The drum track's level is global `G_DRLVL` (GLO > DRUMS LEVEL); mute is the track's `P_MUTE` |
 | 29 TRACK_DUMP | track | track, engine byte, preset, P_COUNT × v14 (that track's parameters; no globals) |
 | 30 TRACK_STEP | track, index (get), or track, index, n, note0..3, time, flags, vel (set) | track, index, n, note0..3, time, flags, vel |
+
+| cmd (v4) | Request args | Reply args |
+| --- | --- | --- |
+| 31 TRACK_PARAM | track, id (get), or track, id, v14 (set); id = `P_*` (0..P_COUNT−1) | track, id, v14 (the value after clamping, as `SET`). The selection does not change; no push about the editor's own write |
+| 32 TRACK_CHANGED (push) | — | track, id, v14: `P_LEVEL`, `P_PAN` or `P_MUTE` of a track that is not selected changed on the device (only while `WATCH` was sent with bit 1) |
 
 **pack7:** groups of up to 7 bytes, each preceded by one byte holding their top bits
 (bit j = bit 7 of byte j).
@@ -126,7 +135,9 @@ presets.
 0xDC000..0xDFFFF), 16 records of 192 bytes each, behind a bank header (magic "UPB1", record size,
 slot count; a mismatch reads as an empty bank). A record keeps its layout version (mismatch: empty)
 and the P_COUNT it was stored with; another count is mapped by count (last 8 values = P_E0..P_E7, the
-first ones = P_LEVEL.. in order, missing ones = defaults).
+first ones = P_LEVEL.. in order, missing ones = defaults). P_COUNT was 53 (P_E0 45) until the SLICER
+parameters (SLCR, PAT, RATE, DEPTH: ids 45..48) went in just before P_E0: P_COUNT 57, P_E0 49. An
+editor takes both from `INFO`; records stored with 53 load with the SLICER off.
 
 ## v2: live sync
 
@@ -159,6 +170,21 @@ first ones = P_LEVEL.. in order, missing ones = defaults).
 - Projects (`PROJECT`) save and load all four tracks and the selection (project format 2; a format 1
   project from older firmware loads into track 1).
 - Older firmware (no NTRK in `INFO`): one instrument; skip the track UI.
+
+## v4: any track's parameters
+
+- **Finding out:** send `WATCH 3`. v4 firmware answers 3; v3 (0.8) firmware answers 1, does not know
+  cmds 31 / 32 (no reply) and never pushes `TRACK_CHANGED`. `WATCH 1` behaves exactly as in v2 / v3
+  (reply 1, no `TRACK_CHANGED`). Match the `WATCH` reply by bit 0.
+- `TRACK_PARAM` clamps like `SET` scope 0: to the range of that parameter; the engine parameters
+  `P_E0..P_E7` to the ranges of that track's engine (the drum track: engine 0, as `DESC`). A parameter
+  with a fixed range (min = max) keeps its value. A track ≥ NTRK or an id ≥ P_COUNT gets no reply.
+  For the selected track it is the same as `SET` scope 0. The drum track's level is still `G_DRLVL`
+  (`SET` scope 1 or `TRACK_MIX`); its `P_LEVEL` is not used.
+- `TRACK_CHANGED` is never about the selected track (its changes stay `CHANGED` scope 0). Coalesced like
+  `CHANGED` (each track and id at most every 20 ms, latest value), and not sent for the editor's own
+  `TRACK_PARAM` / `TRACK_MIX` writes. After a selection change (`RELOAD`, or the editor's `TRACK`) the
+  device takes the current values as known.
 
 ## Notes for the editor
 

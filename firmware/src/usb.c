@@ -8,17 +8,7 @@
  * VID 0x1209 / PID 0x0001 is the pid.codes test id.
  * FELUCCA_CDC=1 adds a CDC-ACM serial function (IAD composite: EP2 notify,
  * EP3 bulk data) for the console in console.c. */
-#define USB_CON0 (*(volatile uint32_t *)0x11800u)
-#define USB_CON1 (*(volatile uint32_t *)0x11804u)
-#define USB_EP0_CNT (*(volatile uint32_t *)0x11808u)
-#define USB_EP1_CNT (*(volatile uint32_t *)0x1180Cu)
-#define USB_EP0_ADR (*(volatile uint32_t *)0x11818u)
-#define USB_EP1_TADR (*(volatile uint32_t *)0x1181Cu)
-#define USB_EP1_RADR (*(volatile uint32_t *)0x11820u)
-#define USB_EPN_RADR(n) (*(volatile uint32_t *)(0x11820u + 8u * ((n) - 1u)))
-#define USB_EP4_RADR (*(volatile uint32_t *)0x1183Cu)
-#define USB_IO_CON0 (*(volatile uint32_t *)0x51000u)
-#define CLK_CON1 (*(volatile uint32_t *)0x10010u)
+#include "../hal/fm1_usb.h"   /* registers; relative, so the loader and the host tests find it too */
 enum { S_FADDR = 0, S_POWER = 1, S_INTRTX1 = 2, S_INTRTX2 = 3, S_INTRRX1 = 4, S_INTRRX2 = 5, S_INTRUSB = 6,
        S_INTRTX1E = 7, S_INTRTX2E = 8, S_INTRRX1E = 9, S_INTRRX2E = 10, S_INTRUSBE = 11, S_FRAME1 = 12,
        S_FRAME2 = 13, S_INDEX = 14,
@@ -29,10 +19,6 @@ static uint8_t ep0buf[64 + 4] __attribute__((aligned(4)));
 static uint8_t ep1tx[64] __attribute__((aligned(4)));
 static uint8_t ep1rx[64 + 4] __attribute__((aligned(4)));
 #if FELUCCA_CDC
-#define USB_EP3_CNT (*(volatile uint32_t *)0x11814u)
-#define USB_EP2_TADR (*(volatile uint32_t *)0x11824u)
-#define USB_EP3_TADR (*(volatile uint32_t *)0x1182Cu)
-#define USB_EP3_RADR (*(volatile uint32_t *)0x11830u)
 static uint8_t ep2tx[8] __attribute__((aligned(4)));
 static uint8_t ep3tx[64] __attribute__((aligned(4)));
 static uint8_t ep3rx[64 + 4] __attribute__((aligned(4)));
@@ -182,11 +168,10 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
 static void sie_wr(uint32_t r, uint32_t v)
 {
     uint32_t n = 20000;
-    if (!(USB_CON0 & 4u))
+    if (!fm1_usb_sie_on())
         return;
-    USB_CON1 = ((r << 8) & 0xFFFF00u) | (v & 0xFFu);
-    __asm__ volatile("csync" ::: "memory");
-    while (!(USB_CON1 & 0x8000u) && --n)
+    fm1_usb_sie_wr_start(r, v);
+    while (!fm1_usb_sie_done() && --n)
         ;
     if (n)
         usb.timeouts = 0;                               /* consecutive failures only */
@@ -197,24 +182,23 @@ static void sie_wr(uint32_t r, uint32_t v)
 static uint32_t sie_rd(uint32_t r)
 {
     uint32_t n = 20000;
-    if (!(USB_CON0 & 4u))
+    if (!fm1_usb_sie_on())
         return 0;
-    USB_CON1 = ((r << 8) & 0xFFBF00u) | 0x4000u;
-    __asm__ volatile("csync" ::: "memory");
-    while (!(USB_CON1 & 0x8000u))
+    fm1_usb_sie_rd_start(r);
+    while (!fm1_usb_sie_done())
         if (!--n) {
             if (++usb.timeouts > 50u)
                 usb.up = 0;
             return 0;
         }
     usb.timeouts = 0;
-    return USB_CON1 & 0xFFu;
+    return fm1_usb_sie_data();
 }
 
 static void ep1_config(void)
 {
-    USB_EP1_TADR = (uint32_t)(uintptr_t)ep1tx;
-    USB_EP1_RADR = (uint32_t)(uintptr_t)ep1rx;
+    fm1_usb_ep_txbuf(1, ep1tx);
+    fm1_usb_ep_rxbuf(1, ep1rx);
     sie_wr(S_INDEX, 1);
     sie_wr(S_TXMAXP, 0xFF);
     sie_wr(S_TXCSR1, 0x48);
@@ -223,15 +207,15 @@ static void ep1_config(void)
     sie_wr(S_RXCSR1, 0x90);
     sie_wr(S_RXCSR2, 0);
     sie_wr(S_INTRRX1E, 0x02);
-    USB_CON0 &= ~(1u << 20);
+    fm1_usb_ep_enable(1u << 1);
 #if FELUCCA_CDC
-    USB_EP2_TADR = (uint32_t)(uintptr_t)ep2tx;
+    fm1_usb_ep_txbuf(2, ep2tx);
     sie_wr(S_INDEX, 2);
     sie_wr(S_TXMAXP, 0xFF);
     sie_wr(S_TXCSR1, 0x48);
     sie_wr(S_TXCSR2, 0);
-    USB_EP3_TADR = (uint32_t)(uintptr_t)ep3tx;
-    USB_EP3_RADR = (uint32_t)(uintptr_t)ep3rx;
+    fm1_usb_ep_txbuf(3, ep3tx);
+    fm1_usb_ep_rxbuf(3, ep3rx);
     sie_wr(S_INDEX, 3);
     sie_wr(S_TXMAXP, 0xFF);
     sie_wr(S_TXCSR1, 0x48);
@@ -240,7 +224,7 @@ static void ep1_config(void)
     sie_wr(S_RXCSR1, 0x90);
     sie_wr(S_RXCSR2, 0);
     sie_wr(S_INTRRX1E, 0x0A);
-    USB_CON0 &= ~((1u << 21) | (1u << 22));
+    fm1_usb_ep_enable((1u << 2) | (1u << 3));
     cdc.rx_pend = 1;                                    /* look once: a packet may already wait */
 #endif
 }
@@ -251,9 +235,7 @@ static void e0_chunk(void)
     int last;
     for (i = 0; i < n; i++)
         ep0buf[i] = usb.e0_src[i];
-    __asm__ volatile("csync" ::: "memory");
-    USB_EP0_ADR = (uint32_t)(uintptr_t)ep0buf;
-    USB_EP0_CNT = n;
+    fm1_usb_ep0_send(ep0buf, n);
     usb.e0_src += n;
     usb.e0_left = (uint16_t)(usb.e0_left - n);
     last = usb.e0_left == 0 && !(n == 64u && usb.e0_zlp);
@@ -312,7 +294,7 @@ static void ep0_service(void)
     }
     if (!(csr & 0x01u))
         return;
-    __asm__ volatile("ssync" ::: "memory");
+    fm1_usb_rx_sync();
 #if FELUCCA_CDC
     if (cdc.e0_rx) {                                    /* SET_LINE_CODING data stage */
         uint32_t n = sie_rd(S_COUNT0);
@@ -469,7 +451,7 @@ static void ep1_rx(void)
     n = sie_rd(S_RXCOUNT1) | (sie_rd(S_RXCOUNT2) << 8);
     if (n > 64u)
         n = 64u;
-    __asm__ volatile("ssync" ::: "memory");
+    fm1_usb_rx_sync();
     for (i = 0; i + 3u < n; i += 4u) {
         uint32_t cin = ep1rx[i] & 15u, pkt = (uint32_t)ep1rx[i] | (uint32_t)ep1rx[i + 1] << 8 |
                                             (uint32_t)ep1rx[i + 2] << 16 | (uint32_t)ep1rx[i + 3] << 24;
@@ -578,9 +560,7 @@ static void ep1_tx(void)
     }
     if (!n)
         return;
-    __asm__ volatile("csync" ::: "memory");
-    USB_EP1_TADR = (uint32_t)(uintptr_t)ep1tx;
-    USB_EP1_CNT = n;
+    fm1_usb_ep_send(1, ep1tx, n);
     sie_wr(S_TXCSR1, sie_rd(S_TXCSR1) | 0x01u);
     usb.tx_pkts++;
 }
@@ -601,7 +581,7 @@ static void ep3_rx(void)                                /* leaves the packet (NA
     if (CI_N - (ci_w - ci_r) < n)
         return;                                         /* rx_pend stays: retried next poll */
     cdc.rx_pend = 0;
-    __asm__ volatile("ssync" ::: "memory");
+    fm1_usb_rx_sync();
     for (i = 0; i < n; i++)
         cdc_in[(ci_w + i) % CI_N] = ep3rx[i];
     RING_PUBLISH();
@@ -625,9 +605,7 @@ static void ep3_tx(void)                                /* <= 63 bytes per packe
         sie_wr(S_TXCSR1, csr & ~0x80u);
     while (co_r != co_w && n < 63u)
         ep3tx[n++] = cdc_out[co_r++ % CO_N];
-    __asm__ volatile("csync" ::: "memory");
-    USB_EP3_TADR = (uint32_t)(uintptr_t)ep3tx;
-    USB_EP3_CNT = n;
+    fm1_usb_ep_send(3, ep3tx, n);
     sie_wr(S_TXCSR1, sie_rd(S_TXCSR1) | 0x01u);
     cdc.tx_pkts++;
 }
@@ -638,8 +616,8 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
     uint32_t iu, it, ir;
     if (!usb.up)
         return;
-    if (USB_CON0 & (1u << 13)) {                        /* SOF pending: not a reliable "host is there", */
-        USB_CON0 |= 1u << 12;                           /* it keeps firing with the cable out */
+    if (fm1_usb_sof_take()) {                           /* SOF pending: not a reliable "host is there", */
+                                                        /* it keeps firing with the cable out */
         usb.sof_seen++;
         usb.no_sof = 0;
     } else if (++usb.no_sof > usb.max_gap) {
@@ -693,7 +671,7 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         cdc.e0_rx = 0;
         cdc.rx_pend = 0;
 #endif
-        USB_EP0_ADR = (uint32_t)(uintptr_t)ep0buf;
+        fm1_usb_ep0_buf(ep0buf);
         sie_wr(S_INTRUSBE, 0x07);
         sie_wr(S_INTRTX1E, 0x01);
         sie_wr(S_INTRRX1E, 0);
@@ -718,33 +696,17 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
 
 static void usb_start(void)                             /* boot, or main-loop retry while usb.up == 0 */
 {
-    uint32_t n;
     usb.timeouts = 0;
-    USB_CON0 = 0;                                       /* reset whatever the ROM left */
-    USB_CON1 = 0;
-    USB_IO_CON0 = 0x0Cu;
+    fm1_usb_reset();                                    /* reset whatever the ROM left */
     fm1_delay_ms(25);
-    CLK_CON1 &= ~3u;                                    /* USB clock = PLL48M */
-    USB_EP0_ADR = (uint32_t)(uintptr_t)ep0buf;
-    for (n = 1; n <= 3u; n++)
-        USB_EPN_RADR(n) = (uint32_t)(uintptr_t)ep0buf;
-    USB_EP4_RADR = (uint32_t)(uintptr_t)ep0buf;
-    USB_IO_CON0 |= (1u << 10) | (1u << 9);
-    USB_IO_CON0 &= ~(1u << 11);
-    USB_IO_CON0 |= 1u << 12;
-    USB_CON0 &= ~0x4035u;
-    USB_CON1 = 0;
-    USB_CON0 |= 1u;
-    USB_IO_CON0 &= ~0xF0u;
-    USB_IO_CON0 |= 0x40u;                               /* D+ pull-up: attach */
-    USB_CON0 |= 0x3Cu;
+    fm1_usb_attach(ep0buf);
     sie_wr(S_POWER, 0x60);
     sie_wr(S_INTRUSBE, 0x07);                           /* suspend, resume, reset (polled) */
     sie_wr(S_INTRTX1E, 0x01);
     sie_wr(S_INTRTX2E, 0);
     sie_wr(S_INTRRX1E, 0);
     sie_wr(S_INTRRX2E, 0);
-    USB_CON0 &= ~(0x1Fu << 19);
+    fm1_usb_ep_enable(0x1Fu);
     usb.up = usb.timeouts < 3u;                         /* a dead SIE leaves USB off */
 }
 
@@ -765,6 +727,5 @@ static void usb_detach(void)
 {
     usb.detached = 1;
     usb.up = 0;
-    USB_CON0 = 0;
-    USB_IO_CON0 = 0x0Cu;
+    fm1_usb_off();
 }

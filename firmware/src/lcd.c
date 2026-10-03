@@ -3,29 +3,14 @@
 /* ST7789-class 240x240 panel on SPI1: PC9 CLK, PC10 DO, PC7 CS, PC8 D/C,
  * backlight PA2 active low. Polled DMA transfers; every source buffer must be
  * in RAM. A pixel transfer is left running (lcd_busy): the next LCD access, or
- * a write to its source buffer (lcd_sync), waits for it. */
-#define LCD_REG(a) (*(volatile uint32_t *)(a))
-#define LCD_PC_OUT LCD_REG(0x50080)
-#define LCD_PC_DIR LCD_REG(0x50088)
-#define LCD_IOMAP_CON1 LCD_REG(0x51020)
-#define LCD_SPI_CON LCD_REG(0x11D00)
-#define LCD_SPI_BAUD LCD_REG(0x11D04)
-#define LCD_SPI_BUF LCD_REG(0x11D08)
-#define LCD_SPI_ADR LCD_REG(0x11D0C)
-#define LCD_SPI_CNT LCD_REG(0x11D10)
-#define LCD_PA_OUT LCD_REG(0x50000)
-#define LCD_PA_DIR LCD_REG(0x50008)
-#define LCD_BL (1u << 2)
-#define LCD_CS (1u << 7)
-#define LCD_DC (1u << 8)
-#define LCD_CLK (1u << 9)
-#define LCD_DO (1u << 10)
+ * a write to its source buffer (lcd_sync), waits for it, so the main loop works
+ * while the last strip of a frame goes out. */
+/* pins and SPI1: hal/fm1_lcd_hw.h */
 #ifndef LCD_BAUD
 #define LCD_BAUD 4u                /* lsb/(BAUD+1): 4 = 12 MHz */
 #endif
 
 static uint8_t lcd_small[64];
-static uint32_t lcd_timeouts;
 static uint8_t lcd_busy;           /* a lcd_data DMA may still run; CS is low */
 
 static void lcd_spin(uint32_t n)
@@ -34,34 +19,21 @@ static void lcd_spin(uint32_t n)
         ;
 }
 
-static void lcd_wait(void)
-{
-    uint32_t n;
-    for (n = 0; n < 4000000u && !(LCD_SPI_CON & 0x8000u); n++)
-        ;
-    if (n == 4000000u)
-        lcd_timeouts++;
-    LCD_SPI_CON |= 0x4000u;
-}
-
 static void lcd_sync(void)          /* finish the running transfer (before touching its buffer) */
 {
     if (!lcd_busy)
         return;
-    lcd_wait();
-    LCD_PC_OUT |= LCD_CS;
+    fm1_lcd_wait();
+    fm1_lcd_deselect();
     lcd_busy = 0;
 }
 
 static void lcd_cmd(uint8_t c)
 {
     lcd_sync();
-    LCD_PC_OUT &= ~LCD_DC;
-    LCD_PC_OUT &= ~LCD_CS;
-    LCD_SPI_CON |= 0x4000u;
-    LCD_SPI_BUF = c;
-    lcd_wait();
-    LCD_PC_OUT |= LCD_CS;
+    fm1_lcd_send_cmd(c);
+    fm1_lcd_wait();
+    fm1_lcd_deselect();
 }
 
 static void lcd_data(const void *p, uint32_t n)
@@ -69,11 +41,7 @@ static void lcd_data(const void *p, uint32_t n)
     if (!n)
         return;                    /* SPI_CNT = 0 never completes */
     lcd_sync();
-    LCD_PC_OUT |= LCD_DC;
-    LCD_PC_OUT &= ~LCD_CS;
-    LCD_SPI_CON |= 0x4000u;
-    LCD_SPI_ADR = (uint32_t)(uintptr_t)p;
-    LCD_SPI_CNT = n;
+    fm1_lcd_send_data(p, n);
     lcd_busy = 1;                  /* completed by lcd_sync */
 }
 
@@ -143,14 +111,7 @@ static const uint8_t LCD_SEQ[] = {
 static void lcd_init(void)
 {
     uint32_t r, x;
-    LCD_PA_OUT &= ~LCD_BL;
-    LCD_PA_DIR &= ~LCD_BL;
-    LCD_IOMAP_CON1 |= 0x10u;
-    LCD_PC_OUT |= LCD_CS;
-    LCD_PC_OUT &= ~(LCD_DC | LCD_CLK | LCD_DO);
-    LCD_PC_DIR &= ~(LCD_CS | LCD_DC | LCD_CLK | LCD_DO);
-    LCD_SPI_CON = 0x4021u;
-    LCD_SPI_BAUD = 4u;
+    fm1_lcd_hw_init();
     lcd_spin(2000000u);
     for (r = 0; r < sizeof LCD_SEQ; r += 2u + LCD_SEQ[r + 1u]) {
         if (LCD_SEQ[r] == 0x00u) {                       /* pseudo command: wait */
@@ -163,7 +124,7 @@ static void lcd_init(void)
         if (LCD_SEQ[r + 1u])
             lcd_data(lcd_small, LCD_SEQ[r + 1u]);
     }
-    LCD_SPI_BAUD = LCD_BAUD;
+    fm1_lcd_baud(LCD_BAUD);
     lcd_fill(0, 0, 240, 240, 0);
     lcd_cmd(0x29);
 }

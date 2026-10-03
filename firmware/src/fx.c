@@ -46,24 +46,40 @@ static void track_dist(track_t *t, int32_t *b, uint32_t n)
 #define LIM_T 18000
 static int32_t lim_env = LIM_T;
 static volatile uint8_t fx_lowcut;     /* settings: 12 dB/oct ~110 Hz for the small speaker */
-static int32_t lc_l1, lc_l2, lc_r1, lc_r2, dc_l, dc_r;
+static int32_t lc_l1, lc_l2, lc_r1, lc_r2, dc_l, dc_r, dce_l, dce_r;
+
+/* DC blocker (~2 Hz), always on: a leaky integrator of the input (Q6 state) subtracted from it.
+ * The >> 12 step keeps its remainder (error feedback, 0..4095) and adds it to the next one, so no
+ * part of the step is lost: the state follows the input exactly, down to 0 after the sound stops.
+ * (It was rounded, and a rounded step of (x - dc) / 4096 stops moving at |x - dc| < 2048: a
+ * constant offset of up to +-31 stayed at the output after silence.) */
+static inline int32_t dc_block(int32_t x, int32_t *dc, int32_t *err)
+{
+    int32_t e = (x << 6) - *dc + *err, d = e >> 12;
+    *err = e - (d << 12);
+    *dc += d;
+    return x - ((*dc + 32) >> 6);
+}
+
+static int32_t lce[4];
+static inline int32_t lowcut1(int32_t x, int32_t *lc, int32_t *err)   /* x minus its one-pole low-pass */
+{
+    int32_t e = x - *lc + *err, d = e >> 6;
+    *err = e - (d << 6);
+    *lc += d;
+    return x - *lc;
+}
 
 static inline void master_out(int32_t *l, int32_t *r)
 {
     int32_t al, ar, a;
-    dc_l += ((*l << 6) - dc_l + 2048) >> 12;            /* DC blocker (~2 Hz), always on; Q6 state, */
-    *l -= dc_l >> 6;                                    /* rounded: a floored leaky integrator adds DC */
-    dc_r += ((*r << 6) - dc_r + 2048) >> 12;
-    *r -= dc_r >> 6;
-    if (fx_lowcut) {                  /* two one-pole high-passes */
-        lc_l1 += (*l - lc_l1 + 32) >> 6;            /* rounded (no DC) */
-        *l -= lc_l1;
-        lc_l2 += (*l - lc_l2 + 32) >> 6;
-        *l -= lc_l2;
-        lc_r1 += (*r - lc_r1 + 32) >> 6;
-        *r -= lc_r1;
-        lc_r2 += (*r - lc_r2 + 32) >> 6;
-        *r -= lc_r2;
+    *l = dc_block(*l, &dc_l, &dce_l);
+    *r = dc_block(*r, &dc_r, &dce_r);
+    if (fx_lowcut) {                  /* two one-pole high-passes, error feedback as dc_block (the */
+        *l = lowcut1(*l, &lc_l1, &lce[0]);          /* rounded step stopped at |x - lc| < 32: an offset) */
+        *l = lowcut1(*l, &lc_l2, &lce[1]);
+        *r = lowcut1(*r, &lc_r1, &lce[2]);
+        *r = lowcut1(*r, &lc_r2, &lce[3]);
     }
     al = *l < 0 ? -*l : *l;
     ar = *r < 0 ? -*r : *r;
@@ -155,7 +171,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
 }
 
 /* one block of the whole mix (shared with tests/hostsim.c): events -> each part
- * -> dist -> level / pan / sends -> drums -> buses -> master; out: stereo Q15 */
+ * -> dist -> SLICER -> level / pan / sends -> drums (-> SLICER) -> buses -> master; out: stereo Q15 */
 static void events_block(uint32_t n);                    /* seq.c */
 static int32_t send_c[CTL], send_d[CTL], send_r[CTL], wet[CTL], mix_l[CTL], mix_r[CTL], part_buf[CTL];
 
@@ -167,8 +183,10 @@ static void mix_part(track_t *t, uint32_t n)
     uint32_t i;
     if (track_render(t, b, n))
         t->tail = 16;                                   /* blocks of DIST state to run out after the last voice */
-    else if (!t->tail || !t->p[P_DIST] || !--t->tail)
+    else if ((!t->tail || !t->p[P_DIST] || !--t->tail) && !slicer_busy(t)) {
+        slicer_track(t, 0, n);                          /* (the SLICER's step clock runs on) */
         return;
+    }
     {
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
@@ -176,6 +194,7 @@ static void mix_part(track_t *t, uint32_t n)
         int32_t xmax = c > d ? c : d;
         xmax = 0x7FFFFFFF / ((xmax > r ? xmax : r) | 1);   /* sends: loud chords at a high LEVEL */
         track_dist(t, b, n);
+        slicer_track(t, b, n);                          /* slicer.c: before the level, pan and sends */
         for (i = 0; i < n; i++) {
             int32_t x = ((b[i] >> 2) * lvl) >> 10, a = x < 0 ? -x : x;   /* pre-shift: 8 loud voices */
             int32_t xs = clamp(x, -xmax, xmax);         /* sends: mulq15 would overflow */
@@ -202,7 +221,7 @@ static void mix_block(int32_t *out, uint32_t n)
     events_block(n);
     for (i = 0; i < NPART; i++)
         mix_part(&trk[i], n);
-    drums_render(mix_l, mix_r, send_r, n);
+    slicer_drums(mix_l, mix_r, send_r, n);              /* drums_render, through the SLICER when on */
     fx_buses(send_c, send_d, send_r, wet, n);
     for (i = 0; i < n; i++) {
         int32_t l = (((mix_l[i] + wet[i]) >> 2) * (int32_t)song.master_q12) >> 10;

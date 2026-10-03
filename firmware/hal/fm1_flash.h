@@ -11,6 +11,7 @@
  */
 #pragma once
 #include <stdint.h>
+#include "fm1_xip.h"
 
 #define RAMFN  __attribute__((section(".ram_text"), noinline, used))
 #define RAMINL static inline __attribute__((always_inline))
@@ -33,7 +34,7 @@ static inline void *fl_far(void *p) { void *volatile q = p; return q; }
 #define CACHE_CON       REG32(0x1EEE008u)          /* b14 = cache idle */
 #define T4_CNT          REG32(0x10804u)            /* TIMER4, 24 MHz free-running */
 
-#define FL_XIP(off)     (0x02000000u + (uint32_t)(off) - 0x4000u)
+#define FL_XIP(off)     FM1_XIP(off)              /* fm1_xip.h */
 #define FL_DATA_LO      0x00097000u                /* Felucca main store */
 #define FL_DATA_HI      0x000E0000u
 #define FL_GLOB_LO      0x000FC000u                /* Felucca superblock / globals */

@@ -12,6 +12,12 @@
  * declicks it); one of the part's own is restarted in place. Extra UNISON
  * voices only start when there is room. The drum track has its own voices (drums.c). */
 static uint32_t vage;                                   /* voice ages: one clock for every part */
+/* engines that play recorded material (a position, not a phase): no phases kept or spread */
+#if FELUCCA_SLICE
+static int eng_sampled(const engine_t *e) { return e == &ENG_SAMPLE || e == &ENG_SLICE; }
+#else
+static int eng_sampled(const engine_t *e) { return e == &ENG_SAMPLE; }
+#endif
 static int32_t lfo_wave(track_t *t, uint32_t ph)
 {
     switch (t->p[P_LWAVE]) {
@@ -219,7 +225,7 @@ static void voice_start(track_t *t, voice_t *v, uint32_t note, uint32_t vel, int
         v->env_out = 0;
     }                                                   /* sounding: the attack starts from the current level */
     e->note_on(t, v);
-    if (sounding && e != &ENG_SAMPLE) {                 /* retrigger / steal: keep phases and filter states */
+    if (sounding && !eng_sampled(e)) {                 /* retrigger / steal: keep phases and filter states */
         v->ph[0] = ph0;                                 /* (resetting them clicks) */
         v->ph[1] = ph1;
         v->ph[2] = ph2;
@@ -253,7 +259,7 @@ static void mono_play(track_t *t, uint32_t note, uint32_t vel, int retrig, int g
                 continue;                                   /* no room for this extra UNISON voice */
             /* level: about the same sum for 8 or 4 voices at random phases */
             voice_start(t, v, note, nv >= NVOICE ? vel * 36u / 100u : nv > 1u ? vel / 2u : vel, glide);
-            if (nv > 1u && i && ENGINES[t->engine] != &ENG_SAMPLE) {   /* random start phases: */
+            if (nv > 1u && i && !eng_sampled(ENGINES[t->engine])) {   /* random start phases: */
                 static uint32_t seed = 0x1234567u;          /* in phase they stack, evenly spread they cancel */
                 seed = seed * 1664525u + 1013904223u;
                 v->ph[0] += seed;
@@ -303,6 +309,16 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         drum_on(note, vel);
         return;
     }
+    if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
+        for (i = 0; i < t->xp_n && t->xp_note[i] != note; i++)
+            ;
+        if (i == t->xp_n && t->xp_n < 4u)
+            t->xp_n++;
+        i = i < t->xp_n ? i : t->xp_n - 1u;             /* (full: the last one is replaced) */
+        t->xp_note[i] = (uint8_t)note;
+        t->xp_vel[i] = (uint8_t)vel;
+        return;
+    }
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;
     if (!any) {                                        /* fresh phrase: LFO retrigger and fade */
@@ -335,9 +351,15 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 
 static void trk_note_off(track_t *t, uint32_t note)
 {
-    uint32_t i, mode = (uint32_t)t->p[P_VOICE];
+    uint32_t i, k = 0, mode = (uint32_t)t->p[P_VOICE];
     if (is_drum(t))
         return;                                         /* one-shots */
+    for (i = 0; i < t->xp_n; i++)                       /* not sounding yet (engine switch): forget it */
+        if (t->xp_note[i] != note) {
+            t->xp_note[k] = t->xp_note[i];
+            t->xp_vel[k++] = t->xp_vel[i];
+        }
+    t->xp_n = (uint8_t)k;
     if (mode != V_POLY) {
         uint32_t nv = mode == V_UNISON ? trk_nvoice(t) : 1u;
         mono_remove(t, note);
@@ -371,6 +393,50 @@ static void trk_all_off(track_t *t)
     }
     t->nmono = 0;
     t->mono_note = 0;
+    t->xp_n = 0;
+}
+
+/* engine switch, at each block start (events_block), before any note of the block. The UI writes
+ * eng_req and the new engine's P_E0..P_E7 together (IRQ off). The part's sounding voices (released by
+ * the preset change) then fade out over XF_BLOCKS blocks on the old engine, rendered with its own
+ * parameters (pe_old: an engine never reads another engine's values, which index its tables); only
+ * then the engine switches and the notes that came during the fade start on it. A part with nothing
+ * sounding switches at once. */
+#define XF_BLOCKS 4u                                    /* 4 x 32 samples: 2.9 ms */
+static void engine_block(track_t *t)
+{
+    uint32_t i, any = 0;
+    if (t->xf_on || t->eng_req != t->engine) {
+        if (!t->xf_on) {
+            for (i = 0; i < NVOICE; i++)
+                any |= t->v[i].active;
+            if (any) {
+                t->xf_on = 1;
+                t->xf = XF_BLOCKS;
+                return;
+            }
+        } else if (t->xf) {
+            return;                                     /* still fading (track_render counts down) */
+        }
+        for (i = 0; i < NVOICE; i++) {                  /* faded to 0: gone */
+            voice_t *v = &t->v[i];
+            v->active = v->gate = 0;
+            v->stage = 0;
+            v->env = v->env_out = 0;
+        }
+        t->engine = t->eng_req % NENGINES;
+        t->xf_on = 0;
+        t->nmono = 0;
+        t->mono_note = 0;
+        {
+            uint32_t n = t->xp_n;
+            t->xp_n = 0;
+            for (i = 0; i < n; i++)
+                trk_note_on(t, t->xp_note[i], t->xp_vel[i]);
+        }
+    }
+    for (i = 0; i < 8u; i++)                            /* the engine's own values, for a later fade */
+        t->pe_old[i] = t->p[P_E0 + i];
 }
 
 /* one control tick (CTL samples) of the amplitude envelope; returns Q15 */
@@ -419,10 +485,18 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     /* TUNE in cents: whole 1/16 semitones in the pitch, the rest as a fine factor (no dead zone) */
     int32_t tune = song.g[G_TUNE] >= 0 ? song.g[G_TUNE] * 16 / 100 : -((-song.g[G_TUNE] * 16 + 99) / 100);
     int32_t tune_fine = (song.g[G_TUNE] * 16 - tune * 100) * 2367 / 16000;   /* rest, in 1/4096 (1 ct = 2.367) */
-    uint32_t nr = 0;
+    uint32_t nr = 0, fade = t->xf_on && t->xf;
+    int16_t pe_new[8];
     for (i = 0; i < n; i++)
         out[i] = 0;
+    if (fade)                                           /* engine switch: the old engine, its own values */
+        for (i = 0; i < 8u; i++) {
+            pe_new[i] = t->p[P_E0 + i];
+            t->p[P_E0 + i] = t->pe_old[i];
+        }
     track_lfo_tick(t);
+    if (e->block)                                       /* the engine's per-part work (DRAWBAR: bars, rotor) */
+        e->block(t);
     for (i = 0; i < NVOICE; i++) {
         voice_t *v = &t->v[i];
         vmod_t m;
@@ -431,10 +505,14 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
             continue;
         {
             env = env_tick(t, v);
+            if (e->amp)                                 /* the engine's own amplitude curve */
+                env = e->amp(t, v, env);
             m.envq15 = env;
             m.amp1 = mulq15(env, v->vel * 258);
             if (p[P_LD_AMP])
                 m.amp1 = mulq15(m.amp1, 32767 - mulq15((lfo + 32768) >> 1, p[P_LD_AMP] * 258));
+            if (fade)                                   /* linear to 0 over the fade */
+                m.amp1 = m.amp1 * (int32_t)(t->xf - 1u) / (int32_t)XF_BLOCKS;
             m.amp0 = v->env_out;
             v->env_out = m.amp1;
         }
@@ -445,7 +523,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
                 st = 1;
             v->pitch_cur += d > 0 ? (d < st ? d : st) : (-d < st ? d : -st);
         }
-        if (!env && !m.amp0 && v->stage == 2 && e != &ENG_SAMPLE)
+        if (!env && !m.amp0 && v->stage == 2 && !eng_sampled(e))
             continue;                                   /* held at a silent sustain (SUS 0): nothing to render */
         pitch = v->pitch_cur + tune + ((lfo * p[P_LD_PIT] * 3) >> 15) + ((m.envq15 * p[P_ED_PIT] * 3) >> 15);
         m.pitch16 = clamp(pitch, 0, 2047);
@@ -458,6 +536,11 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         m.shape = (64 << 8) + ((lfo * p[P_LD_SHP]) >> 7) + ((m.envq15 * p[P_ED_SHP]) >> 7);
         e->render(t, v, out, n, &m);
         nr++;
+    }
+    if (fade) {
+        for (i = 0; i < 8u; i++)
+            t->p[P_E0 + i] = pe_new[i];
+        t->xf--;
     }
     return nr;
 }

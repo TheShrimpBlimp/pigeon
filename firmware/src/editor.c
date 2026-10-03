@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Editor protocol: SysEx for the web editor (web/EDITOR_PROTOCOL.md; v2 = user presets + live sync,
- * v3 = four tracks: the v1 / v2 commands act on the selected track, cmds 27-30 reach any track).
+ * v3 = four tracks: the v1 / v2 commands act on the selected track, cmds 27-30 reach any track;
+ * v4 = TRACK_PARAM (31) and the TRACK_CHANGED push (32), enabled by WATCH bit 1).
  *   F0 7D 46 4C cmd args.. F7     (7D = non-commercial ID, "FL")
  * Values are 14 bit, two 7-bit bytes LSB first, offset by 8192 (so -8192..8191).
  * Every request gets a reply with the same cmd; 23/24/26 are also pushed
@@ -14,7 +15,8 @@ enum { ED_INFO = 1, ED_GET, ED_SET, ED_DUMP, ED_DESC, ED_STEP_GET, ED_STEP_SET, 
        ED_SMP_BEGIN, ED_SMP_WRITE, ED_SMP_END, ED_SMP_ERASE, ED_SMP_INFO,
        ED_UP_LIST, ED_UP_GET, ED_UP_PUT, ED_UP_STORE, ED_UP_LOAD, ED_UP_ERASE,   /* v2: user presets */
        ED_WATCH, ED_CHANGED, ED_RELOAD, ED_PING, ED_STEP_CHANGED,              /* v2: live sync */
-       ED_TRACK, ED_TRACK_MIX, ED_TRACK_DUMP, ED_TRACK_STEP };                   /* v3: tracks */
+       ED_TRACK, ED_TRACK_MIX, ED_TRACK_DUMP, ED_TRACK_STEP,                    /* v3: tracks */
+       ED_TRACK_PARAM, ED_TRACK_CHANGED };                                      /* v4: any track's parameters */
 
 static uint8_t ed_out[600];
 static uint32_t ed_n;
@@ -72,9 +74,9 @@ static uint8_t ed_smp_buf[512] __attribute__((aligned(4)));
 static uint32_t ed_smp_slot(uint32_t k) { return SMP_USER_BASE + k * SMP_USER_SIZE; }
 static void ed_smp_inval(uint32_t k)
 {
-    __asm__ volatile("cli" ::: "memory");
+    fm1_irq_off();
     fl_inval(ed_smp_slot(k), SMP_USER_SIZE);
-    __asm__ volatile("csync\n\tsti" ::: "memory");
+    fm1_irq_on();
 }
 static int ed_smp_erase(uint32_t k, uint32_t all)  /* header sector, or the whole slot */
 {
@@ -120,12 +122,19 @@ static uint32_t ed_eng(const track_t *t) { return is_drum(t) ? NENGINES : t->eng
  * go out only into a half-empty SysEx ring, so they never wait. */
 #define ED_PUSH_MAX 4u                                   /* frames per pass */
 #define ED_NV (P_COUNT + G_COUNT)
+/* v4: the parameters of the tracks that are not selected which TRACK_CHANGED follows (the mixer) */
+static const uint8_t ED_TIDS[3] = {P_LEVEL, P_PAN, P_MUTE};
+#define ED_NT (NTRK * 3u)
 static struct {
     uint8_t on, eng, preset, sel;
+    uint8_t v4;                                          /* WATCH bit 1: TRACK_CHANGED pushes too */
     uint32_t pos, last_ms, run_ms, resets;
     int16_t v[ED_NV];                                    /* TSEL->p[], then song.g[] */
     uint16_t t[ED_NV];                                   /* ms (low 16 bits) of the last push */
     uint32_t st[NSTEP];                                  /* step signatures */
+    int16_t tv[ED_NT];                                   /* v4: trk[k].p[ED_TIDS[j]] at k * 3 + j */
+    uint16_t tt[ED_NT];
+    uint32_t tpos;
 } ed_w;
 
 static int16_t *ed_val(uint32_t i) { return i < P_COUNT ? &TSEL->p[i] : &song.g[i - P_COUNT]; }
@@ -142,12 +151,25 @@ static void ed_shadow(void)                              /* the editor is in syn
         ed_w.v[i] = *ed_val(i);
     for (i = 0; i < NSTEP; i++)
         ed_w.st[i] = ed_step_sig(&TSEL->step[i]);
+    for (i = 0; i < ED_NT; i++)
+        ed_w.tv[i] = trk[i / 3u].p[ED_TIDS[i % 3u]];
     ed_w.eng = (uint8_t)ed_eng(TSEL);
     ed_w.preset = TSEL->preset;
     ed_w.sel = song.sel;
     sync_reload = 0;
 }
 static int ed_room(void) { return so_w - so_r + 8u <= SXQ / 2u; }
+static void ed_known(uint32_t k, uint32_t id)            /* the editor's own change of trk[k].p[id]: no push */
+{
+    uint32_t j;
+    if (k == song.sel) {
+        ed_w.v[id] = trk[k].p[id];
+        return;
+    }
+    for (j = 0; j < 3u; j++)
+        if (ED_TIDS[j] == id)
+            ed_w.tv[k * 3u + j] = trk[k].p[id];
+}
 
 static void ed_sync(void)                                /* main loop */
 {
@@ -200,16 +222,39 @@ static void ed_sync(void)                                /* main loop */
         n++;
         ed_w.pos = k + 1u;
     }
+    for (i = 0; ed_w.v4 && i < ED_NT && n < ED_PUSH_MAX; i++) {   /* v4: the other tracks' mix */
+        uint32_t k = (ed_w.tpos + i) % ED_NT, tr = k / 3u, id = ED_TIDS[k % 3u];
+        int16_t v = trk[tr].p[id];
+        if (tr == song.sel || v == ed_w.tv[k] || (uint16_t)(now - ed_w.tt[k]) < 20u)
+            continue;                                    /* (the selected track: CHANGED above) */
+        if (!ed_room())
+            return;
+        ed_w.tv[k] = v;
+        ed_w.tt[k] = (uint16_t)now;
+        ed_begin(ED_TRACK_CHANGED);
+        ed_b(tr);
+        ed_b(id);
+        ed_v(v);
+        ed_send();
+        n++;
+        ed_w.tpos = k + 1u;
+    }
 }
 
+/* descriptor of parameter id of track t: the engine parameters of the engine it asked for
+ * (t->engine follows in the audio ISR, after a short fade) */
+static const param_desc_t *ed_tdesc(const track_t *t, uint32_t id)   /* the static ones: an engine's */
+{                                                                     /* desc hook is the device display only */
+    if (id >= P_E0 && id <= P_E7)
+        return &ENGINES[t->eng_req % NENGINES]->edit[id - P_E0];
+    return &TP[id];
+}
 /* descriptor and value slot of (scope, id): scope 0 = the selected track, 1 = global */
 static const param_desc_t *ed_desc(uint32_t scope, uint32_t id, int16_t **vp)
 {
     if (scope == 0 && id < P_COUNT) {
         *vp = &TSEL->p[id];
-        if (id >= P_E0 && id <= P_E7)                     /* the requested engine: TSEL->engine follows later */
-            return &ENGINES[TSEL->eng_req]->edit[id - P_E0];
-        return &TP[id];
+        return ed_tdesc(TSEL, id);
     }
     if (scope == 1 && id < G_COUNT) {
         *vp = &song.g[id];
@@ -487,10 +532,11 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         if (na < 1u)
             return;
         ed_w.on = a[0] & 1u;
+        ed_w.v4 = (uint8_t)(ed_w.on && (a[0] & 2u));     /* v4: also TRACK_CHANGED; the reply says it is known */
         ed_w.resets = usb.resets;
         if (ed_w.on)
             ed_shadow();
-        ed_b(ed_w.on);
+        ed_b(ed_w.on | ed_w.v4 << 1);
         break;
     case ED_PING:
         ed_b(0);
@@ -521,11 +567,11 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         if (na >= 4u) {
             *lv = (int16_t)clamp(ed_rv(a + 1), 0, 127);
             t->p[P_MUTE] = (int16_t)(a[3] ? 1 : 0);
-            if (t == TSEL || a[0] == TRK_DRUM) {           /* the editor's own change: no push */
-                ed_w.v[a[0] == TRK_DRUM ? P_COUNT + G_DRLVL : P_LEVEL] = *lv;
-                if (t == TSEL)
-                    ed_w.v[P_MUTE] = t->p[P_MUTE];
-            }
+            if (a[0] == TRK_DRUM)                          /* the editor's own change: no push */
+                ed_w.v[P_COUNT + G_DRLVL] = *lv;
+            else
+                ed_known(a[0], P_LEVEL);
+            ed_known(a[0], P_MUTE);
             ui.force = 1;
         }
         ed_b(a[0]);
@@ -566,6 +612,23 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         ed_b(st->time);
         ed_b(st->flags);
         ed_b(st->vel);
+        break;
+    }
+    case ED_TRACK_PARAM: {                                 /* track, id [, v14] -> track, id, v14 */
+        track_t *t;
+        if (na < 2u || a[0] >= NTRK || a[1] >= P_COUNT)
+            return;
+        t = &trk[a[0]];
+        d = ed_tdesc(t, a[1]);
+        if (na >= 4u) {
+            if (d->max > d->min)                           /* as SET: clamped; a fixed value stays */
+                t->p[a[1]] = (int16_t)clamp(ed_rv(a + 2), d->min, d->max);
+            ed_known(a[0], a[1]);
+            ui.force = 1;
+        }
+        ed_b(a[0]);
+        ed_b(a[1]);
+        ed_v(t->p[a[1]]);
         break;
     }
     default:

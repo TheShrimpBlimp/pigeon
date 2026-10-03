@@ -8,14 +8,24 @@
  *   fm1_wdt_feed()       in the main loop
  *   fm1_reboot()         chip reset through P33 (P3_PR_PWR bit 4)
  *   fm1_enter_uboot()    "usb_update_mode" at 0x01C7FD80 + chip reset
+ *   fm1_enter_update(p)  112-byte UPDATA_PARM record at 0x01C7FD88 + core reset
+ *                        (the SPL then runs the staged update loader)
+ *   fm1_core_reset()     PWR_CON core reset
+ *   fm1_updata_parm_clear()  zero the record (CRC 0: ignored on a warm reset)
+ *   fm1_mailbox_clear()  zero 0x01C7FD80..0x01C7FDFF (boot info, mailbox) at cold start
+ *   fm1_mem_readable(a, n) / fm1_peek8(a)   debug reads of RAM / XIP only
  */
 #pragma once
 #include <stdint.h>
+#include "fm1_cc.h"
 
 #define FM1_P33_CON (*(volatile uint32_t *)0x13E08u)
 #define FM1_P33_DAT (*(volatile uint32_t *)0x13E0Cu)
 #define FM1_RST_SRC (*(volatile uint32_t *)0x100C0u)
 #define FM1_BOOT_STATE ((volatile uint8_t *)0x01C7FD80u)
+#define FM1_PWR_CON (*(volatile uint32_t *)0x10000u)
+#define FM1_UPDATA_PARM ((volatile uint8_t *)0x01C7FD88u)
+#define FM1_UPDATA_PARM_LEN 112u
 
 static uint32_t fm1_p33_timeouts;
 
@@ -119,3 +129,44 @@ static void fm1_enter_uboot(void)
     for (;;)
         ;
 }
+
+FM1_INLINE void fm1_core_reset(void)
+{
+    FM1_PWR_CON |= 0x10u;
+    for (;;)
+        ;
+}
+
+FM1_INLINE void fm1_enter_update(const uint8_t *parm)
+{
+    uint32_t i;
+    __asm__ volatile("cli");
+    if (!(*(volatile uint32_t *)0x1EEE240u & 1u))       /* drop CPU0 write limits, as fm1_enter_uboot */
+        *(volatile uint32_t *)0x1EEE240u = 0xE7u;
+    *(volatile uint32_t *)0x1EEE348u = 0;
+    for (i = 0; i < FM1_UPDATA_PARM_LEN; i++)
+        FM1_UPDATA_PARM[i] = parm[i];
+    fm1_core_reset();
+}
+
+FM1_INLINE void fm1_updata_parm_clear(void)
+{
+    uint32_t i;
+    for (i = 0; i < FM1_UPDATA_PARM_LEN; i++)
+        FM1_UPDATA_PARM[i] = 0;
+}
+
+FM1_INLINE void fm1_mailbox_clear(void)   /* before fm1_guard_enable (it write-protects the top) */
+{
+    uint32_t *s;
+    for (s = (uint32_t *)0x01C7FD80u; s < (uint32_t *)0x01C7FE00u; s++)
+        *s = 0;
+}
+
+/* RAM and the XIP window only: SFR reads can have side effects */
+static int fm1_mem_readable(uint32_t a, uint32_t n)
+{
+    return (a >= 0x01C00000u && a + n <= 0x01C80000u && a + n >= a) ||
+           (a >= 0x02000000u && a + n <= 0x02100000u && a + n >= a);
+}
+FM1_INLINE uint8_t fm1_peek8(uint32_t a) { return *(const volatile uint8_t *)a; }

@@ -14,19 +14,31 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1.
 
 ## Features
 
-- **Six engines:** ANALOG (virtual analog), DIGITAL (4-operator FM), PHASE (CZ-style phase
-  distortion), LOFI (chiptune), SAMPLE (multisampled instruments + 3 user slots), VOICE
-  (formant oscillator, sung vowels)
+- **Nine engines** (below), each with its own factory presets
 - **Four tracks:** three synth parts, each with its own engine and sound, plus a GM drum track;
-  8 voices shared between the parts
+  8 voices shared between the parts. ALGORITHM selects the track on every page
 - **Sequencer:** 64 steps per track with chords, ties, accent and slide; live loop recording
-  with overdub; each track loops on its own length
+  with overdub and held notes; each track loops on its own length
 - **Arpeggiator**, scales and quantize, glide, MONO / LEGATO / UNISON voice modes
-- **Effects:** distortion, chorus, delay and reverb sends, master limiter
+- **Effects:** distortion and the SLICER per track; chorus, delay and reverb sends; master limiter
 - **Presets:** factory presets with their own patterns, 32 user preset slots, 4 project slots
-- **Web editor:** every parameter, step grid, track mixer, preset library, sample upload
+- **Web editor:** every parameter of every track, step grid, track mixer, preset library, sample upload
 - **USB:** class-compliant MIDI in and out (channels 1–3 for the parts, 10 for drums);
   updates over the same USB cable
+
+## Engines
+
+- **ANALOG**: virtual analog; two oscillators (saw, square, triangle, sine, PWM), noise, drive, resonant low-pass filter
+- **DIGITAL**: 4-operator FM, 8 algorithms, feedback
+- **PHASE**: phase distortion (ported from CrispyZebra)
+- **LOFI**: chiptune; pulse, triangle, saw, noise and a 4-bit wave RAM, stepped envelope, sweep, arpeggio
+- **SAMPLE**: multisampled instruments and 3 user sample slots
+- **VOICE**: formant oscillator, sung vowels
+- **TRIO**: 3 oscillators with ring modulation and sync, multimode filter (LP / BP / HP / notch)
+- **WHEEL**: tonewheel-style organ; drawbar registrations, percussion, key click, drive, rotary speaker
+- **GRAIN**: granular textures from the built-in samples or a user slot
+
+**SLICER** (FX page, every track including drums): a tempo-synced 16-step gate or stutter, with 16 patterns.
 
 - Install: [web installer](https://hugelton.github.io/Felucca/) (Chrome or Edge, USB), or `tools/fm1_install.py` from a terminal
 - Editor: [web editor](https://hugelton.github.io/Felucca/webapp/editor/)

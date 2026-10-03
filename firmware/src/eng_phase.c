@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* Phase distortion, CZ style. The waveforms are a C port of the oscillator of
+/* Phase distortion. The waveforms are a C port of the oscillator of
  * CrispyZebra (Leo Kuroshita, GPL-3.0, github.com/hugelton/CrispyZebra), the
- * author's own CZ-101 core: a -cos table read through a bent phase whose bend
- * is DCW. WAVE2 alternates with WAVE every other cycle, as on the CZ. A second
+ * author's own phase-distortion core: a -cos table read through a bent phase whose
+ * bend is DCW. WAVE2 alternates with WAVE every other cycle. A second
  * line (DTN) can be mixed or ring-modulated; SUB adds a sine an octave down.
  * Envelopes are Felucca's own (ADSR, ENV -> DCW). */
 static const char *const N_PD_WAVE[] = {"SAW", "SQR", "PLS", "DSIN", "SPLS", "RSAW", "RTRI", "RTRP"};
@@ -136,7 +136,7 @@ static void phase_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     pd_t b1, b2;
     depth = clamp(depth + (m->shape - (64 << 8)), 0, 127 << 8);
     dcw = (uint32_t)depth * 65535u / (127u << 8);
-    dcw = (dcw * 56000u) >> 16;                              /* the CZ range of the bend */
+    dcw = (dcw * 56000u) >> 16;                              /* the classic range of the bend */
     inc2 = PITCH_INC[clamp(m->pitch16 + d16, 0, 2047)];
     inc2 += (uint32_t)((int32_t)(inc2 >> 12) * (rem * 2367 / 16000));
     pd_setup(&b1, w1, dcw);

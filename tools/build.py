@@ -172,7 +172,7 @@ def build_loader():
 def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_CDC", "FELUCCA_UART",
-                 "FELUCCA_ICONS"):
+                 "FELUCCA_ICONS", "FELUCCA_SLICE"):
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
@@ -251,6 +251,50 @@ def check(img, syms, dis, rt):
     return errors, notes
 
 
+# Every hardware register access lives in hal/. In src/ and loader/ (comments stripped):
+#  - no volatile pointer cast, except of a C object's address (`*(volatile T *)&x`: a read-once
+#    of a RAM flag shared with an ISR, e.g. usb.c ota_wire_send);
+#  - no literal in a register or reserved window (core SFRs 0x10000-0x13FFF, SFC 0x40000-0x43FFF,
+#    GPIO/IOMAP 0x50000-0x51FFF, CPU 0x1EE0000-0x1EEFFFF, RAM top 0x01C7F000- (boot info,
+#    mailbox, vectors), XIP 0x02000000-0x020FFFFF);
+#  - no inline asm, except the empty compiler barrier RING_PUBLISH() (emits no instruction);
+#  - no HAL register macro (a hal/ #define that is, or expands to, a volatile access).
+# Linker symbols (_bss_start[], _rt_load[], ...) are plain C objects and pass.
+MMIO_LIT = re.compile(r"\b0x0*(1[0-3][0-9a-f]{3}|4[0-3][0-9a-f]{3}|5[01][0-9a-f]{3}|1ee[0-9a-f]{4}|"
+                      r"1c7f[0-9a-f]{3}|20[0-9a-f]{5})u?l?\b", re.I)
+MMIO_CAST = re.compile(r"\(\s*(?:const\s+)?volatile\b[^()]*\*\s*\)(?!\s*&)")
+MMIO_ASM = re.compile(r"\b(?:__asm__|asm)\b(?!\s+volatile\s*\(\s*\"\"\s*:::\s*\"memory\"\s*\))")
+
+
+def mmio_check():
+    def strip(s):
+        s = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), s, flags=re.S)
+        return re.sub(r"//[^\n]*", "", s)
+    defs = {}
+    for h in sorted((FW / "hal").glob("*.h")):
+        for m in re.finditer(r"^#define\s+(\w+)(?:\([^)]*\))?\s+(.*)$", strip(h.read_text()), re.M):
+            defs[m.group(1)] = m.group(2)
+    regs = {n for n, b in defs.items() if re.search(r"\bvolatile\b", b)}
+    while True:                                   # macros built on register macros (FM1_WR_LIMIT_H -> FM1_X2)
+        more = {n for n, b in defs.items() if n not in regs and set(re.findall(r"\w+", b)) & regs}
+        if not more:
+            break
+        regs |= more
+    errors = []
+    for f in sorted([*(FW / "src").glob("*.[ch]"), *(FW / "loader").glob("*.c")]):
+        for no, ln in enumerate(strip(f.read_text()).splitlines(), 1):
+            where = f"{f.relative_to(FW)}:{no}"
+            for rx, what in ((MMIO_LIT, "register/window address"), (MMIO_CAST, "volatile pointer cast"),
+                             (MMIO_ASM, "inline asm")):
+                m = rx.search(ln)
+                if m:
+                    errors.append(f"{where}: {what} outside hal/ ({m.group(0).strip()}); add a hal/ helper")
+            used = set(re.findall(r"\b[A-Z_][A-Z0-9_]*\b", ln)) & regs
+            if used:
+                errors.append(f"{where}: HAL register macro {sorted(used)[0]} outside hal/; use a hal/ helper")
+    return errors
+
+
 def main():
     global PRODUCT, VERSION
     ap = argparse.ArgumentParser()
@@ -276,6 +320,10 @@ def main():
         ota = ldr.result()
     img, syms, dis, rt = build_app()
     errors, notes = check(img, syms, dis, rt)
+    hal_err = mmio_check()
+    errors += hal_err
+    if not hal_err:
+        notes.append("register access: hal/ only (src/, loader/ clean)")
     for n in notes:
         print("  ok   ", n)
     for e in errors:

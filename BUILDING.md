@@ -41,8 +41,8 @@ On Linux x86-64 the toolchain runs natively and Docker is not needed.
 `JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations
 (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`).
 
-`./build.sh --release 0.8-beta` makes a release build: the package identity becomes
-`FM-1_908` and the version string `0.8-BETA`; the package is `build/felucca-0.8-beta.fwsc`.
+`./build.sh --release 0.9-beta` makes a release build: the package identity becomes
+`FM-1_909` and the version string `0.9-BETA`; the package is `build/felucca-0.9-beta.fwsc`.
 
 Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`):
 
@@ -67,8 +67,15 @@ tests/run_tests.sh
 ```
 
 Runs the host tests (flash storage, user presets, MIDI parser, update entry, update
-loader, a DSP render, the 4-track mix, the command-line installer) and, with Node.js,
-the web page tests. Run it after `./build.sh` (it uses `build/felucca.fwsc`).
+loader, a DSP render, the 4-track mix, project formats, the SLICER, the regression suite,
+the command-line installer) and, with Node.js, the web page tests. Run it after `./build.sh`
+(it uses `build/` and needs `AC79_SDK` set as for the build).
+
+The regression suite (`tests/regress.c`) renders every engine and preset and compares a
+hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU
+cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended change of
+the sound, `GOLDEN_UPDATE=1 sh tests/run_tests.sh` rewrites the hashes; `BUDGET_UPDATE=1`
+does the same for the cost files.
 
 ## Install
 

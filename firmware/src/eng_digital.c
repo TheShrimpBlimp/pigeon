@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* DIGITAL: four-operator FM. */
-/* Four sine operators, eight TX81Z-style algorithms (ALG = P_E0, EDIT 1 KNOB 1),
- * op 4 with feedback, one modulation INDEX shaped by a modulator envelope. */
+/* Four sine operators, eight classic 4-operator algorithms (ALG = P_E0, EDIT 1 KNOB 1),
+ * op 4 with feedback, one modulation INDEX shaped by a modulator envelope.
+ * Phase modulation wraps naturally in the 32-bit phase. */
 static const char *const N_FMALG[] = {"1", "2", "3", "4", "5", "6", "7", "8"};
 static const char *const N_RATIO[] = {".5", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16"};
 static const uint16_t RATIO_Q8[15] = {128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560, 2816,

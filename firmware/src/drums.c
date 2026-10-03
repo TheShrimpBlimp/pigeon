@@ -70,15 +70,20 @@ static void drum_on(uint32_t note, uint32_t vel)
     v->s[5] = (int32_t)((pow2_q16((int32_t)note * 16 - SMP_ZONES[zi].root16) >> 8) * (SMP_ZONES[zi].rate >> 8));
 }
 
-/* adds the drums into the dry mix and the reverb send */
-static void drums_render(int32_t *ml, int32_t *mr, int32_t *rev, uint32_t n)
+/* adds the drums into the dry mix and the reverb send; mono != 0: into mono instead, before the
+ * pan and the send (the SLICER, slicer.c slicer_drums, does those after it) */
+static inline void drums_mix(int32_t *ml, int32_t *mr, int32_t *rev, int32_t *mono, uint32_t n)
 {
     uint32_t k, i;
     int32_t lvl = song.g[G_DRLVL] * 200, send = song.g[G_DRREV] * 258, pk = drums.peak;
     int32_t pan = trk[TRK_DRUM].p[P_PAN], gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
     for (i = 0; i < n && drums.tail; i++) {         /* declick tail, ~0.4 ms */
-        ml[i] += drums.tail;
-        mr[i] += drums.tail;
+        if (mono) {
+            mono[i] += drums.tail;
+        } else {
+            ml[i] += drums.tail;
+            mr[i] += drums.tail;
+        }
         drums.tail -= drums.tail / 16 + (drums.tail > 0 ? 1 : drums.tail < 0 ? -1 : 0);
     }
     for (k = 0; k < NDRUM; k++) {
@@ -108,6 +113,10 @@ static void drums_render(int32_t *ml, int32_t *mr, int32_t *rev, uint32_t n)
             v->s[7] = s;
             if (s > pk || -s > pk)
                 pk = s < 0 ? -s : s;
+            if (mono) {
+                mono[i] += s;
+                continue;
+            }
             ml[i] += (s * gl) >> 12;
             mr[i] += (s * gr) >> 12;
             if (send)
@@ -117,3 +126,5 @@ static void drums_render(int32_t *ml, int32_t *mr, int32_t *rev, uint32_t n)
     }
     drums.peak = pk;
 }
+static void drums_render(int32_t *ml, int32_t *mr, int32_t *rev, uint32_t n) { drums_mix(ml, mr, rev, 0, n); }
+static void drums_render_mono(int32_t *mono, uint32_t n) { drums_mix(0, 0, 0, mono, n); }

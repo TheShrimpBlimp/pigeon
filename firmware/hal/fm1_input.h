@@ -29,6 +29,7 @@
 #pragma once
 #include <stdint.h>
 #include "fm1_time.h"
+#include "fm1_gpio.h"
 
 #ifndef FM1_INPUT_IDLE
 #define FM1_INPUT_IDLE() ((void)0)
@@ -43,11 +44,6 @@
 #define FM1_NKEY 41u              /* ids: 0..13 buttons, 14..40 note keys */
 #define FM1_NENC 7u
 
-#define FM1_PORT(p) (0x50000u + (p) * 0x40u)
-#define FM1_PR(p, r) (*(volatile uint32_t *)(FM1_PORT(p) + (r)))
-enum { FM1_PA = 0, FM1_PB = 1, FM1_PC = 2, FM1_PH = 7 };
-enum { FM1_OUT = 0x00, FM1_IN = 0x04, FM1_DIR = 0x08, FM1_DIE = 0x0C, FM1_PU = 0x10,
-       FM1_PD = 0x14, FM1_HD0 = 0x18, FM1_HD = 0x1C };
 
 /* key id at (physical column, packed row bit), -1 = none */
 static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {

@@ -106,13 +106,6 @@ static int con_word(const char **p, const char *w)       /* match a whole word *
     return 1;
 }
 
-/* RAM and the XIP window only: SFR reads can have side effects */
-static int con_readable(uint32_t a, uint32_t n)
-{
-    return (a >= 0x01C00000u && a + n <= 0x01C80000u && a + n >= a) ||
-           (a >= 0x02000000u && a + n <= 0x02100000u && a + n >= a);
-}
-
 static void con_memr(const char *p)
 {
     int ok, ok2;
@@ -125,7 +118,7 @@ static void con_memr(const char *p)
         n = 64;
     if (n > 256u)
         n = 256;
-    if (!con_readable(a, n)) {
+    if (!fm1_mem_readable(a, n)) {
         con_puts("only RAM 01C00000-01C80000 and XIP 02000000-02100000\r\n");
         return;
     }
@@ -135,7 +128,7 @@ static void con_memr(const char *p)
             con_putc(':');
         }
         con_putc(' ');
-        con_hex(*(const volatile uint8_t *)(a + i), 2);
+        con_hex(fm1_peek8(a + i), 2);
         if (i % 16u == 15u || i + 1u == n)
             con_puts("\r\n");
     }

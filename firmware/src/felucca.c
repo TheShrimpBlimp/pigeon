@@ -7,6 +7,10 @@
 #include "fm1_irq.h"
 #include "fm1_guard.h"
 #include "fm1_input.h"
+#include "fm1_timer.h"
+#include "fm1_audio.h"
+#include "fm1_adc.h"
+#include "fm1_lcd_hw.h"
 #include "felucca_tables.h"
 
 #include "libc.c"
@@ -17,6 +21,7 @@
 #include "drums.c"
 #include "params.c"
 #include "voice.c"
+#include "slicer.c"          /* per-track SLICER insert, used by fx.c */
 #include "fx.c"
 #ifndef FELUCCA_OTA
 #define FELUCCA_OTA 1            /* M-UPGRADE update entry; needs FELUCCA_FLASH */
@@ -140,19 +145,10 @@ static void ota_show(uint32_t step, int32_t code)
 }
 static void ota_commit(const uint8_t *parm)
 {
-    uint32_t i;
     bootguard.pending = 0;                              /* intentional reset */
     usb_detach();
     fm1_delay_ms(30);
-    __asm__ volatile("cli");
-    if (!(*(volatile uint32_t *)0x1EEE240u & 1u))       /* drop CPU0 write limits, as fm1_enter_uboot */
-        *(volatile uint32_t *)0x1EEE240u = 0xE7u;
-    *(volatile uint32_t *)0x1EEE348u = 0;
-    for (i = 0; i < 112u; i++)
-        ((volatile uint8_t *)0x01C7FD88u)[i] = parm[i];
-    *(volatile uint32_t *)0x10000u |= 0x10u;            /* PWR_CON core reset */
-    for (;;)
-        ;
+    fm1_enter_update(parm);                             /* record into RAM, core reset (fm1_sys.h) */
 }
 #endif
 #if FELUCCA_OTA

@@ -13,15 +13,22 @@ Sources:
   gen_waves.py          Felucca's own drum sounds (the Hügelton Sample Pack)
 One SAMPLE preset is written per set.
 
+With FELUCCA_SLICE=1 the SLICE engine's built-in BREAK (eng_slice.c) is rendered here
+too: one bar of 16ths arranged from Felucca's own generated drums, stored after every set
+and not one of the SAMPLE sets. Its slice table (decoder states on a 128-point grid, the hits as AUTO
+slices) is written with it: SLC_BREAK_INIT.
+
 The header is cached in build/gen_samples.cache under a hash of every input.
 """
 import hashlib
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sampleio as sio  # noqa: E402
 from sampleio import detect_hz, hz_to_midi, ima_encode, key_split, onset, peak, read_any_wav, resample  # noqa: E402
 
 SRC = Path(__file__).resolve().parents[1]
@@ -57,7 +64,15 @@ GM_ROLE_WORDS = [("bassdrum", "kick"), ("kick", "kick"), ("snare", "snare"), ("h
 GM_KEEP = {"crash": 0.8, "ride": 0.8, "ohh": 0.5}
 GM_CC0_ROLES = ("tamb", "shaker", "conga", "claves", "wood")   # the CC0 set is orchestral: hand percussion only
 
-ENV = {"wave": (5, 80, 100, 50), "kit": (0, 127, 127, 60), "multi": (0, 85, 0, 75),
+# SLICE's BREAK: (step, GM role, gain) on a bar of 16ths; the open hat is choked by the next hat
+BREAK_BPM, BREAK_STEPS = 120, 16
+BREAK_HITS = [(0, "kick", 1.0), (0, "chh", 0.55), (2, "kick", 0.7), (2, "chh", 0.4), (4, "snare", 1.0),
+              (4, "chh", 0.45), (6, "chh", 0.4), (7, "kick", 0.8), (8, "chh", 0.55), (9, "snare", 0.3),
+              (10, "kick", 0.9), (10, "ohh", 0.4), (12, "snare", 1.0), (12, "chh", 0.45), (14, "chh", 0.4),
+              (14, "snare", 0.35)]
+SLC_GRID, SLC_AUTO = 128, 32                 # eng_slice.c slc_src_t
+
+ENV = {"wave":(5, 80, 100, 50), "kit": (0, 127, 127, 60), "multi": (0, 85, 0, 75),
        "oneshot": (0, 127, 127, 70), "sus": (12, 80, 120, 60)}
 
 _wavs = {}
@@ -165,9 +180,60 @@ def gm_kit_entry(role, path):
     return [int(v * 30000 / pk) for v in x]
 
 
+def ima_states(data, positions):
+    """IMA ADPCM decoder state before sample p for each p (ascending), packed as eng_slice.c reads it:
+    (predictor & 0xFFFF) | index << 16 (segment 0)"""
+    pred, idx, out, want = 0, 0, [], list(positions)
+    for n in range(max(want) + 1 if want else 0):
+        while want and want[0] == n:
+            out.append((pred & 0xFFFF) | idx << 16)
+            want.pop(0)
+        code = (data[n >> 1] >> (4 * (n & 1))) & 15
+        step = sio.IMA_STEP[idx]
+        vd = step >> 3
+        if code & 4:
+            vd += step
+        if code & 2:
+            vd += step >> 1
+        if code & 1:
+            vd += step >> 2
+        pred = max(-32768, min(32767, pred - vd if code & 8 else pred + vd))
+        idx = max(0, min(88, idx + sio.IMA_IDX[code & 7]))
+    return out
+
+
+def break_loop():
+    """SLICE's BREAK: BREAK_HITS from Felucca's generated drums at TR -> (int16 samples, hit positions)"""
+    src = gm_kit_sources(False)                     # generated sounds only: the same on every build
+    n = int(round(TR * 60 / BREAK_BPM * 4))
+    x = [0.0] * n
+    pos = [s * n // BREAK_STEPS for s in range(BREAK_STEPS + 1)]
+    for step, role, gain in BREAK_HITS:
+        smp = gm_kit_entry(role, src[role])
+        if role == "ohh":                           # choked by the next hat
+            nxt = min([s for s, r, _ in BREAK_HITS if r in ("chh", "ohh") and s > step] or [BREAK_STEPS])
+            keep, fade = pos[nxt] - pos[step], int(0.004 * TR)
+            smp = [v * min(1.0, (keep - i) / fade) for i, v in enumerate(smp[:keep])]
+        for i, v in enumerate(smp):                 # the tails wrap round: a seamless loop
+            x[(pos[step] + i) % n] += v * gain
+    pk = peak(x)
+    return [int(v * 30000 / pk) for v in x], sorted({pos[s] for s, _, _ in BREAK_HITS})
+
+
 class Builder:
     def __init__(self):
         self.zones, self.sets, self.blob, self.kinds = [], [], bytearray(), {}
+        self.brk = None
+
+    def slice_break(self):
+        """SLICE's BREAK, after every set; its slice table: decoder states at k * len / SLC_GRID, the hits"""
+        x, hits = break_loop()
+        off, _ = self.add(x, 0)
+        n = len(x)
+        data = self.blob[off:off + (n + 1) // 2]
+        grid = ima_states(data, [k * n // SLC_GRID for k in range(SLC_GRID)])
+        hits = hits[:SLC_AUTO]
+        self.brk = dict(off=off, n=n, grid=grid, apos=hits, ast=ima_states(data, hits))
 
     def add(self, s, loop_start):
         """ADPCM-encode s into the blob (each sample starts on an even offset) -> (offset, state at loop_start)"""
@@ -251,10 +317,28 @@ class Builder:
         names = ", ".join(f'"{n}"' for n, _, _ in named)
         L.append("#define SMP_SET_NAMES_INIT " + names)
         L.append("static const char *const SMP_SET_NAMES[] = {" + names + "};")
+        L += self.break_header()
         return "\n".join(L) + "\n"
 
+    def break_header(self):
+        """SLC_BREAK_INIT: an eng_slice.c slc_src_t (len, rate, nseg, nauto, seg[], grid[], apos[], ast[])"""
+        b = self.brk
+        if not b:
+            return ["#define SLC_BREAK_INIT {0}"]
+        rate = int(round(TR / 44100 * 65536))
+
+        def lst(v, k):
+            v = list(v) + [0] * (k - len(v))
+            return ", \\\n    ".join(", ".join(map(str, v[i:i + 12])) for i in range(0, len(v), 12))
+        return ["", f"/* SLICE's BREAK: one bar of {BREAK_STEPS} steps at {BREAK_BPM} BPM, {len(b['apos'])} hits */",
+                f"#define SLC_BREAK_BPM {BREAK_BPM}", f"#define SLC_BREAK_STEPS {BREAK_STEPS}",
+                f"#define SLC_BREAK_INIT {{{b['n']}, {rate}, 1, {len(b['apos'])}, {{{{{b['off']}, 0, {b['n']}}}}}, {{ \\",
+                "    " + lst(b["grid"], SLC_GRID) + "}, { \\", "    " + lst(b["apos"], SLC_AUTO) + "}, { \\",
+                "    " + lst(b["ast"], SLC_AUTO) + "}}"]
+
     def summary(self):
-        return f"samples: {len(self.sets)} sets, {len(self.zones)} zones, {len(self.blob)} B ADPCM"
+        brk = f", SLICE BREAK {self.brk['n']} samples" if self.brk else ""
+        return f"samples: {len(self.sets)} sets, {len(self.zones)} zones, {len(self.blob)} B ADPCM{brk}"
 
 
 def input_key(have_cc0):
@@ -263,7 +347,7 @@ def input_key(have_cc0):
     here = Path(__file__).resolve().parent
     for p in (here / "gen_samples.py", here / "sampleio.py"):
         h.update(p.read_bytes())
-    h.update(repr((sys.version_info[:2], have_cc0)).encode())   # sum() differs across versions
+    h.update(repr((sys.version_info[:2], have_cc0, os.environ.get("FELUCCA_SLICE") == "1")).encode())   # sum() differs across versions
     files = sorted(GENDIR.glob("*.wav"))
     if have_cc0:
         files += sorted(CC0.glob("*/*.wav"))
@@ -293,6 +377,8 @@ def main(out):
             if kind != "kit":                       # the CC0 KIT feeds the GM kit
                 b.cc0_set(name, kind)
     b.gm_kit(have_cc0)
+    if os.environ.get("FELUCCA_SLICE") == "1":       # SLICE's BREAK: only when that engine is built
+        b.slice_break()                             # last: the sets' offsets stay as they were
     text = b.header()
     Path(out).write_text(text)
     CACHE.parent.mkdir(parents=True, exist_ok=True)

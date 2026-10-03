@@ -9,7 +9,7 @@ extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
 void fm1_timer5_irq(void)
 {
     static uint32_t sub;
-    *(volatile uint32_t *)0x10900u |= 0x4000u;
+    fm1_timer5_ack();
     felucca_dbg.timer_irqs++;
     if (felucca_dbg.in_audio)
         felucca_dbg.nested++;                      /* only possible if this IRQ outranks ALNK0 */
@@ -37,11 +37,7 @@ extern void isr_timer5(void);
 
 static void timer5_start(void)                 /* OSC /4 = 6 MHz, PRD 600 -> 10 kHz */
 {
-    *(volatile uint32_t *)0x10900u = 0x4000u;
-    *(volatile uint32_t *)0x10904u = 0;
-    *(volatile uint32_t *)0x10908u = 600u;
-    fm1_irq_attach(FM1_IRQ_TIMER5, isr_timer5, 1);   /* below ALNK0 (3): no nesting into audio */
-    *(volatile uint32_t *)0x10900u = 0x4019u;
+    fm1_timer5_start(isr_timer5, 1);   /* below ALNK0 (3): no nesting into audio */
 }
 
 static void hexs(char *b, uint32_t v)
@@ -56,7 +52,7 @@ static void fm1_fault(const fm1_crash_t *c)
 {
     char b[12];
     uint32_t t0;
-    A_CON0 &= ~0x800u;
+    fm1_audio_stop();
     lcd_fill(0, 0, 240, 240, RGB(160, 0, 0));
     draw_text_box(0, 8, 240, &FONT_S, "FELUCCA CRASH", C_WHITE, 1);
     hexs(b, c->vec);
@@ -121,7 +117,7 @@ static void fm1_main(void)
     felucca_dbg.prev_frames = felucca_dbg.ui_frames;
     felucca_dbg.prev_rst = fm1_boot.p3_rst;
     fm1_input_init();
-    adc_init();
+    fm1_adc_init();
     panel_init();
     felucca_init();
     audio_init();
@@ -149,12 +145,12 @@ static void fm1_main(void)
             bootguard.failed = 0;
         }
         {
-            int32_t b = adc_read(3);                    /* battery: slow IIR */
+            int32_t b = fm1_adc_read(FM1_ADC_BATT);     /* battery: slow IIR */
             if (b > 0)
                 song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
         }
         {
-            int32_t a = adc_read(4);
+            int32_t a = fm1_adc_read(FM1_ADC_MASTER);
             if (a >= 0) {
                 uint32_t k10;
                 knob += (a * 16 - knob) / 8;
@@ -179,7 +175,7 @@ static void fm1_main(void)
                     shown = left;
                 }
             } else if (fm1_ms - t0 > 5000u) {
-                A_CON0 &= ~0x800u;
+                fm1_audio_stop();
                 lcd_fill(0, 0, 240, 240, C_BLACK);
                 draw_text_box(0, 110, 240, &FONT_S, "UBOOT", RGB(80, 120, 255), 1);
                 usb_detach();
@@ -201,7 +197,7 @@ static void fm1_main(void)
         }
 #endif
         if (usb.uboot_req) {                            /* SysEx F0 22 24 35 7D F7 from the host */
-            A_CON0 &= ~0x800u;
+            fm1_audio_stop();
             lcd_fill(0, 0, 240, 240, C_BLACK);
             draw_text_box(0, 110, 240, &FONT_S, "UBOOT (USB)", C_WHITE, 1);
             fm1_delay_ms(20);
@@ -262,8 +258,7 @@ void fm1_cstart(void)
         *d = *s;
     for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++)
         *d = *s;                                /* flash driver code that must run from RAM */
-    for (s = (uint32_t *)0x01C7FD80u; s < (uint32_t *)0x01C7FE00u; s++)
-        *s = 0;
+    fm1_mailbox_clear();
     fm1_guard_enable(FM1_GUARD_STACK | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
     fm1_boot.p3_rst = (uint8_t)p3;
     fm1_boot.rst_src = src;

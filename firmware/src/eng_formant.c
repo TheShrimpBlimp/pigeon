@@ -212,21 +212,21 @@ static void formant_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
 
 static const preset_t FORMANT_PRESETS[] = {
     /* VOWEL VOWL2 TALK SHIFT | BUZZ BREATH Q RAND */
-    {"CHOIR AAH", {0, 0, 0, 0, 40, 22, 60, 0}, {85, 90, 115, 95}, 0, 0, FX(0, 70, 15, 90), PAT(5), MAC(0, 4, 5, 1)},
-    {"VOX LEAD", {32, 0, 0, 2, 90, 8, 72, 0}, {6, 70, 105, 55}, 0, 1, FX(0, 20, 45, 40), PAT(4), MAC(0, 4, 4, 2)},
-    {"WOW BASS", {95, 0, 68, 0, 100, 0, 80, 0}, {0, 70, 70, 30}, 0, 1, FX(10, 0, 10, 10), PAT(8), MAC(2, 3, 1, -4)},
-    {"WHISPER", {0, 95, 88, 3, 50, 120, 50, 0}, {50, 90, 110, 90}, 0, 0, FX(0, 40, 30, 70), PAT(5), MAC(5, 3, 0, 4)},
+    {"CHOIR AAH", {0, 0, 0, 0, 40, 22, 60, 0}, {85, 90, 115, 95}, 0, 0, FX(0, 70, 15, 90), PAT(5)},
+    {"VOX LEAD", {32, 0, 0, 2, 90, 8, 72, 0}, {6, 70, 105, 55}, 0, 1, FX(0, 20, 45, 40), PAT(4)},
+    {"WOW BASS", {95, 0, 68, 0, 100, 0, 80, 0}, {0, 70, 70, 30}, 0, 1, FX(10, 0, 10, 10), PAT(8)},
+    {"WHISPER", {0, 95, 88, 3, 50, 120, 50, 0}, {50, 90, 110, 90}, 0, 0, FX(0, 40, 30, 70), PAT(5)},
 };
 
 static const engine_t ENG_FORMANT = {
     "VOICE", {"VOWL", "TONE"},
     {
-        {"VOWEL", F_INT, 0, 127, 0, 0, 0},
+        {"VOWL", F_INT, 0, 127, 0, 0, 0},
         {"VOWL2", F_INT, 0, 127, 64, 0, 0},
         {"TALK", F_TIME, 0, 127, 0, 0, 0},
         {"SHIFT", F_SEMI, -12, 12, 0, 0, 0},
         {"BUZZ", F_PCT, 0, 127, 64, 0, 0},
-        {"BRETH", F_PCT, 0, 127, 10, 0, 0},
+        {"BRTH", F_PCT, 0, 127, 10, 0, 0},
         {"Q", F_PCT, 0, 127, 64, 0, 0},
         {"RAND", F_PCT, 0, 127, 0, 0, 0},
     },

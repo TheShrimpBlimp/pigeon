@@ -2,9 +2,22 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Projects: four slots in .noinit RAM, so they survive resets and UBOOT
  * entry. With FELUCCA_FLASH every save also goes to flash through storage.c,
- * and an empty RAM slot is filled from flash on load. */
-#define PROJ_MAGIC 0x46554E32u                 /* "FUN2": four tracks (format 2) */
+ * and an empty RAM slot is filled from flash on load.
+ *
+ * Formats: 3 ("FUN3", written) = format 2 with today's P_COUNT per track (the SLICER parameters);
+ * 2 ("FUN2") and 1 ("FUN1") are read and converted: they hold PROJ_NP_V2 parameters per track,
+ * mapped by count as user presets are (the first PROJ_NP_V2 - 8 are P_LEVEL.. in order, the last 8
+ * P_E0..P_E7; the parameters added since take their defaults, so the SLICER is OFF). Their engine
+ * bytes are kept: formats 1 and 2 had engines 0..7 (ANALOG .. WHEEL), and the engines added since
+ * (SLICE 8, ..) were appended, no index moved; the drum track's byte (it has no engine) becomes 0.
+ *
+ * Built on the host too (tests/project_test.c, -DPROJ_HOST): the part above the #ifndef
+ * PROJ_HOST needs core.h, params.c (TP), the engines and trk_def_engine (ui.c). */
+#define PROJ_MAGIC 0x46554E33u                 /* "FUN3": four tracks, P_COUNT parameters each (format 3) */
+#define PROJ_MAGIC_V2 0x46554E32u              /* "FUN2": four tracks, PROJ_NP_V2 parameters; read only */
 #define PROJ_MAGIC_V1 0x46554E31u              /* "FUN1": one instrument; loads into track 1 */
+#define PROJ_NP_V2 53u                         /* P_COUNT of formats 1 and 2 (P_E0 was 45) */
+#define PROJ_NG_V2 27u                         /* G_COUNT of formats 1 and 2 */
 typedef struct {                               /* one track; the drum track ignores engine / preset */
     int16_t p[P_COUNT];
     uint8_t engine, preset;
@@ -17,12 +30,25 @@ typedef struct {
     proj_trk_t t[NTRK];
     uint32_t sum;
 } project_t;
+typedef struct {                               /* a track of formats 1 and 2, read only */
+    int16_t p[PROJ_NP_V2];
+    uint8_t engine, preset;
+    step_t step[NSTEP];
+} proj_trk_v2_t;
+typedef struct {                               /* format 2 (until 0.9), read only */
+    uint32_t magic, size;
+    int16_t g[PROJ_NG_V2];
+    uint8_t sel, rsv[3];
+    proj_trk_v2_t t[NTRK];
+    uint32_t sum;
+} project_v2_t;
 typedef struct {                               /* format 1 (until 0.5 beta), read only */
     uint32_t magic, size;
-    int16_t g[G_COUNT];
-    proj_trk_t t;
+    int16_t g[PROJ_NG_V2];
+    proj_trk_v2_t t;
     uint32_t sum;
 } project_v1_t;
+_Static_assert(sizeof(project_v2_t) == 2552u && sizeof(project_v1_t) == 688u, "formats 1 / 2 as they were stored");
 project_t proj_slot[4] __attribute__((section(".noinit")));
 
 static uint32_t proj_hash(const void *p, uint32_t n)   /* FNV-1a over n bytes */
@@ -36,7 +62,46 @@ static uint32_t proj_hash(const void *p, uint32_t n)   /* FNV-1a over n bytes */
 static uint32_t proj_sum(const project_t *p) { return proj_hash(p, sizeof *p - 4u); }
 static int proj_ok(const project_t *q) { return q->magic == PROJ_MAGIC && q->size == sizeof *q && q->sum == proj_sum(q); }
 
-/* a format 1 project (n bytes in *v1) -> slot q as format 2: the instrument becomes track 1,
+/* the globals of formats 1 and 2 (G_* unchanged since; any added later: their defaults) */
+static void proj_g_from_v2(int16_t *g, const int16_t *g2)
+{
+    uint32_t i;
+    for (i = 0; i < G_COUNT; i++)
+        g[i] = i < PROJ_NG_V2 ? g2[i] : GP[i].def;
+}
+
+/* a track of formats 1 and 2 -> today's, mapped by count (see the top); drum: the drum track */
+static void proj_trk_from_v2(proj_trk_t *d, const proj_trk_v2_t *s, int drum)
+{
+    uint32_t k, nc = PROJ_NP_V2 - 8u;
+    for (k = 0; k < P_E0; k++)
+        d->p[k] = k < nc ? s->p[k] : TP[k].def;
+    for (k = 0; k < 8u; k++)
+        d->p[P_E0 + k] = s->p[nc + k];
+    d->engine = drum ? 0u : s->engine;          /* (indices 0..7 as they were) */
+    d->preset = drum ? 0u : s->preset;
+    memcpy(d->step, s->step, sizeof d->step);
+}
+
+/* a format 2 project (n bytes in *v2) -> slot q as format 3 */
+static int proj_from_v2(project_t *q, const project_v2_t *v2, int n)
+{
+    uint32_t i;
+    if (n != (int)sizeof *v2 || v2->magic != PROJ_MAGIC_V2 || v2->size != sizeof *v2 ||
+        v2->sum != proj_hash(v2, sizeof *v2 - 4u))
+        return 0;
+    memset(q, 0, sizeof *q);
+    q->magic = PROJ_MAGIC;
+    q->size = sizeof *q;
+    proj_g_from_v2(q->g, v2->g);
+    q->sel = v2->sel;
+    for (i = 0; i < NTRK; i++)
+        proj_trk_from_v2(&q->t[i], &v2->t[i], i == TRK_DRUM);
+    q->sum = proj_sum(q);
+    return 1;
+}
+
+/* a format 1 project (n bytes in *v1) -> slot q as format 3: the instrument becomes track 1,
  * tracks 2..4 start empty (their sounds as at power-on) */
 static int proj_from_v1(project_t *q, const project_v1_t *v1, int n)
 {
@@ -47,9 +112,8 @@ static int proj_from_v1(project_t *q, const project_v1_t *v1, int n)
     memset(q, 0, sizeof *q);
     q->magic = PROJ_MAGIC;
     q->size = sizeof *q;
-    for (i = 0; i < G_COUNT; i++)
-        q->g[i] = v1->g[i];
-    q->t[0] = v1->t;
+    proj_g_from_v2(q->g, v1->g);
+    proj_trk_from_v2(&q->t[0], &v1->t, 0);
     for (i = 1; i < NTRK; i++) {               /* the other tracks: their defaults, no steps */
         uint32_t k;
         for (k = 0; k < P_COUNT; k++)
@@ -63,19 +127,29 @@ static int proj_from_v1(project_t *q, const project_v1_t *v1, int n)
     return 1;
 }
 
+/* n bytes of a stored project (any format) -> slot q as format 3; 0 = not a project */
+static int proj_import(project_t *q, const void *b, int n)
+{
+    if (n == (int)sizeof *q && proj_ok((const project_t *)b)) {
+        memcpy(q, b, sizeof *q);
+        return 1;
+    }
+    return proj_from_v2(q, (const project_v2_t *)b, n) || proj_from_v1(q, (const project_v1_t *)b, n);
+}
+
+#ifndef PROJ_HOST
 #if FELUCCA_FLASH
-/* slot from flash into RAM (format 2, or format 1 converted) */
+/* slot from flash into RAM (format 3, or format 2 / 1 converted) */
 static void proj_fetch(uint32_t slot)
 {
     static union {
-        project_t v2;
+        project_t v3;
+        project_v2_t v2;
         project_v1_t v1;
     } tmp;
     project_t *q = &proj_slot[slot & 3u];
     int n = st_load(OBJ_PROJECT0 + (slot & 3u), &tmp, sizeof tmp);
-    if (n == (int)sizeof tmp.v2 && proj_ok(&tmp.v2))
-        *q = tmp.v2;
-    else if (!proj_from_v1(q, &tmp.v1, n))
+    if (!proj_import(q, &tmp, n))
         q->magic = 0;
 }
 #endif
@@ -242,3 +316,4 @@ static void settings_save(void)
 #if FELUCCA_FLASH
 _Static_assert(sizeof(project_t) <= ST_PAYLOAD_MAX, "project does not fit one flash sector");
 #endif
+#endif /* PROJ_HOST */
