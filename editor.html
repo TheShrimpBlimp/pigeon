@@ -1,0 +1,1540 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments -->
+<!-- Felucca web editor. One file, no libraries. Protocol: EDITOR_PROTOCOL.md.
+     Add ?mock=1 to the URL to use a built-in simulated device. -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Felucca Editor</title>
+<style>
+  :root { --bg: #fff; --fg: #000; --dim: #777; --line: #ccc; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #000; --fg: #fff; --dim: #888; --line: #444; }
+  }
+  :root[data-theme="dark"] { --bg: #000; --fg: #fff; --dim: #888; --line: #444; }
+  html { color-scheme: light dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+         font-variant-numeric: tabular-nums; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; padding-bottom: 2px; border-bottom: 1px solid var(--fg); }
+  h3 { font-size: 11px; font-weight: 400; color: var(--dim); margin: 4px 0 0; }
+  a { color: inherit; }
+  .lang { float: right; font-size: 12px; color: var(--dim); text-decoration: underline; background: none; padding: 0; }
+  button { font: inherit; background: var(--fg); color: var(--bg); border: 0; padding: 2px 10px; cursor: pointer; }
+  button:disabled { opacity: .3; cursor: default; }
+  button.lang { color: var(--dim); background: none; }
+  select, input[type=text], input[type=number] {
+    font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); padding: 1px 3px; border-radius: 0; }
+  input[type=range] { width: 100%; margin: 0; accent-color: var(--fg); }
+  input[type=checkbox] { accent-color: var(--fg); margin: 0; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 8px; }
+  .dim { color: var(--dim); }
+  #status { min-height: 1.4em; }
+  section { margin: 12px 0; }
+  .groups { columns: 250px; column-gap: 20px; }
+  .group { break-inside: avoid; margin: 0 0 12px; }
+  .row { display: grid; grid-template-columns: 46px 1fr 70px; gap: 6px; align-items: center; min-height: 22px; }
+  .row .v { text-align: right; white-space: nowrap; }
+  .row select { width: 100%; }
+  .browser { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  .browser select[size] { min-width: 150px; }
+  .slots { display: grid; grid-template-columns: auto auto auto auto; gap: 3px 8px; align-items: center; justify-content: start; }
+  table { border-collapse: collapse; }
+  th { font-weight: 400; color: var(--dim); text-align: left; padding: 0 6px 2px 0; }
+  td { padding: 1px 6px 1px 0; }
+  td.i { color: var(--dim); text-align: right; }
+  #steps input[type=text] { width: 120px; }
+  #steps input[type=number] { width: 48px; }
+  #steps .bad { outline: 1px solid var(--fg); text-decoration: underline wavy; }
+  #steps tr.off td { color: var(--dim); }
+  .stepcols { columns: 470px; column-gap: 24px; }
+  .stepcols table { break-inside: avoid; }
+  .smp { margin: 0 0 14px; padding: 6px 0 0; border-top: 1px solid var(--line); }
+  .smp.over { outline: 1px solid var(--fg); outline-offset: 2px; }
+  .smp .head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .smp .head b { font-weight: 600; min-width: 40px; }
+  .smp progress { width: 160px; height: 6px; accent-color: var(--fg); }
+  .smp table { margin: 4px 0; }
+  .smp input.name { width: 80px; text-transform: uppercase; }
+  .smp input.root { width: 48px; }
+  .smp .bad { text-decoration: underline wavy; }
+  footer { margin-top: 24px; font-size: 11px; color: var(--dim); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <button class="lang" id="lang"></button>
+  <h1>Felucca Editor</h1>
+  <p class="dim"><a href="./" style="color:inherit">Felucca installer</a></p>
+  <div class="bar">
+    <button id="connect" data-t="connect"></button>
+    <span id="version" class="dim"></span>
+    <span id="mock" class="dim" hidden data-t="mock"></span>
+  </div>
+  <div id="status"></div>
+
+  <div id="ui" hidden>
+    <section>
+      <h2 data-t="sound"></h2>
+      <div class="browser">
+        <label><span data-t="engine"></span><br><select id="engine"></select></label>
+        <label><span data-t="presets"></span><br><select id="preset" size="8"></select></label>
+        <div>
+          <p class="bar"><button id="init" data-t="initSound"></button></p>
+          <p class="bar"><button id="savefile" data-t="saveFile"></button>
+            <button id="loadfile" data-t="loadFile"></button>
+            <input type="file" id="file" accept=".json,application/json" hidden></p>
+          <h3 data-t="projects"></h3>
+          <div class="slots" id="slots"></div>
+        </div>
+      </div>
+    </section>
+    <section class="groups" id="groups"></section>
+    <section id="steps">
+      <h2 data-t="steps"></h2>
+      <p class="bar"><button id="reloadsteps" data-t="reload"></button>
+        <button id="clearseq" data-t="clearSeq"></button>
+        <span class="dim" data-t="notesHelp"></span></p>
+      <div class="stepcols" id="steptables"></div>
+    </section>
+    <section id="samples" hidden>
+      <h2 data-t="samples"></h2>
+      <p class="dim" data-t="smpHelp"></p>
+      <div id="smpslots"></div>
+    </section>
+  </div>
+
+  <footer>Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>. GPL-3.0.<br>
+    <span data-t="foot"></span> M-VAVE and FM-1 are trademarks of their respective owners.</footer>
+</main>
+<script>
+"use strict";
+/*PROTO-BEGIN*/
+/* ---------------------------------------------------------------- protocol --- */
+const HDR = [0x7D, 0x46, 0x4C];
+const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, STEP_GET: 6, STEP_SET: 7, PRESET: 8, PROJECT: 9, NAMES: 10,
+  SMP_BEGIN: 11, SMP_WRITE: 12, SMP_END: 13, SMP_ERASE: 14, SMP_INFO: 15 };
+const F = { INT: 0, PCT: 1, BIPCT: 2, TIME: 3, LFOHZ: 4, CUTOFF: 5, DB: 6, SEMI: 7, ENUM: 8, BPM: 9, NOTE: 10, ONOFF: 11, OCT: 12, STEPS: 13 };
+
+const v14enc = (v) => { const u = Math.max(-8192, Math.min(8191, Math.round(v))) + 8192; return [u & 0x7F, (u >> 7) & 0x7F]; };
+const v14dec = (lo, hi) => (lo | (hi << 7)) - 8192;
+function strEnc(s) { const a = []; for (const c of String(s)) a.push(c.charCodeAt(0) & 0x7F); a.push(0); return a; }
+
+/* only ever builds F0 7D 46 4C ... F7 */
+function frame(cmd, args = []) {
+  for (const b of args) if (!(Number.isInteger(b) && b >= 0 && b <= 0x7F)) throw new Error("bad data byte " + b);
+  return [0xF0, ...HDR, cmd & 0x7F, ...args, 0xF7];
+}
+/* -> {cmd, a} or null when it is not an editor frame */
+function unframe(d) {
+  if (!d || d.length < 6 || d[0] !== 0xF0 || d[d.length - 1] !== 0xF7) return null;
+  if (d[1] !== HDR[0] || d[2] !== HDR[1] || d[3] !== HDR[2]) return null;
+  return { cmd: d[4], a: Array.from(d.slice(5, d.length - 1)) };
+}
+
+class Reader {
+  constructor(a) { this.a = a; this.i = 0; }
+  b() { if (this.i >= this.a.length) throw new Error("short reply"); return this.a[this.i++]; }
+  v() { const lo = this.b(); return v14dec(lo, this.b()); }
+  s() { let s = ""; for (;;) { const c = this.b(); if (!c) return s; s += String.fromCharCode(c); } }
+}
+
+const parse = {
+  [CMD.INFO](a) {
+    const r = new Reader(a);
+    const o = { version: r.s(), nengines: r.b(), pcount: r.b(), gcount: r.b(), nstep: r.b(), pe0: r.b(), engines: [] };
+    for (let i = 0; i < o.nengines; i++) o.engines.push(r.s());
+    return o;
+  },
+  [CMD.GET](a) { const r = new Reader(a); return { scope: r.b(), id: r.b(), value: r.v() }; },
+  [CMD.SET](a) { return parse[CMD.GET](a); },
+  /* needs the counts from INFO */
+  [CMD.DUMP](a, info) {
+    const r = new Reader(a);
+    const o = { engine: r.b(), preset: r.b(), p: [], g: [] };
+    for (let i = 0; i < info.pcount; i++) o.p.push(r.v());
+    for (let i = 0; i < info.gcount; i++) o.g.push(r.v());
+    return o;
+  },
+  [CMD.DESC](a) {
+    const r = new Reader(a);
+    const o = { scope: r.b(), id: r.b(), fmt: r.b(), min: r.v(), max: r.v(), def: r.v(), label: r.s(), unit: r.s(), names: [] };
+    if (o.fmt === F.ENUM) for (let i = 0; i <= o.max - o.min && i < 16; i++) o.names.push(r.s());
+    return o;
+  },
+  [CMD.STEP_GET](a) {
+    const r = new Reader(a);
+    const o = { index: r.b(), n: r.b(), notes: [r.b(), r.b(), r.b(), r.b()], time: r.b(), flags: r.b(), vel: r.b() };
+    return o;
+  },
+  [CMD.STEP_SET](a) { return parse[CMD.STEP_GET](a); },
+  [CMD.PRESET](a) { const r = new Reader(a); return { engine: r.b(), preset: r.b() }; },
+  [CMD.PROJECT](a) { const r = new Reader(a); return { op: r.b(), slot: r.b(), used: r.b() }; },
+  [CMD.NAMES](a) {
+    const r = new Reader(a);
+    const o = { engine: r.b(), names: [] };
+    const n = r.b();
+    for (let i = 0; i < n; i++) o.names.push(r.s());
+    o.titles = [];
+    try { o.titles.push(r.s(), r.s()); } catch (e) { o.titles = []; }   /* older firmware: no page titles */
+    return o;
+  },
+  [CMD.SMP_BEGIN](a) { const r = new Reader(a); return { slot: r.b(), rc: r.b() }; },
+  [CMD.SMP_WRITE](a) { const r = new Reader(a); return { slot: r.b(), offset: r.b() | (r.b() << 7) | (r.b() << 14), rc: r.b() }; },
+  [CMD.SMP_END](a) { return parse[CMD.SMP_BEGIN](a); },
+  [CMD.SMP_ERASE](a) { return parse[CMD.SMP_BEGIN](a); },
+  [CMD.SMP_INFO](a) {
+    const r = new Reader(a);
+    const o = { nslots: r.b(), slotKiB: r.b(), slots: [] };
+    for (let i = 0; i < o.nslots; i++) o.slots.push({ zones: r.b(), name: r.s(), kib: r.b() });
+    return o;
+  },
+};
+
+const req = {
+  info: () => [CMD.INFO, []],
+  get: (scope, id) => [CMD.GET, [scope, id]],
+  set: (scope, id, v) => [CMD.SET, [scope, id, ...v14enc(v)]],
+  dump: () => [CMD.DUMP, []],
+  desc: (scope, id) => [CMD.DESC, [scope, id]],
+  stepGet: (i) => [CMD.STEP_GET, [i]],
+  stepSet: (i, st) => {
+    const n = Math.max(0, Math.min(4, st.n | 0));
+    const notes = [0, 1, 2, 3].map((k) => (st.notes[k] | 0) & 0x7F);
+    return [CMD.STEP_SET, [i, n, ...notes, Math.max(0, Math.min(2, st.time | 0)), st.flags & 3, (st.vel | 0) & 0x7F]];
+  },
+  preset: (e, p) => [CMD.PRESET, [e & 0x7F, p & 0x7F]],
+  project: (op, slot) => { if (![0, 1, 2].includes(op)) throw new Error("bad PROJECT op"); return [CMD.PROJECT, [op, slot & 3]]; },   /* 0 load, 1 save, 2 query */
+  names: (e) => [CMD.NAMES, [e & 0x7F]],
+  smpBegin: (s) => [CMD.SMP_BEGIN, [s & 0x7F]],
+  smpWrite: (s, off, bytes) => [CMD.SMP_WRITE, [s & 0x7F, off & 0x7F, (off >> 7) & 0x7F, (off >> 14) & 0x7F, ...pack7(bytes)]],
+  smpEnd: (s, hdr) => [CMD.SMP_END, [s & 0x7F, ...pack7(hdr)]],
+  smpErase: (s) => [CMD.SMP_ERASE, [s & 0x7F]],
+  smpInfo: () => [CMD.SMP_INFO, []],
+};
+
+/* which reply belongs to which request (the device echoes these) */
+function replyMatches(cmd, args, a) {
+  switch (cmd) {
+    case CMD.GET: case CMD.SET: case CMD.DESC: return a[0] === args[0] && a[1] === args[1];
+    case CMD.STEP_GET: case CMD.STEP_SET: case CMD.NAMES:
+    case CMD.SMP_BEGIN: case CMD.SMP_END: case CMD.SMP_ERASE: return a[0] === args[0];
+    case CMD.SMP_WRITE: return a[0] === args[0] && a[1] === args[1] && a[2] === args[2] && a[3] === args[3];
+    case CMD.PROJECT: return a[0] === args[0] && a[1] === args[1];
+    default: return true;
+  }
+}
+
+/* strict request/response: one frame in flight, the rest queued */
+class Link {
+  constructor(send, opts = {}) {
+    this.sendRaw = send;
+    this.q = [];
+    this.cur = null;
+    this.closed = false;
+    this.timeout = opts.timeout || 300;
+    this.onUnknown = opts.onUnknown || (() => {});
+    this.onTimeout = opts.onTimeout || (() => {});
+  }
+  get idle() { return !this.cur && !this.q.length; }
+  hasQueued(key) { return this.q.some((r) => r.key === key); }
+  /* r = [cmd, args]; opt: {timeout, retries, key (coalesce queued requests), front} */
+  request(r, opt = {}) {
+    if (this.closed) return Promise.reject(new Error("closed"));
+    const [cmd, args] = r;
+    if (opt.key) {
+      const old = this.q.find((x) => x.key === opt.key);
+      if (old) { old.cmd = cmd; old.args = args; return old.promise; }
+    }
+    let res, rej;
+    const promise = new Promise((a, b) => { res = a; rej = b; });
+    const item = { cmd, args, key: opt.key, res, rej, promise,
+      timeout: opt.timeout || this.timeout, retries: opt.retries ?? 1 };
+    if (opt.front) this.q.unshift(item); else this.q.push(item);
+    this.pump();
+    return promise;
+  }
+  pump() {
+    if (this.cur || this.closed || !this.q.length) return;
+    this.cur = this.q.shift();
+    this.fire();
+  }
+  fire() {
+    const c = this.cur;
+    try { this.sendRaw(frame(c.cmd, c.args)); } catch (e) { this.finish(null, e); return; }
+    c.timer = setTimeout(() => {
+      if (this.cur !== c) return;
+      if (c.retries-- > 0) { this.fire(); return; }
+      this.onTimeout(c.cmd);
+      this.finish(null, new Error("timeout (cmd " + c.cmd + ")"));
+    }, c.timeout);
+  }
+  finish(val, err) {
+    const c = this.cur;
+    if (!c) return;
+    clearTimeout(c.timer);
+    this.cur = null;
+    if (err) c.rej(err); else c.res(val);
+    this.pump();
+  }
+  /* raw incoming MIDI bytes */
+  receive(data) {
+    const f = unframe(data);
+    if (!f) return;                                  /* not ours (notes, clock, other SysEx) */
+    const c = this.cur;
+    if (!c || f.cmd !== c.cmd || !replyMatches(c.cmd, c.args, f.a)) { this.onUnknown(f); return; }
+    this.finish(f.a);
+  }
+  close() {
+    this.closed = true;
+    const all = (this.cur ? [this.cur] : []).concat(this.q);
+    if (this.cur) clearTimeout(this.cur.timer);
+    this.cur = null;
+    this.q = [];
+    for (const r of all) r.rej(new Error("closed"));
+  }
+}
+
+/* ------------------------------------------------------------- formatting --- */
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);   /* 60 = C4 */
+function parseNote(tok) {
+  if (/^\d+$/.test(tok)) { const n = +tok; return n <= 127 ? n : null; }
+  const m = /^([A-Ga-g])([#b]?)(-?\d)$/.exec(tok);
+  if (!m) return null;
+  const base = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1].toUpperCase()];
+  const n = base + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + (parseInt(m[3], 10) + 1) * 12;
+  return n >= 0 && n <= 127 ? n : null;
+}
+/* "C4 E4 G4" -> [60, 64, 67]; null on a bad token or more than 4 notes */
+function parseNotes(s) {
+  const t = s.trim().split(/[\s,]+/).filter(Boolean);
+  if (t.length > 4) return null;
+  const out = t.map(parseNote);
+  return out.includes(null) ? null : out;
+}
+
+/* close to the device's param_format (params.c), tables from tools/gen_tables.py */
+function fmtValue(d, v) {
+  const sign = (x) => (x > 0 ? "+" + x : String(x));
+  switch (d.fmt) {
+    case F.PCT: return [String(Math.trunc((v * 100 + 63) / 127)), "%"];
+    case F.BIPCT: return [sign(Math.trunc(v * 100 / 64)), "%"];
+    case F.TIME: {
+      const ms10 = Math.round(10 * Math.pow(10000, (v & 127) / 127));
+      if (ms10 < 100) return [(ms10 / 10).toFixed(1), "ms"];
+      if (ms10 < 10000) return [String(Math.round(ms10 / 10)), "ms"];
+      return [(ms10 / 10000).toFixed(2), "s"];
+    }
+    case F.LFOHZ: { const h = 0.05 * Math.pow(800, (v & 127) / 127); return [h < 10 ? h.toFixed(2) : h.toFixed(1), "Hz"]; }
+    case F.CUTOFF: { const h = 30 * Math.pow(16000 / 30, (v & 127) / 127); return h < 1000 ? [String(Math.round(h)), "Hz"] : [(h / 1000).toFixed(1), "kHz"]; }
+    case F.DB: return v <= 0 ? ["OFF", ""] : [((v - 112) / 2).toFixed(1), "dB"];
+    case F.SEMI: return [sign(v), "st"];
+    case F.ENUM: return [d.names[v - d.min] ?? String(v), d.unit || ""];
+    case F.BPM: return [String(v), "BPM"];
+    case F.NOTE: return [NOTE_NAMES[((v % 12) + 12) % 12], ""];
+    case F.ONOFF: return [v ? "ON" : "OFF", ""];
+    case F.STEPS: return [String(v), "STEP"];
+    default: return [String(v), d.unit || ""];
+  }
+}
+
+/* ---------------------------------------------------------- user samples --- */
+/* A port of felucca/tools/sampleio.py (read_any_wav, resample, to_int16, ima_encode, user_slot),
+   byte for byte: felucca/web/test_web.mjs compares them. */
+const SMP = { SLOT_SIZE: 0x14000, DATA_OFF: 512, RATE: 22050, HDR_LEN: 32 + 16 * 28, MAX_ZONES: 16 };
+SMP.MAX_DATA = SMP.SLOT_SIZE - SMP.DATA_OFF;
+
+/* groups of up to 7 bytes, each preceded by their top bits */
+function pack7(b) {
+  const out = [];
+  for (let i = 0; i < b.length; i += 7) {
+    const g = Array.from(b.slice(i, i + 7));
+    out.push(g.reduce((m, x, j) => m | (((x >> 7) & 1) << j), 0));
+    for (const x of g) out.push(x & 0x7F);
+  }
+  return out;
+}
+function unpack7(a) {
+  const out = [];
+  for (let i = 0; i < a.length; i += 8) {
+    const top = a[i];
+    for (let j = 0; j < 7 && i + 1 + j < a.length; j++) out.push(a[i + 1 + j] | (((top >> j) & 1) << 7));
+  }
+  return Uint8Array.from(out);
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+const IMA_STEP = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88,
+  97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658,
+  724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660,
+  4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818,
+  18500, 20350, 22385, 24623, 27086, 29794, 32767];
+const IMA_IDX = [-1, -1, -1, -1, 2, 4, 6, 8];
+/* IMA ADPCM, 4 bit, low nibble first, from predictor 0 / index 0 -> {data, pred, idx} (state at loopStart) */
+function imaEncode(s, loopStart = 0) {
+  let pred = 0, idx = 0, atLoop = [0, 0];
+  const nib = new Uint8Array(s.length + (s.length & 1));
+  for (let n = 0; n < s.length; n++) {
+    if (n === loopStart) atLoop = [pred, idx];
+    const step = IMA_STEP[idx];
+    let diff = s[n] - pred, code = 0;
+    if (diff < 0) { code = 8; diff = -diff; }
+    let vd = step >> 3;
+    if (diff >= step) { code |= 4; diff -= step; vd += step; }
+    if (diff >= step >> 1) { code |= 2; diff -= step >> 1; vd += step >> 1; }
+    if (diff >= step >> 2) { code |= 1; vd += step >> 2; }
+    pred = Math.max(-32768, Math.min(32767, code & 8 ? pred - vd : pred + vd));
+    idx = Math.max(0, Math.min(88, idx + IMA_IDX[code & 7]));
+    nib[n] = code;
+  }
+  const out = new Uint8Array(nib.length >> 1);
+  for (let k = 0; k < nib.length; k += 2) out[k >> 1] = nib[k] | (nib[k + 1] << 4);
+  return { data: out, pred: atLoop[0], idx: atLoop[1] };
+}
+
+/* WAV: PCM 8/16/24/32 or float, any channel count, mixed to mono -> {sr, x} (gen_samples.read_any_wav) */
+function parseWav(buf) {
+  const d = new Uint8Array(buf), v = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const id = (i) => String.fromCharCode(d[i], d[i + 1], d[i + 2], d[i + 3]);
+  if (d.length < 12 || id(0) !== "RIFF" || id(8) !== "WAVE") throw new Error("not a WAV file");
+  let i = 12, fmt = null, data = null;
+  while (i + 8 <= d.length) {
+    const cid = id(i), n = v.getUint32(i + 4, true);
+    if (cid === "fmt ") {
+      let tag = v.getUint16(i + 8, true);
+      const ch = v.getUint16(i + 10, true), sr = v.getUint32(i + 12, true), bits = v.getUint16(i + 22, true);
+      if (tag === 0xFFFE) tag = v.getUint16(i + 32, true);
+      fmt = { tag, ch, sr, bits };
+    } else if (cid === "data") {
+      data = [i + 8, Math.min(d.length, i + 8 + n)];
+      break;
+    }
+    i += 8 + n + (n & 1);
+  }
+  if (!fmt || !data) throw new Error("WAV without fmt/data");
+  const { tag, ch, sr, bits } = fmt, bps = bits >> 3, frame = bps * ch;
+  if (!(tag === 1 || tag === 3) || !bps || !ch) throw new Error("unsupported WAV format");
+  const nfr = Math.floor((data[1] - data[0]) / frame), x = new Float64Array(nfr);
+  for (let f = 0; f < nfr; f++) {
+    let acc = 0;
+    for (let c = 0; c < ch; c++) {
+      const o = data[0] + f * frame + c * bps;
+      let s;
+      if (tag === 3) s = bps === 4 ? v.getFloat32(o, true) : v.getFloat64(o, true);
+      else if (bps === 2) s = v.getInt16(o, true) / 32768;
+      else if (bps === 3) s = (((d[o] | (d[o + 1] << 8) | (d[o + 2] << 16)) << 8) >> 8) / 8388608;
+      else if (bps === 4) s = v.getInt32(o, true) / 2147483648;
+      else s = (d[o] - 128) / 128;
+      acc += s;
+    }
+    x[f] = acc / ch;
+  }
+  return { sr, x };
+}
+
+/* gen_samples.resample: moving average over the ratio, then linear interpolation */
+function resample(x, sr, to) {
+  if (sr === to) return Array.from(x);
+  if (sr > to) {
+    const k = Math.max(1, pyRound(sr / to));
+    if (k > 1) {
+      const y = new Array(x.length);
+      for (let i = 0; i < x.length; i++) { let s = 0; for (let j = i; j < Math.min(x.length, i + k); j++) s += x[j]; y[i] = s / k; }
+      x = y;
+    }
+  }
+  const step = sr / to, out = [];
+  let p = 0;
+  while (p < x.length - 1) { const i = Math.floor(p), f = p - i; out.push(x[i] * (1 - f) + x[i + 1] * f); p += step; }
+  return out;
+}
+function pyRound(v) { const f = Math.floor(v), r = v - f; return r > 0.5 ? f + 1 : r < 0.5 ? f : (f % 2 ? f + 1 : f); }
+
+/* mono float -> int16, peak normalised to 30000 */
+function normalize(x) {
+  let pk = 1e-9;
+  for (const v of x) pk = Math.max(pk, Math.abs(v));
+  return Int16Array.from(x, (v) => Math.max(-32768, Math.min(32767, Math.trunc(v / pk * 30000))));
+}
+
+/* root from a file name like "piano_C4" or "F#3" (C4 = 60), else 60 (sampleio.note_from_name) */
+function rootFromName(name) {
+  const m = /(?<![A-Za-z])([A-G])([#b]?)(-?\d)(?!\d)/.exec(name);
+  if (!m) return 60;
+  const n = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + (parseInt(m[3], 10) + 1) * 12;
+  return Math.max(0, Math.min(127, n));
+}
+
+/* zones: [{s: Int16Array (22050 Hz), root, lo?, hi?}] -> {hdr (480 B), data, zones} (sampleio.user_slot) */
+function buildSlot(name, zonesIn) {
+  const zones = [], parts = [];
+  let len = 0;
+  for (const z of zonesIn) {
+    const e = imaEncode(z.s, 0);
+    zones.push({ off: len, n: z.s.length, ls: 0, le: z.s.length - 1, root: z.root, lo: z.lo ?? null, hi: z.hi ?? null, pred: e.pred, idx: e.idx });
+    parts.push(e.data);
+    len += e.data.length;
+  }
+  const data = new Uint8Array(len);
+  let o = 0;
+  for (const p of parts) { data.set(p, o); o += p.length; }
+  if (len > SMP.MAX_DATA) throw new Error(`too long: ${len} B (max ${SMP.MAX_DATA} B)`);
+  if (!zones.length || zones.length > SMP.MAX_ZONES) throw new Error("1..16 files per slot");
+  zones.sort((a, b) => a.root - b.root);
+  zones.forEach((z, j) => {
+    if (z.lo == null) {
+      z.lo = j === 0 ? 0 : Math.floor((zones[j - 1].root + z.root) / 2) + 1;
+      z.hi = j === zones.length - 1 ? 127 : Math.floor((z.root + zones[j + 1].root) / 2);
+    }
+  });
+  const hdr = new Uint8Array(SMP.HDR_LEN), v = new DataView(hdr.buffer);
+  v.setUint32(0, 0x504D5346, true);
+  v.setUint16(4, 1, true);
+  hdr[6] = zones.length;
+  const nm = String(name).toUpperCase().replace(/[^\x20-\x7E]/g, "").slice(0, 8);
+  for (let i = 0; i < nm.length; i++) hdr[8 + i] = nm.charCodeAt(i);
+  v.setUint32(16, len, true);
+  v.setUint32(20, crc32(data), true);
+  const rate = pyRound(SMP.RATE / 44100 * 65536);
+  zones.forEach((z, j) => {
+    const b = 32 + j * 28;
+    [z.off, z.n, z.ls, z.le, rate].forEach((x, k) => v.setUint32(b + k * 4, x >>> 0, true));
+    v.setInt16(b + 20, z.root * 16, true);
+    v.setInt16(b + 22, z.pred, true);
+    hdr[b + 24] = z.idx; hdr[b + 25] = z.lo; hdr[b + 26] = z.hi; hdr[b + 27] = 0;
+  });
+  return { hdr, data, zones };
+}
+
+/* ------------------------------------------------------------ mock device --- */
+/* Implements the protocol like felucca/src/editor.c, with tables copied from params.c
+   and the engine sources. Used with ?mock=1. */
+function makeMockDevice() {
+  const NONOFF = ["OFF", "ON"], NDIV = ["1/4", "1/8", "1/16", "1/32", "8T", "16T"], NGO = ["--", "GO"], NDASH = ["--"];
+  const D = (label, fmt, min, max, def, names = null, unit = "") => ({ label, fmt, min, max, def, names, unit });
+  const E = (label, names, def) => D(label, F.ENUM, 0, names.length - 1, def, names);
+  const TP = [
+    D("LVL", F.DB, 0, 127, 104),
+    D("ATK", F.TIME, 0, 127, 10), D("DEC", F.TIME, 0, 127, 70), D("SUS", F.PCT, 0, 127, 90), D("REL", F.TIME, 0, 127, 60),
+    D("FLT", F.BIPCT, -64, 63, 0), D("PIT", F.BIPCT, -64, 63, 0), D("SHP", F.BIPCT, -64, 63, 0), D("FX", F.BIPCT, -64, 63, 0),
+    D("RATE", F.LFOHZ, 0, 127, 60), E("WAVE", ["SIN", "TRI", "SAW", "SQR", "S&H"], 0), D("PHS", F.INT, 0, 127, 0), D("FADE", F.TIME, 0, 127, 0),
+    D("PIT", F.BIPCT, -64, 63, 0), D("FLT", F.BIPCT, -64, 63, 0), D("SHP", F.BIPCT, -64, 63, 0), D("AMP", F.PCT, 0, 127, 0),
+    E("MODE", ["OFF", "UP", "DN", "UPDN", "RND", "ORD"], 0), E("RATE", NDIV, 2), D("OCT", F.INT, 1, 4, 1), D("GATE", F.PCT, 1, 127, 64),
+    D("SWG", F.PCT, 0, 100, 0), D("PROB", F.PCT, 0, 127, 127), E("HOLD", NONOFF, 0), E("ORD", ["NOTE", "PLAY"], 0),
+    D("ROOT", F.NOTE, 0, 11, 0), E("SCL", ["CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", "MPEN", "HARM"], 0), E("QNT", NONOFF, 0), D("TRN", F.SEMI, -24, 24, 0),
+    D("LEN", F.STEPS, 1, 64, 16), E("DIV", NDIV, 2), D("SWG", F.PCT, 0, 100, 0), D("GATE", F.PCT, 1, 127, 64),
+    D("DST", F.PCT, 0, 127, 0), D("CHO", F.PCT, 0, 127, 0), D("DLY", F.PCT, 0, 127, 0), D("REV", F.PCT, 0, 127, 0),
+    E("VCE", ["POLY", "MONO", "LEG", "UNI"], 0), D("GLD", F.TIME, 0, 127, 0), D("PAN", F.BIPCT, -64, 63, 0), E("MUTE", NONOFF, 0),
+    E("GLMOD", ["RATE", "TIME"], 0), E("PRIO", ["LAST", "LOW", "HIGH"], 0), E("ALLOC", ["ROT", "REUSE"], 0), D("DTUNE", F.INT, 0, 127, 40),
+  ];
+  const GP = [
+    D("BPM", F.BPM, 40, 240, 120), D("SWG", F.PCT, 0, 100, 0), E("CLK", ["INT"], 0), D("TUNE", F.INT, -50, 50, 0),
+    E("TIME", NDIV, 1), D("FDBK", F.PCT, 0, 120, 60), D("COLR", F.PCT, 0, 127, 70), D("MIX", F.PCT, 0, 127, 90),
+    D("SIZE", F.PCT, 0, 127, 90), D("DAMP", F.PCT, 0, 127, 60), D("CRT", F.LFOHZ, 0, 127, 40), D("CDP", F.PCT, 0, 127, 60),
+    E("MIDI", NDASH, 0), E("SYNC", NDASH, 0), E("ROUT", NDASH, 0), D("CPU", F.INT, 0, 0, 0),
+    D("SLOT", F.INT, 1, 4, 1), E("NAME", NDASH, 0), E("LOAD", NGO, 0), E("SAVE", NGO, 0),
+    E("ENG", ["ANALOG", "DIGITAL", "PHASE", "LOFI", "SAMPLE"], 0), E("SET", NGO, 0),
+    E("CLRSQ", NGO, 0), E("INIT", NGO, 0),
+    D("CH", F.INT, 0, 16, 10), D("LEVEL", F.INT, 0, 127, 100), D("REV", F.INT, 0, 127, 16),
+  ];
+  const NONE = D("-", F.INT, 0, 0, 0);
+  const RATIO = [".5", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16"];
+  const P = (name, e, env = [10, 70, 90, 60], mono = 0, pat = 0) => ({ name, e, env, mono, pat });
+  const ENG = [
+    { name: "ANALOG", titles: ["OSC", "FLT"], edit: [E("WAVE", ["SAW", "SQR", "TRI", "SIN", "PWM"], 0), D("DTN", F.INT, 0, 127, 10, null, "ct"), D("MIX", F.PCT, 0, 127, 64),
+        D("NOIS", F.PCT, 0, 127, 0), D("CUT", F.CUTOFF, 0, 127, 90), D("RES", F.PCT, 0, 127, 30), D("DRV", F.PCT, 0, 127, 0), D("KTR", F.PCT, 0, 127, 64)],
+      presets: [P("SAW LEAD", [0, 12, 64, 0, 90, 30, 10, 64], [4, 70, 100, 50], 1), P("SOFT PAD", [0, 20, 64, 4, 60, 10, 0, 32], [80, 90, 110, 95]),
+        P("SQR BASS", [1, 0, 0, 0, 50, 70, 40, 64], [0, 60, 40, 30], 1), P("PWM STR", [4, 8, 40, 0, 75, 20, 0, 48]),
+        P("ACID", [0, 0, 0, 0, 50, 100, 25, 64], [0, 55, 20, 30], 1, 1), P("SINE KEY", [3, 6, 50, 0, 127, 0, 0, 0]),
+        P("RAVE", [4, 30, 64, 0, 85, 20, 30, 64]), P("SUB BASS", [3, 0, 0, 0, 40, 0, 20, 0], [0, 60, 100, 20], 1),
+        P("PLUCK", [0, 8, 50, 0, 30, 40, 0, 64], [0, 45, 0, 45]), P("BRASS", [0, 10, 64, 0, 45, 20, 10, 64]),
+        P("WIND", [0, 0, 0, 90, 30, 90, 0, 0]), P("STRINGS", [0, 25, 64, 0, 70, 10, 0, 32])] },
+    { name: "DIGITAL", titles: ["OPS", "MOD"], edit: [E("ALG", ["1", "2", "3", "4", "5", "6", "7", "8"], 0), E("R2", RATIO, 1), E("R3", RATIO, 1), E("R4", RATIO, 1),
+        D("IDX", F.PCT, 0, 127, 60), D("MDEC", F.TIME, 0, 127, 60), D("FB", F.PCT, 0, 127, 0), NONE],
+      presets: [P("E.PIANO", [4, 1, 1, 14, 70, 55, 0, 0]), P("BELL", [4, 8, 1, 4, 90, 70, 0, 0]), P("BASS", [0, 1, 1, 1, 48, 40, 8, 0], undefined, 1),
+        P("BRASS", [0, 1, 1, 1, 70, 40, 20, 0]), P("ORGAN", [7, 2, 3, 4, 0, 0, 0, 0]), P("PAD", [5, 2, 1, 3, 40, 90, 10, 0]),
+        P("MARIMBA", [4, 4, 1, 1, 60, 30, 0, 0]), P("FM LEAD", [0, 1, 2, 1, 70, 60, 40, 0]), P("FUNK KEY", [3, 1, 3, 5, 90, 25, 20, 0])] },
+    { name: "PHASE", titles: ["PHS", "LINE"], edit: [E("WAVE", ["SAW", "SQR", "PLS", "DSIN", "SPLS", "RSAW", "RTRI", "RTRP"], 0),
+        E("WAVE2", ["--", "SAW", "SQR", "PLS", "DSIN", "SPLS", "RSAW", "RTRI", "RTRP"], 0), D("DCW", F.PCT, 0, 127, 60), D("ENV", F.PCT, 0, 127, 64),
+        D("DTN", F.INT, 0, 127, 0, null, "ct"), E("LINE", ["MIX", "RING"], 0), D("SUB", F.PCT, 0, 127, 0), NONE],
+      presets: [P("BRASS", [0, 0, 30, 90, 0, 0, 0, 0]), P("BASS", [0, 0, 40, 100, 0, 0, 50, 0], undefined, 1, 2), P("ORGAN", [3, 0, 40, 0, 0, 0, 0, 0]),
+        P("STRING", [0, 4, 50, 40, 12, 0, 0, 0]), P("RESO", [5, 0, 60, 60, 0, 0, 0, 0]), P("BELL", [6, 0, 80, 50, 0, 1, 0, 0]),
+        P("PLUCK", [1, 0, 20, 110, 0, 0, 0, 0], undefined, 0, 3), P("WIRE", [4, 7, 70, 40, 7, 0, 0, 0])] },
+    { name: "LOFI", titles: ["CHIP", "MOTN"], edit: [E("CHIP", ["4BIT", "4B/2", "8BIT", "1BIT"], 0), E("WAVE", ["PLS", "TRI", "SAW", "NOIS"], 0), D("DUTY", F.INT, 0, 127, 64),
+        D("CRSH", F.PCT, 0, 127, 0), D("SWP", F.PCT, 0, 127, 0), D("VIB", F.PCT, 0, 127, 0), E("ARP", ["OFF", "OCT", "MAJ", "MIN"], 0), D("TONE", F.PCT, 0, 127, 127)],
+      presets: [P("PULSE LD", [0, 0, 32, 0, 0, 20, 0, 127]), P("WAVE BASS", [1, 1, 0, 0, 0, 0, 0, 90], undefined, 1),
+        P("ARP 8BIT", [2, 0, 96, 0, 0, 0, 2, 110]), P("ZAP", [0, 0, 0, 0, 90, 0, 0, 127]), P("NOISE HH", [3, 3, 0, 0, 0, 0, 0, 127])] },
+    { name: "SAMPLE", titles: ["SET", "TONE"], edit: [E("SET", ["PIANO", "EPIANO", "STRINGS", "CHOIR", "BASS", "GUITAR", "USR1", "USR2", "USR3"], 0), D("TUNE", F.SEMI, -24, 24, 0), D("BITS", F.INT, 0, 127, 0),
+        E("LOOP", NONOFF, 1), D("CUT", F.INT, 0, 127, 127), NONE, D("DRV", F.PCT, 0, 127, 0), NONE],
+      presets: [P("PIANO", [0, 0, 0, 0, 127, 0, 0, 0]), P("EPIANO", [1, 0, 0, 0, 110, 0, 0, 0]), P("STRINGS", [2, 0, 0, 1, 100, 0, 0, 0]),
+        P("CHOIR", [3, 0, 0, 1, 90, 0, 0, 0]), P("BASS", [4, -12, 0, 0, 80, 0, 20, 0], undefined, 1), P("GUITAR", [5, 0, 0, 0, 120, 0, 0, 0])] },
+  ];
+  const PATTERNS = [
+    [[45, 45, 57, 45, 0, 48, 45, 55, 45, 0, 57, 52, 45, 48, 0, 50], [1, 0, 2, 0, 0, 0, 1, 2, 0, 0, 1, 0, 0, 2, 0, 1]],
+    [[0, 36, 0, 36, 0, 36, 0, 48, 0, 36, 0, 36, 0, 39, 0, 43], [0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]],
+    [[60, 0, 67, 0, 72, 67, 0, 64, 62, 0, 69, 0, 74, 69, 0, 67], [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]],
+  ];
+  const P_COUNT = 53, G_COUNT = 27, NSTEP = 64, P_E0 = 45, G_ENGSEL = 20;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const st = {
+    engine: 0, preset: 0,
+    p: TP.map((d) => d.def).concat(new Array(8).fill(0)),
+    g: GP.map((d) => d.def),
+    step: Array.from({ length: NSTEP }, () => ({ n: 0, notes: [0, 0, 0, 0], time: 2, flags: 0, vel: 0 })),
+    slots: [null, null, null, null],
+    smp: [0, 1, 2].map(() => ({ flash: new Uint8Array(SMP.SLOT_SIZE).fill(0xFF), zones: 0, name: "", len: 0, next: SMP.DATA_OFF })),
+  };
+  const desc = (scope, id) => (scope === 0 && id < P_COUNT ? (id >= P_E0 ? ENG[st.engine].edit[id - P_E0] : TP[id])
+    : scope === 1 && id < G_COUNT ? GP[id] : null);
+  const seqEmpty = () => st.step.every((s) => !s.n);
+  function loadPattern(k) {
+    const [notes, flags] = PATTERNS[k];
+    st.step.forEach((s, i) => { const n = i < 16 ? notes[i] : 0; s.notes = [n, 0, 0, 0]; s.n = n ? 1 : 0; s.time = n ? 0 : 2; s.flags = n ? flags[i] : 0; s.vel = n ? 96 : 0; });
+    st.p[29] = 16;
+  }
+  function applyPreset(pi) {
+    const e = ENG[st.engine];
+    pi %= e.presets.length;
+    const pr = e.presets[pi];
+    st.preset = pi;
+    for (let i = 0; i < 8; i++) st.p[P_E0 + i] = pr.e[i];
+    [1, 2, 3, 4].forEach((id, k) => { st.p[id] = pr.env[k]; });
+    st.p[37] = pr.mono ? 2 : 0;
+    st.p[33] = 0; st.p[34] = 24; st.p[35] = 28; st.p[36] = 36;
+    if (pr.pat && seqEmpty()) loadPattern(pr.pat - 1);
+  }
+  function setEngine(ei) {
+    st.engine = ei % ENG.length;
+    for (let i = 0; i < 8; i++) st.p[P_E0 + i] = ENG[st.engine].edit[i].def;
+    applyPreset(0);
+  }
+  setEngine(0);
+  applyPreset(4);                                   /* ACID with its pattern */
+  st.slots[0] = JSON.parse(JSON.stringify({ engine: st.engine, preset: st.preset, p: st.p, g: st.g, step: st.step }));
+
+  function handle(cmd, a) {
+    const out = [];
+    const b = (x) => out.push(x & 0x7F), v = (x) => out.push(...v14enc(x)), s = (x) => out.push(...strEnc(x));
+    switch (cmd) {
+      case CMD.INFO:
+        s("FELUCCA 0.4 BETA (MOCK)"); b(ENG.length); b(P_COUNT); b(G_COUNT); b(NSTEP); b(P_E0);
+        ENG.forEach((e) => s(e.name));
+        break;
+      case CMD.GET: case CMD.SET: {
+        if (a.length < 2) return null;
+        const d = desc(a[0], a[1]);
+        if (!d) return null;
+        const arr = a[0] ? st.g : st.p;
+        if (cmd === CMD.SET && a.length >= 4) {
+          if (a[0] === 1 && a[1] === G_ENGSEL) setEngine(clamp(v14dec(a[2], a[3]), 0, ENG.length - 1));
+          else if (d.max > d.min) arr[a[1]] = clamp(v14dec(a[2], a[3]), d.min, d.max);
+        }
+        b(a[0]); b(a[1]); v(arr[a[1]]);
+        break;
+      }
+      case CMD.DUMP:
+        b(st.engine); b(st.preset); st.p.forEach(v); st.g.forEach(v);
+        break;
+      case CMD.DESC: {
+        if (a.length < 2) return null;
+        const d = desc(a[0], a[1]);
+        if (!d) return null;
+        b(a[0]); b(a[1]); b(d.fmt); v(d.min); v(d.max); v(d.def); s(d.label); s(d.unit || "");
+        if (d.fmt === F.ENUM && d.names) for (let i = 0; i <= d.max - d.min && i < 16; i++) s(d.names[i]);
+        break;
+      }
+      case CMD.STEP_GET: case CMD.STEP_SET: {
+        if (a.length < 1 || a[0] >= NSTEP) return null;
+        const x = st.step[a[0]];
+        if (cmd === CMD.STEP_SET && a.length >= 9) {
+          x.n = Math.min(4, a[1]); x.notes = a.slice(2, 6); x.time = Math.min(2, a[6]); x.flags = a[7] & 3; x.vel = a[8];
+        }
+        b(a[0]); b(x.n); x.notes.forEach(b); b(x.time); b(x.flags); b(x.vel);
+        break;
+      }
+      case CMD.PRESET:
+        if (a.length < 2 || a[0] >= ENG.length) return null;
+        if (a[0] !== st.engine) setEngine(a[0]);
+        applyPreset(a[1]);
+        b(st.engine); b(st.preset);
+        break;
+      case CMD.PROJECT: {
+        if (a.length < 2) return null;
+        const k = a[1] & 3;
+        if (a[0] > 2) return null;
+        if (a[0] === 1) st.slots[k] = JSON.parse(JSON.stringify({ engine: st.engine, preset: st.preset, p: st.p, g: st.g, step: st.step }));
+        else if (a[0] === 0 && st.slots[k]) Object.assign(st, JSON.parse(JSON.stringify(st.slots[k])));
+        b(a[0]); b(k); b(st.slots[k] ? 1 : 0);
+        break;
+      }
+      case CMD.NAMES:
+        if (a.length < 1 || a[0] >= ENG.length) return null;
+        b(a[0]); b(ENG[a[0]].presets.length); ENG[a[0]].presets.forEach((p) => s(p.name));
+        ENG[a[0]].titles.forEach(s);
+        break;
+      /* user sample slots: the header is checked like the firmware's ed_smp_end() */
+      case CMD.SMP_BEGIN: case CMD.SMP_ERASE: {
+        if (a.length < 1 || a[0] >= 3) return null;
+        const u = st.smp[a[0]];
+        if (cmd === CMD.SMP_ERASE) u.flash.fill(0xFF); else u.flash.fill(0xFF, 0, 4096);
+        u.zones = 0; u.name = ""; u.len = 0; u.next = SMP.DATA_OFF;
+        b(a[0]); b(0);
+        break;
+      }
+      case CMD.SMP_WRITE: {
+        if (a.length < 5 || a[0] >= 3) return null;
+        const u = st.smp[a[0]], off = a[1] | (a[2] << 7) | (a[3] << 14), dat = unpack7(a.slice(4));
+        let rc = 0;
+        if (off < SMP.DATA_OFF || (off & 0xFF) || !dat.length || off + dat.length > SMP.SLOT_SIZE || dat.length > 256) rc = 1;
+        else {
+          if (!(off & 0xFFF)) u.flash.fill(0xFF, off, off + 4096);
+          u.flash.set(dat, off);
+          u.next = off + dat.length;
+        }
+        b(a[0]); b(off); b(off >> 7); b(off >> 14); b(rc);
+        break;
+      }
+      case CMD.SMP_END: {
+        if (a.length < 2 || a[0] >= 3) return null;
+        const u = st.smp[a[0]], hd = unpack7(a.slice(1)), dv = new DataView(hd.buffer);
+        let rc = 0;
+        if (hd.length < SMP.HDR_LEN || dv.getUint32(0, true) !== 0x504D5346 || dv.getUint16(4, true) !== 1) rc = 2;
+        else if (!hd[6] || hd[6] > 16) rc = 5;
+        else {
+          const len = dv.getUint32(16, true);
+          if (len > SMP.MAX_DATA) rc = 1;
+          else if (crc32(u.flash.subarray(SMP.DATA_OFF, SMP.DATA_OFF + len)) !== dv.getUint32(20, true)) rc = 3;
+          else {
+            u.flash.set(hd, 0);
+            u.zones = hd[6]; u.len = len;
+            u.name = String.fromCharCode(...hd.slice(8, 16)).replace(/\0.*$/, "");
+          }
+        }
+        b(a[0]); b(rc);
+        break;
+      }
+      case CMD.SMP_INFO:
+        b(3); b(SMP.SLOT_SIZE / 1024);
+        st.smp.forEach((u) => { b(u.zones); s(u.zones ? u.name : ""); b(u.zones ? Math.ceil(u.len / 1024) : 0); });
+        break;
+      default:
+        return null;
+    }
+    return frame(cmd, out);
+  }
+
+  /* a WebMIDI-like access object: one input and one output named "Felucca" */
+  const input = { id: "mock-in", name: "Felucca", type: "input", state: "connected", onmidimessage: null };
+  let busy = false;
+  const output = {
+    id: "mock-out", name: "Felucca", type: "output", state: "connected",
+    send(data) {
+      const f = unframe(data);
+      if (!f) { console.error("mock: refused a frame that is not F0 7D 46 4C ... F7", data); return; }
+      if (busy) { console.warn("mock: frame dropped (device holds only one frame)", data); return; }
+      busy = true;
+      setTimeout(() => {
+        busy = false;
+        const r = handle(f.cmd, f.a);
+        if (r && input.onmidimessage) input.onmidimessage({ data: Uint8Array.from(r) });
+      }, f.cmd === CMD.SMP_ERASE ? 900 : f.cmd === CMD.SMP_BEGIN ? 120 : f.cmd === CMD.SMP_WRITE ? 25 + Math.random() * 10 : 4 + Math.random() * 12);
+    },
+  };
+  /* a "knob" moved on the device now and then, so polling has something to follow */
+  const knob = setInterval(() => {
+    const id = [9, 33, 35, P_E0 + 4][Math.floor(Math.random() * 4)];
+    const d = desc(0, id);
+    st.p[id] = clamp(st.p[id] + (Math.random() < 0.5 ? -4 : 4), d.min, d.max);
+  }, 4000);
+  return {
+    state: st,
+    stop: () => clearInterval(knob),
+    access: { sysexEnabled: true, inputs: new Map([[input.id, input]]), outputs: new Map([[output.id, output]]), onstatechange: null },
+  };
+}
+/*PROTO-END*/
+
+/* ===================================================================== UI === */
+if (typeof document !== "undefined") (() => {
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids) e.append(k);
+  return e;
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const TEXT = {
+  ja: {
+    other: "English", connect: "接続", disconnect: "切断", mock: "モック（実機なし）",
+    sound: "音色", engine: "エンジン", presets: "プリセット", initSound: "音色を初期化",
+    saveFile: "ファイルに保存", loadFile: "ファイルを読み込む", projects: "プロジェクト",
+    load: "読込", save: "保存", used: "使用中", empty: "空", unknown: "—",
+    steps: "ステップ", reload: "再読み込み", clearSeq: "シーケンスを消去",
+    notesHelp: "ノートは C4 E4 G4 のように入力（最大 4 音、C4 = 60）。",
+    notes: "ノート", time: "タイム", acc: "アクセント", slide: "スライド", vel: "ベロシティ",
+    foot: "Chrome か Edge で使えます。",
+    nomidi: "このブラウザでは使えません。Chrome か Edge で開いてください。",
+    denied: "MIDI（SysEx）の使用が許可されませんでした。",
+    nodevice: "Felucca が見つかりません。USB で接続して、もう一度押してください。",
+    connecting: "接続中", reading: "読み込み中 ", steploading: "ステップを読み込み中 ",
+    ready: "接続しました", disconnected: "切断されました", lost: "Felucca が外されました",
+    noreply: "応答がありません", error: "エラー: ", busy: "処理中",
+    applying: "書き込み中 ", applied: "読み込みました", badfile: "ファイルを読み込めません: ",
+    savedSlot: "保存しました: スロット ", loadedSlot: "読み込みました: スロット ", emptySlot: "空のスロットです: ",
+    confirmSave: "スロット {n} に上書き保存しますか？", confirmLoad: "スロット {n} を読み込みますか？ 今の音色とパターンは置き換わります。",
+    confirmClear: "シーケンスを全部消しますか？", confirmInit: "音色を初期化しますか？",
+    samples: "サンプル", smpHelp: "WAV をドロップするか選んでください。1 スロットに 16 ファイルまで、モノ 22050 Hz の ADPCM で合計約 7 秒。SAMPLE エンジンの SET で USR1〜USR3 を選ぶと鳴ります。",
+    zones: "ゾーン", smpName: "名前", chooseFiles: "ファイルを選ぶ", upload: "書き込む", erase: "消去", clearList: "リストを消す",
+    file: "ファイル", root: "ルート", keys: "鍵盤", length: "長さ", remove: "外す",
+    smpTooBig: "大きすぎます", smpDecodeFail: "読み込めません: ", smpUploading: "書き込み中 USR", smpDone: "書き込みました USR",
+    smpFail: "サンプルの書き込みに失敗しました: ", smpErased: "消去しました USR",
+    confirmErase: "USR{n} を消去しますか？", confirmUpload: "USR{n} に書き込みますか？ 今の内容は消えます。",
+    layout: "（ファームウェアのパラメーター数が想定と違うため、簡易表示にしています）",
+  },
+  en: {
+    other: "日本語", connect: "Connect", disconnect: "Disconnect", mock: "Mock device (no hardware)",
+    sound: "Sound", engine: "Engine", presets: "Presets", initSound: "Init sound",
+    saveFile: "Save to file", loadFile: "Load file", projects: "Projects",
+    load: "Load", save: "Save", used: "used", empty: "empty", unknown: "—",
+    steps: "Steps", reload: "Reload", clearSeq: "Clear sequence",
+    notesHelp: "Enter notes like C4 E4 G4 (up to 4, C4 = 60).",
+    notes: "Notes", time: "Time", acc: "Accent", slide: "Slide", vel: "Velocity",
+    foot: "Works in Chrome or Edge.",
+    nomidi: "This browser cannot do it. Open the page in Chrome or Edge.",
+    denied: "MIDI (SysEx) access was not allowed.",
+    nodevice: "Felucca not found. Connect it by USB and press Connect again.",
+    connecting: "Connecting", reading: "Reading ", steploading: "Reading steps ",
+    ready: "Connected", disconnected: "Disconnected", lost: "Felucca was unplugged",
+    noreply: "No reply from the device", error: "Error: ", busy: "Busy",
+    applying: "Writing ", applied: "Loaded", badfile: "Cannot read the file: ",
+    savedSlot: "Saved to slot ", loadedSlot: "Loaded slot ", emptySlot: "Empty slot: ",
+    confirmSave: "Overwrite slot {n}?", confirmLoad: "Load slot {n}? The current sound and pattern will be replaced.",
+    confirmClear: "Clear the whole sequence?", confirmInit: "Reset the sound to the engine defaults?",
+    samples: "Samples", smpHelp: "Drop or choose WAV files. Up to 16 files per slot, stored as mono 22050 Hz ADPCM (about 7 s in all). Select USR1–USR3 with SET on the SAMPLE engine.",
+    zones: "zones", smpName: "Name", chooseFiles: "Choose files", upload: "Upload", erase: "Erase", clearList: "Clear list",
+    file: "File", root: "Root", keys: "Keys", length: "Length", remove: "Remove",
+    smpTooBig: "too large", smpDecodeFail: "Cannot read: ", smpUploading: "Uploading USR", smpDone: "Uploaded USR",
+    smpFail: "Sample upload failed: ", smpErased: "Erased USR",
+    confirmErase: "Erase USR{n}?", confirmUpload: "Write to USR{n}? Its current contents will be replaced.",
+    layout: "(The firmware has a different parameter count; showing a plain list.)",
+  },
+};
+let lang = (navigator.language || "en").toLowerCase().startsWith("ja") ? "ja" : "en";
+const t = (k) => TEXT[lang][k] ?? k;
+let lastKey = null, lastArg = "";
+function sayK(k, arg = "") { lastKey = k; lastArg = arg; $("status").textContent = t(k) + arg; }
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = t(e.dataset.t); });
+  $("lang").textContent = t("other");
+  $("connect").textContent = t(dev ? "disconnect" : "connect");
+  if (lastKey) $("status").textContent = t(lastKey) + lastArg;
+  if (dev) { renderSlots(); renderStepHead(); renderSamples(); }
+}
+$("lang").addEventListener("click", () => { lang = lang === "ja" ? "en" : "ja"; applyLang(); });
+
+const MOCK = new URLSearchParams(location.search).get("mock") === "1";
+$("mock").hidden = !MOCK;
+let mock = null;
+
+/* -------------------------------------------------------------- state --- */
+let access = null;     /* MIDIAccess */
+let dev = null;        /* {link, input, output, info, pdesc[], gdesc[], names[][], dump, steps[], slotUsed[]} */
+let busy = 0;          /* multi-request operations in progress: no polling */
+let dragging = null;   /* key of the slider being dragged */
+let wantConnected = false;
+const ctl = new Map(); /* key "s:id" -> {input, out, desc, scope, id, row} */
+const sets = new Map(); /* key -> {last, timer} for SET throttling */
+const stepEdit = new Map(); /* index -> time of the last edit */
+
+/* parameter ids (felucca/src/core.h); used only when P_COUNT / G_COUNT match */
+const EXPECT = { pcount: 53, gcount: 27, pe0: 45 };
+const P = { LEVEL: 0, SLEN: 29 };
+const LAYOUT = (pe0) => [
+  { t: "ENV", pages: [["ENV", 0, [1, 2, 3, 4]], ["ENV DEST", 0, [5, 6, 7, 8]]] },
+  { t: "LFO", pages: [["LFO", 0, [9, 10, 11, 12]], ["LFO DEST", 0, [13, 14, 15, 16]]] },
+  { t: "EDIT", engine: true, pages: [["EDIT 1", 0, [pe0, pe0 + 1, pe0 + 2, pe0 + 3]], ["EDIT 2", 0, [pe0 + 4, pe0 + 5, pe0 + 6, pe0 + 7]]] },
+  { t: "VOICE", pages: [["LEVEL", 0, [0]], ["VOICE", 0, [37, 38, 41, 42]], ["VOICE 2", 0, [43, 44, 39, 40]]] },
+  { t: "FX", pages: [["FX", 0, [33, 34, 35, 36]], ["DLY", 1, [4, 5, 6, 7]], ["REV/CHO", 1, [8, 9, 10, 11]]] },
+  { t: "SCL", pages: [["SCL", 0, [25, 26, 27, 28]]] },
+  { t: "ARP", pages: [["ARP", 0, [17, 18, 19, 20]], ["ARP 2", 0, [21, 22, 23, 24]]] },
+  { t: "SEQ PATTERN", pages: [["PATTERN", 0, [29, 30, 31, 32]]] },
+  { t: "GLOBAL", pages: [["GLOBAL", 1, [0, 1, 2, 3]]] },
+  { t: "DRUMS", pages: [["DRUMS", 1, [24, 25, 26]]] },
+];
+/* globals that are actions or placeholders on the device: buttons instead, or hidden */
+const G_SKIP = new Set(["SLOT", "NAME", "LOAD", "SAVE", "ENG", "SET", "CLRSQ", "INIT", "MIDI", "SYNC", "ROUT", "CPU", "CLK"]);
+const key = (s, id) => s + ":" + id;
+const gEng = () => { const i = dev.gdesc.findIndex((d) => d && d.label === "ENG"); return i >= 0 ? i : 20; };
+const pSlen = () => { const i = dev.pdesc.findIndex((d) => d && d.fmt === F.STEPS); return i >= 0 ? i : P.SLEN; };
+
+/* -------------------------------------------------------------- MIDI --- */
+async function connect() {
+  wantConnected = true;
+  if (!MOCK && !navigator.requestMIDIAccess) { sayK("nomidi"); return; }
+  $("connect").disabled = true;
+  sayK("connecting");
+  try {
+    if (!access) {
+      if (MOCK) { mock = makeMockDevice(); access = mock.access; }
+      else {
+        try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+        catch (e) { sayK("denied"); return; }
+      }
+      access.onstatechange = onState;
+    }
+    const isF = (p) => /felucca/i.test(p.name || "") && p.state !== "disconnected";
+    const input = [...access.inputs.values()].find(isF);
+    const output = [...access.outputs.values()].find(isF);
+    if (!input || !output) { sayK("nodevice"); return; }
+    const link = new Link((d) => output.send(d), {
+      timeout: 300,
+      onUnknown: (f) => console.debug("ignored reply", f),
+      onTimeout: () => sayK("noreply"),
+    });
+    input.onmidimessage = (e) => link.receive(e.data);
+    if (input.open) await input.open().catch(() => {});
+    dev = { link, input, output, info: null, pdesc: [], gdesc: [], names: [], dump: null, steps: [], slotUsed: [null, null, null, null] };
+    $("connect").textContent = t("disconnect");
+    await load(dev);
+  } catch (e) {
+    console.error(e);
+    if (dev) {                                       /* not unplugged meanwhile (that says "lost") */
+      const timeout = /^timeout/.test(e.message);
+      disconnect();
+      sayK(timeout ? "noreply" : "error", timeout ? "" : e.message);
+    }
+  } finally {
+    $("connect").disabled = false;
+  }
+}
+
+function disconnect(reasonKey = "disconnected") {
+  if (dev) {
+    dev.link.close();
+    dev.input.onmidimessage = null;
+  }
+  dev = null;
+  busy = 0;
+  $("ui").hidden = true;
+  $("version").textContent = "";
+  $("connect").textContent = t("connect");
+  sayK(reasonKey);
+}
+
+function onState(e) {
+  const p = e.port;
+  if (!p || !/felucca/i.test(p.name || "")) return;
+  if (dev && p.state === "disconnected" && (p.id === dev.input.id || p.id === dev.output.id)) {
+    disconnect("lost");
+  } else if (!dev && wantConnected && p.state === "connected" && p.type === "output") {
+    clearTimeout(onState.tm);                       /* the device came back: reconnect */
+    onState.tm = setTimeout(() => { if (!dev && wantConnected) connect(); }, 800);
+  }
+}
+
+const rq = (r, opt) => dev.link.request(r, opt);
+async function getDesc(scope, id) { return parse[CMD.DESC](await rq(req.desc(scope, id))); }
+async function getDump() { return parse[CMD.DUMP](await rq(req.dump()), dev.info); }
+async function getStep(i) { return parse[CMD.STEP_GET](await rq(req.stepGet(i))); }
+
+/* the whole connect sequence */
+async function load(d) {
+  busy++;
+  try {
+    /* the first frame after opening the port can be lost: a few tries */
+    d.info = parse[CMD.INFO](await d.link.request(req.info(), { timeout: 500, retries: 3 }));
+    $("version").textContent = d.info.version;
+    const total = d.info.pcount + d.info.gcount;
+    for (let i = 0; i < d.info.pcount; i++) { sayK("reading", `${i + 1}/${total}`); d.pdesc[i] = await getDescOrNull(0, i); }
+    for (let i = 0; i < d.info.gcount; i++) { sayK("reading", `${d.info.pcount + i + 1}/${total}`); d.gdesc[i] = await getDescOrNull(1, i); }
+    d.titles = [];
+    for (let e = 0; e < d.info.nengines; e++) {
+      const r = parse[CMD.NAMES](await d.link.request(req.names(e)));
+      d.names[e] = r.names;
+      d.titles[e] = r.titles;
+    }
+    for (let k = 0; k < 4; k++) {                    /* PROJECT op 2: is the slot used */
+      try { d.slotUsed[k] = parse[CMD.PROJECT](await d.link.request(req.project(2, k))).used; }
+      catch (e) { if (e.message === "closed") throw e; }
+    }
+    try { d.smp = parse[CMD.SMP_INFO](await d.link.request(req.smpInfo())); }
+    catch (e) { if (e.message === "closed") throw e; d.smp = null; }   /* older firmware, or no flash */
+    d.dump = await getDump();
+    buildUI();
+    $("ui").hidden = false;
+    await loadSteps();
+    sayK("ready");
+  } finally { busy--; }
+}
+async function getDescOrNull(s, i) { try { return await getDesc(s, i); } catch (e) { if (e.message === "closed") throw e; return null; } }
+
+async function rereadEngineDesc() {
+  const pe0 = dev.info.pe0;
+  for (let i = 0; i < 8 && pe0 + i < dev.info.pcount; i++) dev.pdesc[pe0 + i] = await getDescOrNull(0, pe0 + i);
+  buildGroups();
+}
+
+async function loadSteps() {
+  const n = dev.info.nstep;
+  for (let i = 0; i < n; i++) {
+    if (i % 8 === 0) sayK("steploading", `${i}/${n}`);
+    dev.steps[i] = await getStep(i);
+  }
+  renderSteps();
+}
+
+/* --------------------------------------------------------------- UI --- */
+function buildUI() {
+  const sel = $("engine");
+  sel.replaceChildren(...dev.info.engines.map((n, i) => el("option", { value: i, text: n })));
+  buildGroups();
+  updateBrowser();
+  renderSlots();
+  renderSamples();
+}
+
+function updateBrowser() {
+  const e = dev.dump.engine;
+  const sel = $("engine");
+  if (document.activeElement !== sel) sel.value = String(e);
+  const ps = $("preset");
+  const names = dev.names[e] || [];
+  if (ps.dataset.engine !== String(e)) {
+    ps.replaceChildren(...names.map((n, i) => el("option", { value: i, text: n })));
+    ps.dataset.engine = String(e);
+  }
+  if (document.activeElement !== ps) ps.value = String(dev.dump.preset);
+}
+
+function visible(d) { return d && d.max > d.min && d.label !== "-"; }
+
+function buildGroups() {
+  ctl.clear();
+  const box = $("groups");
+  const groups = [];
+  const { info } = dev;
+  if (info.pcount === EXPECT.pcount && info.gcount === EXPECT.gcount && info.pe0 === EXPECT.pe0) {
+    for (const g of LAYOUT(info.pe0)) {
+      const div = el("div", { class: "group" }, el("h2", { text: g.engine ? `EDIT ${info.engines[dev.dump.engine] || ""}` : g.t }));
+      for (const [title, s, ids] of g.pages) {
+        const rows = ids.map((id) => paramRow(s, id)).filter(Boolean);
+        if (!rows.length) continue;
+        const tt = g.engine && (dev.titles[dev.dump.engine] || [])[g.pages.findIndex((x) => x[0] === title)];
+        if (g.pages.length > 1) div.append(el("h3", { text: tt || title }));
+        div.append(...rows);
+      }
+      groups.push(div);
+    }
+  } else {
+    /* unknown firmware layout: everything in id order */
+    const a = el("div", { class: "group" }, el("h2", { text: "INSTRUMENT" }), el("p", { class: "dim", text: t("layout") }));
+    const b = el("div", { class: "group" }, el("h2", { text: "EDIT" }));
+    const c = el("div", { class: "group" }, el("h2", { text: "GLOBAL" }));
+    for (let i = 0; i < info.pcount; i++) { const r = paramRow(0, i); if (r) (i >= info.pe0 ? b : a).append(r); }
+    for (let i = 0; i < info.gcount; i++) { const r = paramRow(1, i); if (r) c.append(r); }
+    groups.push(a, b, c);
+  }
+  box.replaceChildren(...groups);
+}
+
+function paramRow(s, id) {
+  const d = s ? dev.gdesc[id] : dev.pdesc[id];
+  if (!visible(d) || (s === 1 && G_SKIP.has(d.label))) return null;
+  const k = key(s, id);
+  let input;
+  if (d.fmt === F.ENUM || d.fmt === F.NOTE || d.fmt === F.ONOFF) {
+    input = el("select");
+    for (let v = d.min; v <= d.max; v++) {
+      const [txt] = fmtValue(d, v);
+      input.append(el("option", { value: v, text: d.fmt === F.ENUM && d.names[v - d.min] == null ? String(v) : txt }));
+    }
+    input.addEventListener("change", () => userSet(s, id, +input.value, true));
+  } else {
+    input = el("input", { type: "range", min: d.min, max: d.max, step: 1 });
+    input.addEventListener("pointerdown", () => { dragging = k; });
+    input.addEventListener("input", () => userSet(s, id, +input.value, false));
+    input.addEventListener("change", () => userSet(s, id, +input.value, true));
+    input.addEventListener("dblclick", () => { input.value = d.def; userSet(s, id, d.def, true); });
+  }
+  input.title = d.label;
+  const out = el("span", { class: "v" });
+  const row = el("div", { class: "row" }, el("span", { text: d.label }), input, out);
+  ctl.set(k, { input, out, desc: d, scope: s, id });
+  showValue(k, s ? dev.dump.g[id] : dev.dump.p[id], true);
+  return row;
+}
+
+function showValue(k, v, force) {
+  const c = ctl.get(k);
+  if (!c || v == null) return;
+  const [txt, unit] = fmtValue(c.desc, v);
+  c.out.textContent = unit ? `${txt} ${unit}` : txt;
+  if (force || !touched(k)) c.input.value = String(v);
+}
+/* the user is working on this control: polling must not move it */
+function touched(k) {
+  const c = ctl.get(k), st = sets.get(k);
+  if (dragging === k) return true;
+  if (c && c.input.tagName === "SELECT" && document.activeElement === c.input) return true;
+  if (st && (st.timer || performance.now() - st.last < 600)) return true;
+  return dev && dev.link.hasQueued(k);
+}
+
+window.addEventListener("pointerup", () => { if (dragging) { const k = dragging; dragging = null; const c = ctl.get(k); if (c) userSet(c.scope, c.id, +c.input.value, true); } });
+window.addEventListener("pointercancel", () => { dragging = null; });
+
+/* SET with ~30 messages/s while dragging; the final value is always sent */
+function userSet(s, id, v, final) {
+  if (!dev) return;
+  const k = key(s, id);
+  (s ? dev.dump.g : dev.dump.p)[id] = v;
+  showValue(k, v, false);
+  let st = sets.get(k);
+  if (!st) sets.set(k, (st = { last: 0, timer: null }));
+  const now = performance.now();
+  const wait = 33 - (now - st.last);
+  if (wait <= 0 || final) { clearTimeout(st.timer); st.timer = null; sendSet(s, id, k); }
+  else if (!st.timer) st.timer = setTimeout(() => { st.timer = null; sendSet(s, id, k); }, wait);
+}
+async function sendSet(s, id, k) {
+  if (!dev) return;                                 /* a throttled SET after a disconnect */
+  const st = sets.get(k);
+  st.last = performance.now();
+  const v = (s ? dev.dump.g : dev.dump.p)[id];
+  try {
+    const r = parse[CMD.SET](await rq(req.set(s, id, v), { key: k }));
+    if (dev && dragging !== k && !st.timer) {          /* the device's value after clamping */
+      (s ? dev.dump.g : dev.dump.p)[id] = r.value;
+      showValue(k, r.value, false);
+    }
+  } catch (e) { if (e.message !== "closed") console.warn(e); }
+}
+
+/* engine / preset browser */
+$("engine").addEventListener("change", () => choosePreset(+$("engine").value, 0));
+$("preset").addEventListener("change", () => { if (dev) choosePreset(dev.dump.engine, +$("preset").value); });
+async function choosePreset(e, p) {
+  if (!dev) return;
+  busy++;
+  try {
+    const r = parse[CMD.PRESET](await rq(req.preset(e, p)));
+    await afterSoundChange();
+  } catch (err) { report(err); } finally { busy--; }
+}
+async function afterSoundChange() {
+  dev.dump = await getDump();
+  await rereadEngineDesc();
+  updateBrowser();
+  refreshAll();
+  await loadSteps();                                /* a preset can bring a pattern */
+  sayK("ready");
+}
+$("init").addEventListener("click", async () => {
+  if (!dev || !confirm(t("confirmInit"))) return;
+  busy++;
+  try { await rq(req.set(1, gEng(), dev.dump.engine)); await afterSoundChange(); }
+  catch (err) { report(err); } finally { busy--; }
+});
+
+function refreshAll() {
+  for (const [k, c] of ctl) showValue(k, c.scope ? dev.dump.g[c.id] : dev.dump.p[c.id], false);
+  renderSteps();
+}
+function report(err) { if (err && err.message !== "closed") { console.warn(err); sayK("error", err.message); } }
+
+/* projects: the protocol cannot ask whether a slot is used without loading or saving it */
+function renderSlots() {
+  const box = $("slots");
+  box.replaceChildren();
+  for (let i = 0; i < 4; i++) {
+    const u = dev.slotUsed[i];
+    box.append(el("span", { text: String(i + 1) }),
+      el("span", { class: "dim", text: u == null ? t("unknown") : t(u ? "used" : "empty") }),
+      el("button", { text: t("load"), onclick: () => project(0, i) }),
+      el("button", { text: t("save"), onclick: () => project(1, i) }));
+  }
+}
+async function project(op, slot) {
+  if (!dev) return;
+  if (!confirm(t(op ? "confirmSave" : "confirmLoad").replace("{n}", slot + 1))) return;
+  busy++;
+  try {
+    /* save writes flash: a long timeout and no retry */
+    const r = parse[CMD.PROJECT](await rq(req.project(op, slot), { timeout: 4000, retries: 0 }));
+    dev.slotUsed[slot] = r.used;
+    renderSlots();
+    if (!op && r.used) await afterSoundChange();
+    sayK(op ? "savedSlot" : r.used ? "loadedSlot" : "emptySlot", String(slot + 1));
+  } catch (err) { report(err); } finally { busy--; }
+}
+
+/* ---------------------------------------------------------- steps --- */
+const TIMES = ["NOTE", "TIE", "REST"];
+function renderStepHead() { if (dev && dev.steps.length) renderSteps(); }
+function renderSteps() {
+  if (!dev || !dev.steps.length) return;
+  const len = Math.max(1, Math.min(dev.info.nstep, dev.dump.p[pSlen()] || 16));
+  const box = $("steptables");
+  /* keep the rows the user is typing in */
+  if (box.contains(document.activeElement) && box.dataset.len === String(len)) { updateStepRows(); return; }
+  box.dataset.len = String(len);
+  const tables = [];
+  for (let b = 0; b < len; b += 16) {
+    const tb = el("table", {}, el("tr", {}, el("th"), el("th", { text: t("notes") }), el("th", { text: t("time") }),
+      el("th", { text: t("acc") }), el("th", { text: t("slide") }), el("th", { text: t("vel") })));
+    for (let i = b; i < Math.min(len, b + 16); i++) tb.append(stepRow(i));
+    tables.push(tb);
+  }
+  box.replaceChildren(...tables);
+}
+function stepRow(i) {
+  const notes = el("input", { type: "text", placeholder: "—", spellcheck: "false" });
+  const time = el("select", {}, ...TIMES.map((n, k) => el("option", { value: k, text: n })));
+  const acc = el("input", { type: "checkbox" });
+  const sl = el("input", { type: "checkbox" });
+  const vel = el("input", { type: "number", min: 0, max: 127 });
+  const tr = el("tr", { "data-i": i }, el("td", { class: "i", text: String(i + 1) }),
+    el("td", {}, notes), el("td", {}, time), el("td", {}, acc), el("td", {}, sl), el("td", {}, vel));
+  tr._c = { notes, time, acc, sl, vel };
+  fillStep(tr, dev.steps[i]);
+  const send = () => writeStep(i, tr);
+  notes.addEventListener("change", send);
+  time.addEventListener("change", send);
+  acc.addEventListener("change", send);
+  sl.addEventListener("change", send);
+  vel.addEventListener("change", send);
+  return tr;
+}
+function fillStep(tr, s) {
+  const c = tr._c;
+  if (!s) return;
+  c.notes.value = s.notes.slice(0, s.n).map(noteName).join(" ");
+  c.notes.classList.remove("bad");
+  c.time.value = String(s.time);
+  c.acc.checked = !!(s.flags & 1);
+  c.sl.checked = !!(s.flags & 2);
+  c.vel.value = String(s.vel);
+  tr.classList.toggle("off", !s.n || s.time === 2);
+}
+function updateStepRows() {
+  for (const tr of $("steptables").querySelectorAll("tr[data-i]")) {
+    if (tr.contains(document.activeElement)) continue;
+    fillStep(tr, dev.steps[+tr.dataset.i]);
+  }
+}
+async function writeStep(i, tr) {
+  const c = tr._c;
+  const notes = parseNotes(c.notes.value);
+  if (!notes) { c.notes.classList.add("bad"); return; }
+  c.notes.classList.remove("bad");
+  const old = dev.steps[i];
+  const all = notes.concat(old.notes.slice(notes.length)).slice(0, 4);
+  let time = +c.time.value;
+  if (notes.length && !old.n && time === 2) time = 0;   /* typing notes into an empty step makes it play */
+  const s = { n: notes.length, notes: all, time, flags: (c.acc.checked ? 1 : 0) | (c.sl.checked ? 2 : 0),
+    vel: Math.max(0, Math.min(127, +c.vel.value || 0)) };
+  if (s.n && !s.vel) s.vel = 96;
+  stepEdit.set(i, performance.now());
+  try {
+    dev.steps[i] = parse[CMD.STEP_SET](await rq(req.stepSet(i, s)));
+    if (!tr.contains(document.activeElement) || document.activeElement === c.notes) fillStep(tr, dev.steps[i]);
+  } catch (err) { report(err); }
+}
+$("reloadsteps").addEventListener("click", async () => {
+  if (!dev) return;
+  busy++;
+  try { await loadSteps(); sayK("ready"); } catch (err) { report(err); } finally { busy--; }
+});
+$("clearseq").addEventListener("click", async () => {
+  if (!dev || !confirm(t("confirmClear"))) return;
+  busy++;
+  try {
+    for (let i = 0; i < dev.info.nstep; i++) {
+      if (i % 8 === 0) sayK("applying", `${i}/${dev.info.nstep}`);
+      dev.steps[i] = parse[CMD.STEP_SET](await rq(req.stepSet(i, { n: 0, notes: [0, 0, 0, 0], time: 2, flags: 0, vel: 0 })));
+    }
+    $("steptables").dataset.len = "";
+    renderSteps();
+    sayK("ready");
+  } catch (err) { report(err); } finally { busy--; }
+});
+
+/* ---------------------------------------------------------- samples --- */
+const smpDraft = [0, 1, 2].map(() => ({ name: "", files: [] }));
+let smpBusy = false;
+const SMP_RC = { 1: "size", 2: "header", 3: "data CRC", 4: "flash", 5: "zones" };
+const kib = (n) => (n / 1024).toFixed(1);
+
+/* auto key split, as in buildSlot (for the preview) */
+function splitKeys(files) {
+  const z = files.map((f, i) => ({ i, root: f.root })).sort((a, b) => a.root - b.root);
+  const out = [];
+  z.forEach((x, j) => {
+    out[x.i] = [j === 0 ? 0 : Math.floor((z[j - 1].root + x.root) / 2) + 1, j === z.length - 1 ? 127 : Math.floor((x.root + z[j + 1].root) / 2)];
+  });
+  return out;
+}
+const draftBytes = (d) => d.files.reduce((a, f) => a + ((f.s.length + 1) >> 1), 0);
+
+async function decodeFile(f) {
+  const buf = await f.arrayBuffer();
+  let x;
+  try {
+    const w = parseWav(buf);
+    x = resample(w.x, w.sr, SMP.RATE);
+  } catch (e) {                                     /* not a plain WAV: let the browser decode it */
+    const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const ab = await new Ctx(1, 1, SMP.RATE).decodeAudioData(buf.slice(0));
+    x = new Float64Array(ab.length);
+    for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < d.length; i++) x[i] += d[i] / ab.numberOfChannels; }
+  }
+  if (!x.length) throw new Error("no audio");
+  return { fname: f.name, s: normalize(x), root: rootFromName(f.name.replace(/\.[^.]*$/, "")) };
+}
+
+async function addFiles(k, list) {
+  const d = smpDraft[k];
+  for (const f of list) {
+    try {
+      const z = await decodeFile(f);
+      if (d.files.length >= SMP.MAX_ZONES) break;
+      d.files.push(z);
+      if (!d.name) d.name = f.name.replace(/\.[^.]*$/, "").toUpperCase().replace(/[^\x20-\x7E]/g, "").slice(0, 8);
+    } catch (e) { sayK("smpDecodeFail", `${f.name} (${e.message})`); }
+  }
+  renderSamples();
+}
+
+function renderSamples() {
+  const sec = $("samples");
+  if (!dev || !dev.smp) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const box = $("smpslots");
+  const max = SMP.MAX_DATA;
+  box.replaceChildren(...dev.smp.slots.map((u, k) => {
+    const d = smpDraft[k];
+    const status = u.zones ? `${u.name || "—"}, ${u.zones} ${t("zones")}, ${u.kib} KiB` : t("empty");
+    const bar = el("progress", { max: dev.smp.slotKiB, value: u.kib, title: `${u.kib} / ${dev.smp.slotKiB} KiB` });
+    const file = el("input", { type: "file", accept: ".wav,audio/wav,audio/x-wav,audio/*", multiple: true, hidden: true });
+    file.addEventListener("change", () => { addFiles(k, [...file.files]); file.value = ""; });
+    const name = el("input", { type: "text", class: "name", maxlength: 8, value: d.name, spellcheck: "false", placeholder: "NAME" });
+    name.addEventListener("input", () => {
+      const v = name.value.toUpperCase().replace(/[^\x20-\x7E]/g, "").slice(0, 8);
+      if (v !== name.value) name.value = v;
+      d.name = v;
+    });
+    const bytes = draftBytes(d), tooBig = bytes > max;
+    const size = el("span", { class: tooBig ? "bad" : "dim",
+      text: d.files.length ? `${kib(bytes)} / ${kib(max)} KiB` + (tooBig ? " " + t("smpTooBig") : "") : "" });
+    const prog = el("progress", { max: 1, value: 0, hidden: true });
+    const blk = el("div", { class: "smp", "data-k": k },
+      el("div", { class: "head" }, el("b", { text: `USR${k + 1}` }), el("span", { text: status }), bar,
+        el("button", { text: t("erase"), disabled: smpBusy || !u.zones, onclick: () => smpErase(k) })),
+      el("div", { class: "head" }, el("span", { text: t("smpName") }), name,
+        el("button", { text: t("chooseFiles"), disabled: smpBusy, onclick: () => file.click() }), file,
+        el("button", { text: t("upload"), disabled: smpBusy || !d.files.length || tooBig || !d.name, onclick: () => smpUpload(k, prog) }),
+        d.files.length ? el("button", { text: t("clearList"), disabled: smpBusy, onclick: () => { d.files = []; renderSamples(); } }) : "",
+        size, prog));
+    if (d.files.length) {
+      const keys = splitKeys(d.files);
+      const tb = el("table", {}, el("tr", {}, el("th", { text: t("file") }), el("th", { text: t("root") }),
+        el("th", { text: t("keys") }), el("th", { text: t("length") }), el("th")));
+      d.files.forEach((f, i) => {
+        const root = el("input", { type: "text", class: "root", value: noteName(f.root), spellcheck: "false" });
+        root.addEventListener("change", () => {
+          const n = parseNote(root.value.trim());
+          if (n == null) { root.classList.add("bad"); return; }
+          f.root = n;
+          renderSamples();
+        });
+        tb.append(el("tr", {}, el("td", { text: f.fname }), el("td", {}, root),
+          el("td", { text: `${noteName(keys[i][0])}–${noteName(keys[i][1])}` }),
+          el("td", { text: `${(f.s.length / SMP.RATE).toFixed(2)} s` }),
+          el("td", {}, el("button", { text: t("remove"), disabled: smpBusy, onclick: () => { d.files.splice(i, 1); renderSamples(); } }))));
+      });
+      blk.append(tb);
+    }
+    blk.addEventListener("dragover", (e) => { e.preventDefault(); blk.classList.add("over"); });
+    blk.addEventListener("dragleave", () => blk.classList.remove("over"));
+    blk.addEventListener("drop", (e) => {
+      e.preventDefault();
+      blk.classList.remove("over");
+      if (!smpBusy && e.dataTransfer.files.length) addFiles(k, [...e.dataTransfer.files]);
+    });
+    return blk;
+  }));
+}
+
+async function smpInfo() { dev.smp = parse[CMD.SMP_INFO](await rq(req.smpInfo())); }
+
+async function smpUpload(k, prog) {
+  const d = smpDraft[k];
+  let built;
+  try { built = buildSlot(d.name, d.files.map((f) => ({ s: f.s, root: f.root }))); }
+  catch (e) { sayK("smpFail", e.message); return; }
+  if (!confirm(t("confirmUpload").replace("{n}", k + 1))) return;
+  const { hdr, data } = built;
+  busy++;
+  smpBusy = true;
+  renderSamples();
+  prog = $("smpslots").querySelector(`[data-k="${k}"] progress[max="1"]`);
+  prog.hidden = false;
+  try {
+    const t0 = performance.now();
+    let r = parse[CMD.SMP_BEGIN](await rq(req.smpBegin(k), { timeout: 1000, retries: 0 }));
+    if (r.rc) throw new Error("begin rc " + r.rc);
+    for (let off = 0; off < data.length; off += 256) {
+      const a = SMP.DATA_OFF + off;
+      const w = parse[CMD.SMP_WRITE](await rq(req.smpWrite(k, a, data.subarray(off, off + 256)), { timeout: 1000, retries: 1 }));
+      if (w.rc) throw new Error(`write at 0x${a.toString(16)} rc ${w.rc}`);
+      prog.value = (off + 256) / data.length;
+      sayK("smpUploading", `${k + 1}  ${kib(Math.min(data.length, off + 256))} / ${kib(data.length)} KiB`);
+    }
+    r = parse[CMD.SMP_END](await rq(req.smpEnd(k, hdr), { timeout: 2000, retries: 0 }));
+    if (r.rc) throw new Error(`end rc ${r.rc} (${SMP_RC[r.rc] || "?"})`);
+    sayK("smpDone", `${k + 1}  ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  } catch (e) {
+    if (e.message !== "closed") sayK("smpFail", e.message);
+  } finally {
+    try { if (dev) await smpInfo(); } catch (e) { /* shown by the next action */ }
+    smpBusy = false;
+    busy--;
+    renderSamples();
+  }
+}
+
+async function smpErase(k) {
+  if (!dev || !confirm(t("confirmErase").replace("{n}", k + 1))) return;
+  busy++;
+  smpBusy = true;
+  renderSamples();
+  try {
+    const r = parse[CMD.SMP_ERASE](await rq(req.smpErase(k), { timeout: 2500, retries: 0 }));
+    if (r.rc) throw new Error("erase rc " + r.rc);
+    sayK("smpErased", String(k + 1));
+  } catch (e) {
+    if (e.message !== "closed") sayK("smpFail", e.message);
+  } finally {
+    try { if (dev) await smpInfo(); } catch (e) { /* ignore */ }
+    smpBusy = false;
+    busy--;
+    renderSamples();
+  }
+}
+
+/* --------------------------------------------------------- polling --- */
+let stepRR = 0;
+setInterval(async () => {
+  if (!dev || busy || dragging || document.hidden || !dev.dump || !dev.link.idle) return;
+  busy++;
+  const d = dev;
+  try {
+    const dump = await getDump();
+    if (d !== dev) return;
+    const soundChanged = dump.engine !== d.dump.engine || dump.preset !== d.dump.preset;
+    const engineChanged = dump.engine !== d.dump.engine;
+    const oldLen = d.dump.p[pSlen()];
+    for (const [k, c] of ctl) {
+      const v = c.scope ? dump.g[c.id] : dump.p[c.id];
+      if (touched(k)) { (c.scope ? dump.g : dump.p)[c.id] = c.scope ? d.dump.g[c.id] : d.dump.p[c.id]; continue; }
+      showValue(k, v, false);
+    }
+    d.dump = dump;
+    if (engineChanged) await rereadEngineDesc();
+    if (soundChanged) { updateBrowser(); await loadSteps(); sayK("ready"); return; }
+    if (dump.p[pSlen()] !== oldLen) { $("steptables").dataset.len = ""; renderSteps(); }
+    /* steps are not in DUMP: follow them two at a time */
+    const len = Math.max(1, Math.min(d.info.nstep, dump.p[pSlen()] || 16));
+    for (let n = 0; n < 2; n++) {
+      stepRR = (stepRR + 1) % len;
+      if (performance.now() - (stepEdit.get(stepRR) || 0) < 1500) continue;
+      const s = await getStep(stepRR);
+      const o = d.steps[stepRR];
+      d.steps[stepRR] = s;
+      if (JSON.stringify(o) !== JSON.stringify(s)) updateStepRows();
+    }
+  } catch (err) { report(err); } finally { busy--; }
+}, 400);
+
+/* ------------------------------------------------------------ files --- */
+$("savefile").addEventListener("click", () => {
+  if (!dev) return;
+  const engine = dev.dump.engine, preset = dev.dump.preset;
+  const data = { format: "felucca-patch", version: 1, firmware: dev.info.version,
+    engineName: dev.info.engines[engine], presetName: (dev.names[engine] || [])[preset],
+    engine, preset, p: dev.dump.p.slice(), g: dev.dump.g.slice(),
+    steps: dev.steps.map((s) => ({ n: s.n, notes: s.notes.slice(), time: s.time, flags: s.flags, vel: s.vel })) };
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+  const a = el("a", { href: URL.createObjectURL(blob), download: `felucca-${(data.engineName || "patch").toLowerCase()}-${(data.presetName || preset).toString().toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("loadfile").addEventListener("click", () => { $("file").value = ""; $("file").click(); });
+$("file").addEventListener("change", async () => {
+  const f = $("file").files[0];
+  if (!f || !dev) return;
+  let data;
+  try {
+    data = JSON.parse(await f.text());
+    if (!Number.isInteger(data.engine) || !Number.isInteger(data.preset) || !Array.isArray(data.p)) throw new Error("engine / preset / p");
+    if (data.engine < 0 || data.engine >= dev.info.nengines) throw new Error("engine " + data.engine);
+  } catch (e) { sayK("badfile", e.message); return; }
+  busy++;
+  try {
+    await rq(req.preset(data.engine, data.preset));
+    dev.dump = await getDump();
+    await rereadEngineDesc();
+    const n = Math.min(data.p.length, dev.info.pcount);
+    for (let i = 0; i < n; i++) {
+      const d = dev.pdesc[i];
+      if (!visible(d) || !Number.isFinite(data.p[i])) continue;
+      if (i % 8 === 0) sayK("applying", `${i}/${n}`);
+      await rq(req.set(0, i, data.p[i]));
+    }
+    if (Array.isArray(data.steps)) {
+      const m = Math.min(data.steps.length, dev.info.nstep);
+      for (let i = 0; i < m; i++) {
+        const s = data.steps[i] || {};
+        if (i % 8 === 0) sayK("applying", `steps ${i}/${m}`);
+        dev.steps[i] = parse[CMD.STEP_SET](await rq(req.stepSet(i, {
+          n: s.n | 0, notes: Array.isArray(s.notes) ? s.notes : [0, 0, 0, 0], time: s.time ?? 2, flags: s.flags | 0, vel: s.vel | 0 })));
+      }
+    }
+    dev.dump = await getDump();
+    updateBrowser();
+    $("steptables").dataset.len = "";
+    refreshAll();
+    sayK("applied");
+  } catch (err) { report(err); } finally { busy--; }
+});
+
+$("connect").addEventListener("click", () => {
+  if (dev) { wantConnected = false; disconnect(); } else connect();
+});
+applyLang();
+if (!MOCK && !navigator.requestMIDIAccess) sayK("nomidi");
+})();
+</script>
+</body>
+</html>
