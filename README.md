@@ -44,8 +44,8 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1.
 
 ## Support
 
-If Felucca is useful to you, [sponsoring on GitHub](https://github.com/sponsors/hugelton) helps keep
-its development going.
+If Felucca is useful to you, [sponsoring on GitHub](https://github.com/sponsors/hugelton) or a donation
+on [itch.io](https://hugelton.itch.io/felucca) helps keep its development going.
 
 Pull requests are welcome, and so are ideas and requests: post them in
 [Discussions](https://github.com/hugelton/Felucca/discussions) or on X ([@kurogedelic](https://x.com/kurogedelic)).
