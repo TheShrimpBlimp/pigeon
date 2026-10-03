@@ -44,6 +44,11 @@ async function editorMock() {
   let descs = 0;
   for (let i = 0; i < info.pcount; i++) if (E.parse[E.CMD.DESC](await rq(E.req.desc(0, i))).label) descs++;
   ok(descs === info.pcount, "editor: DESC for every parameter");
+  const scale = E.parse[E.CMD.DESC](await rq(E.req.desc(0, 26)));
+  const scaleNames = ["CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", "MPEN", "HARM", "PHRY", "LYD", "LOC", "MEL", "BLUES", "WHOLE", "DIMHW", "DIMWH"];
+  ok(scale.label === "SCL" && scale.max === 15 && eq(scale.names, scaleNames), "editor: all 16 scale names exposed");
+  const scaleSet = E.parse[E.CMD.SET](await rq(E.req.set(0, scale.id, 15)));
+  ok(scaleSet.value === 15, "editor: new scale selection is not clamped to the old range");
   const dump = E.parse[E.CMD.DUMP](await rq(E.req.dump()), info);
   ok(dump.p.length === info.pcount && dump.g.length === info.gcount, "editor: DUMP");
   const set = E.parse[E.CMD.SET](await rq(E.req.set(0, 3, 500)));

@@ -275,7 +275,7 @@ static void graph_roll(const track_t *t, uint16_t c)
 static void graph_scale(const track_t *t, uint16_t c)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
-    uint32_t i, mask = SCALE_MASK[t->p[P_SCALE] & 7];
+    uint32_t i, mask = scale_mask(t);
     for (i = 0; i < 12u; i++) {
         uint32_t deg = (i + 12u - (uint32_t)t->p[P_ROOT]) % 12u;
         int32_t x = 6 + (int32_t)i * 19;

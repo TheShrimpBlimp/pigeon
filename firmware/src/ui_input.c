@@ -253,6 +253,8 @@ static void seq_entry(uint32_t pressed)
         if (!((pressed >> k) & 1u))
             continue;
         note = kb_map(t, k);
+        if (note == KB_SILENT)
+            continue;
         if (!ui.entry_open) {
             ui.entry_open = 1;
             st->n = 0;
