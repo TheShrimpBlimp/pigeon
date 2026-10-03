@@ -46,11 +46,11 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1.
 
 ## Scale keyboard
 
-On the **SCL** page, turn **QNT** on to play the selected scale using only the
-white keys. C4 plays **ROOT**; consecutive white keys play consecutive scale notes
+On the **SCL** page, set **QNT** to WHITE to play the selected scale using only the
+white keys (SNAP keeps every key and rounds it down to the scale). C4 plays **ROOT**; consecutive white keys play consecutive scale notes
 above and below it. Black keys are silent, including during live recording and
 step entry. **TRN** transposes the resulting notes; the octave buttons shift them
-by full octaves. Turn QNT off for the normal chromatic keyboard.
+by full octaves. Set QNT to OFF for the normal chromatic keyboard.
 
 Available scales: chromatic (CHR), major (MAJ), natural minor (MIN), Dorian (DOR),
 Mixolydian (MIX), major pentatonic (PEN), minor pentatonic (MPEN), harmonic minor

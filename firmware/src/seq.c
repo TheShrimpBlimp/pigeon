@@ -70,7 +70,14 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
     if (ENGINES[t->eng_req % NENGINES] == &ENG_SLICE)   /* SLICE: lowest key = slice 0 (C4 + ROOT), no scale */
         return (uint32_t)clamp(SLC_BASE + t->p[P_ROOT] + 12 * song.octave + (int32_t)k, 0, 127);
 #endif
-    if (t->p[P_QUANT]) {
+    if (t->p[P_QUANT] == 1) {                    /* SNAP: every key, rounded down to the scale (the old ON) */
+        uint32_t mask = scale_mask(t), guard = 12;
+        n += 12 * song.octave + t->p[P_TRANS];
+        while (guard-- && !((mask >> (uint32_t)((n - t->p[P_ROOT] + 120) % 12)) & 1u))
+            n--;
+        return (uint32_t)clamp(n, 0, 127);
+    }
+    if (t->p[P_QUANT] == 2) {                    /* WHITE: white keys walk the scale, black keys are silent */
         uint32_t mask = scale_mask(t), i;
         int32_t count = 0, degree = DEGREE[n % 12], oct;
         if (degree < 0)

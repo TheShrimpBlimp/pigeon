@@ -26,7 +26,7 @@ static void mapping_test(void)
     int root, oct, trans;
     assert(TP[P_SCALE].max + 1 == sizeof EXPECTED / sizeof EXPECTED[0]);
     assert(sizeof SCALE_MASK / sizeof SCALE_MASK[0] == sizeof EXPECTED / sizeof EXPECTED[0]);
-    t->p[P_QUANT] = 1;
+    t->p[P_QUANT] = 2;
     for (s = 0; s <= (uint32_t)TP[P_SCALE].max; s++) {
         uint32_t mask = 0;
         t->p[P_SCALE] = (int16_t)s;
@@ -60,18 +60,25 @@ static void mapping_test(void)
     t->p[P_TRANS] = -5;
     for (k = 0; k < 27u; k++)
         assert(kb_map(t, k) == 48u + k);
-    t->p[P_QUANT] = 1;
+    t->p[P_QUANT] = 2;
     for (k = 0; k < 27u; k++) {
-        TDRUM->p[P_QUANT] = 1;
+        TDRUM->p[P_QUANT] = 2;
         assert(kb_map(TDRUM, k) == DRUM_KEYS[k]);
     }
-    t->engine = 4;
+    t->engine = t->eng_req = 4;
     if (drum_set() >= 0) {
         t->p[P_E0] = (int16_t)drum_set();
         for (k = 0; k < 27u; k++)
             assert(kb_map(t, k) == 36u + k);
     }
-    puts("scales: all 16 scales, 12 roots, octave/transpose ranges, bypass and drums ok");
+    t->engine = t->eng_req = 0;                /* SNAP (QNT 1, the old ON): every key, rounded down */
+    t->p[P_QUANT] = 1;
+    t->p[P_SCALE] = 2;                         /* C minor */
+    t->p[P_ROOT] = 0;
+    t->p[P_TRANS] = 0;
+    song.octave = 0;
+    assert(kb_map(t, 11) == 63u && kb_map(t, 10) == 63u && kb_map(t, 7) == 60u && kb_map(t, 8) == 60u);
+    puts("scales: all 16 scales, 12 roots, octave/transpose ranges, bypass, drums and SNAP ok");
 }
 
 static void key_events_test(void)
@@ -84,7 +91,7 @@ static void key_events_test(void)
     kb_prev = 0;
     usb.config = 1;
     mo_w = mo_r = 0;
-    t->p[P_QUANT] = 1;
+    t->p[P_QUANT] = 2;
     t->p[P_SCALE] = 2;                      /* C minor: E key plays Eb */
     t->p[P_AMODE] = 1;
     song.playing = song.rec = 1;
@@ -95,7 +102,7 @@ static void key_events_test(void)
     fm1_in.notes = 0;
     keyboard_block();
     assert(mo_w == 0);
-    t->p[P_QUANT] = 1;
+    t->p[P_QUANT] = 2;
     fm1_in.notes = (1u << 11) | (1u << 10); /* E and D#: only Eb sounds/records */
     keyboard_block();
     assert(t->arp_phys == 1 && t->nheld == 1 && t->held[0] == 63);
@@ -117,7 +124,7 @@ static void key_events_test(void)
     keyboard_block();
     before = mo_w;
     assert(t->arp_phys == 1);
-    t->p[P_QUANT] = 1;
+    t->p[P_QUANT] = 2;
     fm1_in.notes = 0;
     keyboard_block();
     assert(t->arp_phys == 0 && t->nheld == 0 && mo_w == before + 1);
