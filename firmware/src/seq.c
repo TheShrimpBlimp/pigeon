@@ -9,7 +9,7 @@
  * other channel the selected track. A note into an armed track (song.rec) while
  * the transport runs is recorded into its pattern, quantised to its (swung) steps, with its
  * held length as TIE steps (rec_note, rec_hold, rec_release). */
-static const uint16_t SCALE_MASK[8] = {
+static const uint16_t SCALE_MASK[] = {
     0xFFF,                                   /* CHR */
     (1 << 0) | (1 << 2) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9) | (1 << 11),   /* MAJ */
     (1 << 0) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 10),   /* MIN */
@@ -18,8 +18,17 @@ static const uint16_t SCALE_MASK[8] = {
     (1 << 0) | (1 << 2) | (1 << 4) | (1 << 7) | (1 << 9),                          /* PEN */
     (1 << 0) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 10),                         /* MPEN */
     (1 << 0) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 11),   /* HARM */
+    (1 << 0) | (1 << 1) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 10),   /* PHRY */
+    (1 << 0) | (1 << 2) | (1 << 4) | (1 << 6) | (1 << 7) | (1 << 9) | (1 << 11),   /* LYD */
+    (1 << 0) | (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 10),   /* LOC */
+    (1 << 0) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 9) | (1 << 11),   /* MEL (ascending) */
+    (1 << 0) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10),              /* BLUES (minor) */
+    (1 << 0) | (1 << 2) | (1 << 4) | (1 << 6) | (1 << 8) | (1 << 10),              /* WHOLE */
+    (1 << 0) | (1 << 1) | (1 << 3) | (1 << 4) | (1 << 6) | (1 << 7) | (1 << 9) | (1 << 10), /* DIMHW */
+    (1 << 0) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 11), /* DIMWH */
 };
 
+#define KB_SILENT 255u
 static uint32_t kb_prev;
 static uint8_t kb_note[27], kb_trk[27];  /* per key: the note it started and on which track */
 static uint8_t last_note = 60;
@@ -43,19 +52,15 @@ static uint32_t trk_midi_ch(uint32_t i)    /* MIDI channel 0..15 of track i (key
     return song.g[G_DRCH] ? (uint32_t)song.g[G_DRCH] - 1u : 9u;
 }
 
-static uint32_t scale_note(const track_t *t, int32_t n)
+static uint32_t scale_mask(const track_t *t)
 {
-    n += t->p[P_TRANS];
-    if (t->p[P_QUANT]) {
-        uint32_t mask = SCALE_MASK[t->p[P_SCALE] & 7], guard = 12;
-        while (guard-- && !((mask >> (uint32_t)((n - t->p[P_ROOT] + 120) % 12)) & 1u))
-            n--;
-    }
-    return (uint32_t)clamp(n, 0, 127);
+    return SCALE_MASK[clamp(t->p[P_SCALE], 0, sizeof SCALE_MASK / sizeof SCALE_MASK[0] - 1)];
 }
 
 static uint32_t kb_map(const track_t *t, uint32_t k)
 {
+    static const int8_t DEGREE[12] = {0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6};
+    int32_t n = 53 + (int32_t)k;
     if (is_drum(t))
         return DRUM_KEYS[k % 27u];
     if (ENGINES[t->eng_req % NENGINES] == &ENG_SAMPLE && drum_set() >= 0 &&   /* (the engine it switches to) */
@@ -65,7 +70,31 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
     if (ENGINES[t->eng_req % NENGINES] == &ENG_SLICE)   /* SLICE: lowest key = slice 0 (C4 + ROOT), no scale */
         return (uint32_t)clamp(SLC_BASE + t->p[P_ROOT] + 12 * song.octave + (int32_t)k, 0, 127);
 #endif
-    return scale_note(t, 53 + 12 * song.octave + (int32_t)k);
+    if (t->p[P_QUANT]) {
+        uint32_t mask = scale_mask(t), i;
+        int32_t count = 0, degree = DEGREE[n % 12], oct;
+        if (degree < 0)
+            return KB_SILENT;
+        /* C4 is the root. Walk scale degrees on successive white keys, including
+         * below C4; scales with 5, 6, 8 or 12 notes still have no duplicated degrees. */
+        degree += (n / 12 - 5) * 7;
+        for (i = 0; i < 12u; i++)
+            count += (mask >> i) & 1u;
+        oct = degree / count;
+        degree %= count;
+        if (degree < 0) {
+            degree += count;
+            oct--;
+        }
+        for (i = 0; i < 12u; i++)
+            if ((mask >> i) & 1u) {
+                if (!degree)
+                    break;
+                degree--;
+            }
+        n = 60 + t->p[P_ROOT] + 12 * oct + (int32_t)i;
+    }
+    return (uint32_t)clamp(n + 12 * song.octave + t->p[P_TRANS], 0, 127);
 }
 
 /* ------------------------------------------------------------- arp --- */
@@ -298,10 +327,14 @@ static void keyboard_block(void)
         if ((cur >> k) & 1u) {                    /* the selected track; the key-up goes to the same one */
             kb_trk[k] = song.sel;
             kb_note[k] = (uint8_t)kb_map(&trk[kb_trk[k]], k);
+            if (kb_note[k] == KB_SILENT)
+                continue;
             input_on(&trk[kb_trk[k]], kb_note[k], 100);
             mc = trk_midi_ch(kb_trk[k]);
             midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)kb_note[k] << 16 | 100u << 24);
         } else {
+            if (kb_note[k] == KB_SILENT)
+                continue;
             input_off(&trk[kb_trk[k] % NTRK], kb_note[k]);
             mc = trk_midi_ch(kb_trk[k] % NTRK);
             midi_out_event(0x08u | (0x80u | mc) << 8 | (uint32_t)kb_note[k] << 16);
