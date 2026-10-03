@@ -10,6 +10,8 @@ to the official firmware.
 
 Multi-engine synthesizer firmware for the M-VAVE FM-1.
 
+![FM-1 controls with Felucca](docs/panel.jpg)
+
 ## Features
 
 - **Six engines:** ANALOG (virtual analog), DIGITAL (4-operator FM), PHASE (CZ-style phase
