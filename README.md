@@ -249,6 +249,13 @@ Issues are for reproducible bugs (one per issue). Ideas and requests go to
 [Discussions](https://github.com/hugelton/Felucca/discussions), and feature requests posted as issues will be
 moved there. Pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## AI disclaimer
+
+Felucca is developed with the assistance of AI coding agents. These tools are used for coding, testing, documentation, translation, and maintenance.
+The instrument's design, features, sound design, and overall direction are determined by the maintainer or community.
+No generative AI is used to create music, icons, or visual artwork for this project.
+For more details, see [On AI-Assisted Development and Responsibility](https://github.com/hugelton/Felucca/discussions/166).
+
 ## Credits
 
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):
