@@ -83,8 +83,9 @@ static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
             host_screen[(y + j) * 240u + x + i] = (uint16_t)((c >> 8) | (c << 8));
 }
 static void lcd_sync(void) {}
-/* MENU > SCREEN OFF (lcd.c lcd_power / lcd_wake_now): what the panel was told, in order (0 off: backlight off,
- * DISPOFF, SLPIN; 1 SLPOUT; 2 DISPON, backlight on; 3 lcd_wake_now), with the time; host_bl the backlight */
+/* MENU > SCREEN OFF (lcd.c lcd_power / lcd_wake_now): what the panel was told, in order (0 off: DISPOFF, SLPIN;
+ * 1 SLPOUT; 2 DISPON; 3 lcd_wake_now), with the time; host_bl the panel showing (the backlight itself stays on: PA2 is
+ * the key matrix's /OE too, lcd.c lcd_power) */
 static uint32_t host_pw_n, host_pw[256], host_pw_ms[256];
 static int host_bl = 1;
 static void host_pw_log(uint32_t s)
@@ -4833,7 +4834,7 @@ static int test_step_leds(void)
 /* MENU > DISPLAY > SCREEN OFF (1.1.5, ui.c scr_*): the screen and its backlight off after NEVER / 5 / 15 / 30 (default)
  * / 60 minutes without panel input; the press, key or turn that wakes it does nothing else; the dialogs, the count-in
  * and the UPDATE MODE countdown keep it on and wake it; the sound goes on as if it were on (forked sessions, bit for
- * bit); the setting saved (a spare favorites byte, 0 = 30 MIN) and offered in the MENU */
+ * bit); the setting saved (a spare favorites byte, 0 = NEVER since 1.1.5.1) and offered in the MENU */
 static void scr_idle(uint32_t ms)                  /* nobody touches it for ms (a frame a minute, then frames) */
 {
     while (ms > 60000u) { fm1_ms += 60000u - 16u; host_ticks += 60000u * 1000u; frame(); ms -= 60000u; }
@@ -4902,12 +4903,13 @@ static int test_screen_off(void)
     int16_t *vp, v0;
 
     ui_power_on();
-    ok = ui_scr == 0u && scr_get() == 3u && SCR_MIN[scr_get()] == 30u && str_eq(MI_NAME[MI_SCROFF], "SCREEN OFF") &&
+    ok = ui_scr == 0u && scr_get() == 0u && SCR_MIN[scr_get()] == 0u && str_eq(MI_NAME[MI_SCROFF], "SCREEN OFF") &&
          MI_TAB[MI_SCROFF] == MTAB_DISPLAY && menu_n(MI_SCROFF) == 5u && str_eq(menu_vname(MI_SCROFF, 0), "NEVER") &&
          str_eq(menu_vname(MI_SCROFF, 1), "5 MIN") && str_eq(menu_vname(MI_SCROFF, 2), "15 MIN") &&
          str_eq(menu_vname(MI_SCROFF, 3), "30 MIN") && str_eq(menu_vname(MI_SCROFF, 4), "60 MIN") &&
-         menu_get(MI_SCROFF) == 3u;
-    bad += check("SCREEN OFF: MENU > DISPLAY row, NEVER 5 15 30 60 MIN, 30 MIN by default (stored 0)", ok);
+         menu_get(MI_SCROFF) == 0u;
+    bad += check("SCREEN OFF: MENU > DISPLAY row, NEVER 5 15 30 60 MIN, NEVER by default (stored 0, 1.1.5.1)", ok);
+    menu_put(MI_SCROFF, 3u);                         /* 30 MIN for what follows */
 
     host_pw_n = 0;
     scr_idle(30u * 60000u - 2000u);
@@ -4918,7 +4920,7 @@ static int test_screen_off(void)
     ui_message("SAVED");
     scr_idle(5000u);
     ok &= host_blit_rows == rows && host_pw_n == 1u && !ui.msg_t;
-    bad += check("SCREEN OFF: 30 MIN untouched -> backlight off, DISPOFF + SLPIN once; dark: nothing drawn", ok);
+    bad += check("SCREEN OFF: 30 MIN untouched -> DISPOFF + SLPIN once; dark: nothing drawn", ok);
 
     n = host_pw_n;
     ok = ui.home && !ui.menu;
@@ -4933,7 +4935,7 @@ static int test_screen_off(void)
     ok &= ui.home && !ui.menu && !ui.layer && !scrn.eat && !kb_asleep;
     press(B_ENV);                                     /* awake: the button works again */
     ok &= !ui.home && cur_page()->fam == FAM_ENV;
-    bad += check("SCREEN OFF: a button wakes it (SLPOUT, 120 ms, the page redrawn, DISPON + backlight), swallowed", ok);
+    bad += check("SCREEN OFF: a button wakes it (SLPOUT, 120 ms, the page redrawn, DISPON), swallowed", ok);
 
     go_home();
     for (i = 0; i < 3u; i++) {                        /* HOME, SAVE, REC held across the wake: no menu, undo, clear */
@@ -4978,7 +4980,7 @@ static int test_screen_off(void)
     menu_put(MI_SCROFF, 0u);                         /* NEVER */
     n = host_pw_n;
     scr_idle(3u * 3600000u);
-    ok = host_pw_n == n && host_bl && ui_scr == 3u;
+    ok = host_pw_n == n && host_bl && ui_scr == 0u;
     menu_put(MI_SCROFF, 1u);                         /* 5 MIN */
     scr_idle(4u * 60000u + 50000u);
     ok &= host_pw_n == n && host_bl;
@@ -5015,21 +5017,28 @@ static int test_screen_off(void)
     ok &= host_pw_n == n + 1u && host_pw[n] == 3u && host_bl && scrn.st == SCR_ON;
     bad += check("SCREEN OFF: a dialog, the count-in, UPDATE MODE keep it on and wake it; the crash screen at once", ok);
 
-    {   /* the setting with the settings: stored ^ 3 in favorites.factory[15][27], 0 (older settings) = 30 MIN */
+    {   /* the setting with the settings: SCR_CODE in favorites.factory[15][27]; 1.1.5's codes: 0 (its 30 MIN, its
+         * default) now NEVER, 3 (its NEVER) NEVER, 2 1 7 as they were; 30 MIN is 4 now; unknown NEVER */
         persist_t p = {0};
         p.magic = PERSIST_MAGIC; p.panel = panel;
         menu_put(MI_SCROFF, 4u);
         settings_export(&p); ui_scr = 0;
         ok = p.favorites.factory[15][27] == 7u && settings_import(&p, sizeof p) && scr_get() == 4u;
         p.favorites.factory[15][27] = 0;
-        ok &= settings_import(&p, sizeof p) && scr_get() == 3u;
-        p.favorites.factory[15][27] = 6;              /* unknown: 30 MIN */
-        ok &= settings_import(&p, sizeof p) && p.favorites.factory[15][27] == 0u && scr_get() == 3u;
-        ui_scr = 0x55; ok &= scr_get() == 3u;
-        bad += check("SCREEN OFF: saved with the settings (0 and unknown = 30 MIN)", ok);
+        ok &= settings_import(&p, sizeof p) && scr_get() == 0u;
+        p.favorites.factory[15][27] = 3;              /* 1.1.5's NEVER */
+        ok &= settings_import(&p, sizeof p) && scr_get() == 0u;
+        p.favorites.factory[15][27] = 2;              /* 5 MIN, as on 1.1.5 */
+        ok &= settings_import(&p, sizeof p) && scr_get() == 1u;
+        menu_put(MI_SCROFF, 3u); ok &= ui_scr == 4u && scr_get() == 3u;
+        p.favorites.factory[15][27] = 6;              /* unknown: NEVER */
+        ok &= settings_import(&p, sizeof p) && scr_get() == 0u;
+        ui_scr = 0x55; ok &= scr_get() == 0u;
+        bad += check("SCREEN OFF: saved with the settings (0, 1.1.5's 30 MIN, and unknown = NEVER)", ok);
     }
 
     ui_power_on();                                    /* in the MENU: OCT+ / a knob step it */
+    menu_put(MI_SCROFF, 3u);
     hold(B_HOME);
     for (i = 0; i < 5u; i++) turn(EN_PRESET, 1);
     ok = ui.menu == 1 && ui.menu_sel == MI_SCROFF;

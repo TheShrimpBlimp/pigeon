@@ -169,19 +169,24 @@ enum { CF_NONE, CF_CLEAR_SEQ, CF_CLEAR_TRK, CF_OVR_PROJ, CF_OVR_USER, CF_LOAD_PA
                                    * SAVE over a used slot; a pattern over the user's steps;
                                    * USER ERASE */
 
-/* MENU > DISPLAY > SCREEN OFF (1.1.5): after a while with no input on the panel the screen and its backlight go off
+/* MENU > DISPLAY > SCREEN OFF (1.1.5): after a while with no input on the panel the screen goes dark (the backlight
+ * stays on: lcd.c lcd_power)
  * (a picture held for hours can stay faintly on the panel); the sound, the sequencer, MIDI and USB go on, the LEDs
- * stay as they are. NEVER, 5, 15, 30 (the default), 60 minutes, kept in a byte no engine uses, saved with the
- * settings: stored value ^ 3, so 0 (every older setting) is 30 MIN; 5..7 unknown read as 30 MIN.
+ * stay as they are. NEVER (the default since 1.1.5.1), 5, 15, 30, 60 minutes, kept in a byte no engine uses, saved
+ * with the settings (SCR_CODE). 1.1.5 stored value ^ 3, 0 (its default and every older setting) being 30 MIN; 1.1.5.1
+ * reads that 0 as NEVER (the new default: the panel went dark for good on 1.1.5, see lcd.c lcd_power) and keeps the
+ * other codes, 30 MIN now 4. Unknown codes read as NEVER.
  * Input is the panel's only: a button or key held or pressed, a knob turned (not MIDI, the editor or MASTER, an
  * analogue pot). The press, key or turn that wakes it is swallowed: no note (seq.c kb_asleep), no button, no
  * value, until everything is let go and the knobs rest for SCR_EAT_MS. A dialog, the count-in and the UPDATE MODE
  * countdown keep it on (and wake it); the crash screen, UPDATE and UBOOT wake it at once (lcd_wake_now).
- * Off: lcd_power(0) (backlight off, DISPOFF, SLPIN) and nothing is drawn. Waking, a frame at a time (never a wait in
+ * Off: lcd_power(0) (DISPOFF, SLPIN) and nothing is drawn. Waking, a frame at a time (never a wait in
  * the loop): 120 ms after the SLPIN, SLPOUT (lcd_power(1)); 120 ms after that one frame redraws everything
- * (ui.force), then DISPON and the backlight (lcd_power(2)) */
+ * (ui.force), then DISPON (lcd_power(2)) */
 #define ui_scr (favorites.factory[15][27])
-#define SCR_DEF 3u                                     /* 30 MIN */
+#define SCR_DEF 0u                                     /* NEVER (1.1.5.1; 1.1.5: 30 MIN) */
+static const uint8_t SCR_CODE[5] = {0, 2, 1, 4, 7};    /* the stored byte of NEVER 5 15 30 60 MIN (1.1.5: 3 2 1 0 7) */
+static const uint8_t SCR_DEC[8] = {0, 2, 1, 0, 3, 0, 0, 4};   /* .. and back (3: 1.1.5's NEVER; 5, 6 unknown) */
 #define SCR_EAT_MS 300u
 static const uint8_t SCR_MIN[5] = {0, 5, 15, 30, 60};  /* NEVER, minutes */
 enum { SCR_ON, SCR_OFF, SCR_WAKE, SCR_SLPOUT, SCR_SHOW };
@@ -194,12 +199,11 @@ static struct {
 } scrn;
 static uint32_t scr_get(void)                          /* the MENU's value: 0 NEVER .. 4 60 MIN */
 {
-    uint32_t v = ui_scr ^ SCR_DEF;
-    return v < NELEM(SCR_MIN) ? v : SCR_DEF;
+    return ui_scr < NELEM(SCR_DEC) ? SCR_DEC[ui_scr] : SCR_DEF;
 }
 static void scr_put(uint32_t v)                        /* (the time counts from the change: the editor's too) */
 {
-    ui_scr = (uint8_t)((v < NELEM(SCR_MIN) ? v : SCR_DEF) ^ SCR_DEF);
+    ui_scr = SCR_CODE[v < NELEM(SCR_MIN) ? v : SCR_DEF];
     scrn.idle = fm1_ms;
 }
 static void scr_wake(void)

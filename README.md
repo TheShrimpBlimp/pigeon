@@ -5,7 +5,7 @@
 
 ![Felucca 1.0](docs/felucca-1.0.png)
 
-**TL;DR:** Felucca 1.1.5 — Big New Features, field testing. Connect your FM-1 to a computer by USB,
+**TL;DR:** Felucca 1.1.5.1 — Big New Features, field testing. Connect your FM-1 to a computer by USB,
 open the [web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge, and press Install;
 no extra hardware is needed. Installing is at your own risk: M-VAVE's updater or the installer's
 **Return to official V15** takes you back. Want to look around first?
@@ -72,7 +72,7 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you fi
   grayscale, black and white, high contrast and NIGHT; tracks numbered 1–4 on small cushions;
   MENU > LARGE for tall knob cards with larger labels and values; the menu in four tabs. The header
   shows the track, the play state and the tempo in three parts; a new start-up screen; the screen can
-  turn itself off when the panel is left alone (MENU > SCREEN OFF)
+  go dark when the panel is left alone (MENU > SCREEN OFF)
 - **LEDs:** idle buttons and keys glow dim so the panel can be found in the dark (MENU > LEDS: OFF,
   DIM LO, DIM HI or INV, the official firmware's look); PLAY turns green while playing; the keys show
   the notes the sequencer and MIDI IN play, and on SEQ > STEP (stopped) the notes of the step under the cursor;
@@ -125,9 +125,10 @@ too (COLOR to USB SERIAL), saved the same way as from the menu; with 1.0.5 it gr
   the LED sweep at power-on
 - **LEDS:** OFF (no glow), DIM LO, DIM HI (default) or INV (the idle LEDs lit, the active ones dark).
   What can be pressed breathes up to about 60 % of a lit LED, about 30 % with DIM LO
-- **SCREEN OFF:** NEVER, 5 MIN, 15 MIN, 30 MIN (default) or 60 MIN: after that long with no button, key or
-  knob touched, the screen and its backlight go off; the sound, the sequencer, MIDI and USB go on. The next
-  button, key or knob only turns the screen back on
+- **SCREEN OFF:** NEVER (default since 1.1.5.1), 5 MIN, 15 MIN, 30 MIN or 60 MIN: after that long with no
+  button, key or knob touched, the screen goes dark; the sound, the sequencer, MIDI and USB go on. The
+  backlight stays on: on the FM-1 its line also enables the buttons and keys (1.1.5 turned it off, and then
+  nothing woke the FM-1 until it was switched off). The next button, key or knob only turns the screen back on
 - **HOLD:** how long FX, GLO, SCL or EDIT is held before its map shows
 - **KNOB ACCEL:** OFF (one step per click) or ON: a fast, steady turn of a wide value moves 2 to 4 steps
   per click, up to 8 on values of more than 64 steps, the FX and GLO layers' knobs included; lists never
