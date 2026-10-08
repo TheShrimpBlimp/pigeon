@@ -2,14 +2,16 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Host test of the USB descriptor layouts in src/usb.c (#67), one build per variant:
  *   -DT_CDC=0/1 (FELUCCA_CDC)  -DT_UAC=0/1 (FELUCCA_UAC)  -DT_LAYOUT=0..3 (FELUCCA_USB_LAYOUT)
- *   -DT_ON=0/1 (usb_cdc_on: the console presented or not)
+ *   -DT_ON=0/1 (usb_cdc_on: the console presented or not)  -DT_48K=0/1 (FELUCCA_UAC_48K, default 1)
  * The device and configuration descriptors come from get_desc(), as GET_DESCRIPTOR sends them, and are
  * parsed as a host does: lengths and wTotalLength, bNumInterfaces, interface numbers 0..n-1 in order, the
  * endpoints of each setting and their addresses (EP1 MIDI, EP2 / EP3 CDC, EP4 audio, each once), the IADs
  * (in front of their first interface, contiguous, the function's class, no interface in two), the AC
  * header's collection (the MIDI and audio streaming interfaces), the CDC union / call management (the data
  * interface), the device class of the layout, bcdDevice. Layout 0 and the console left out must equal the
- * 1.0 descriptors byte for byte (tests/usb_desc_v10.h). Last, the device descriptor against the IOUSBHostDevice
+ * 1.0 descriptors (tests/usb_desc_v10.h): byte for byte without FELUCCA_UAC_48K, and with it (1.1) exactly 1.0
+ * plus the 48 kHz changes (v11_from_v10: the type I format lists 44100 and 48000, EP 0x84 takes 49 frames,
+ * wTotalLength + 3, bcdDevice + 0.10). Last, the device descriptor against the IOUSBHostDevice
  * personalities of macOS 27.2's AppleUSBCDC / AppleUSBAudio / AppleUSBHostCompositeDevice (the same on the
  * #67 reporter's macOS 15): which composite drivers may take the device. And the update path, with the console
  * presented or not (MENU > USB SERIAL OFF): the soft key, the M-UPGRADE command and a SysEx frame (the installer's,
@@ -24,6 +26,10 @@
 #define FELUCCA_UAC T_UAC
 #define FELUCCA_USB_LAYOUT T_LAYOUT
 #define FELUCCA_CDC_DEFAULT T_ON
+#ifndef T_48K
+#define T_48K 1
+#endif
+#define FELUCCA_UAC_48K T_48K
 static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"   /* SIE register macros (never touched here) */
 #include "../firmware/src/usb.c"
@@ -42,6 +48,47 @@ static void check(const char *what, int ok)
 static uint32_t le16(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8; }
 
 #define CDC_SHOWN (T_CDC && T_ON)
+#define AUDIO_48K (T_UAC && T_48K)
+
+/* the 1.0 descriptors with 1.1's 48 kHz changes, nothing else: the format descriptor 11 -> 14 bytes
+ * (bSamFreqType 2: 44100, 48000), EP 0x84's wMaxPacketSize 184 -> 196, wTotalLength + 3, bcdDevice x.1x -> x.2x */
+static uint8_t v11_dev[18], v11_cfg[512];
+static uint32_t v11_from_v10(const uint8_t *dev, const uint8_t *cfg, uint32_t n)
+{
+    uint32_t off, o = 0, as = 0;
+    memcpy(v11_dev, dev, 18);
+    v11_dev[12] = (uint8_t)(v11_dev[12] + 0x10);
+    for (off = 0; off < n; off += cfg[off]) {
+        const uint8_t *d = cfg + off;
+        if (d[1] == 4)
+            as = d[5] == 1 && d[6] == 2;
+        if (as && d[1] == 0x24 && d[2] == 2 && d[0] == 11 && d[7] == 1) {
+            static const uint8_t F[14] = {14, 0x24, 2, 1, 2, 2, 16, 2, 0x44, 0xAC, 0x00, 0x80, 0xBB, 0x00};
+            memcpy(v11_cfg + o, F, 14);
+            o += 14;
+            continue;
+        }
+        memcpy(v11_cfg + o, d, d[0]);
+        if (d[1] == 5 && d[2] == 0x84) {
+            v11_cfg[o + 4] = 196;
+            v11_cfg[o + 5] = 0;
+        }
+        o += d[0];
+    }
+    v11_cfg[2] = (uint8_t)o;
+    v11_cfg[3] = (uint8_t)(o >> 8);
+    return o;
+}
+
+/* dev / cfg against the 1.0 reference: equal, or (48 kHz) equal to it with the 1.1 changes */
+static int same_as(const uint8_t *dev, const uint8_t *c, uint32_t n, const uint8_t *rdev, const uint8_t *rcfg,
+                   uint32_t rn)
+{
+    if (!AUDIO_48K)
+        return !memcmp(dev, rdev, 18) && n == rn && !memcmp(c, rcfg, n);
+    rn = v11_from_v10(rdev, rcfg, rn);
+    return !memcmp(dev, v11_dev, 18) && n == rn && !memcmp(c, v11_cfg, n);
+}
 
 int main(void)
 {
@@ -59,8 +106,9 @@ int main(void)
     memset(if_sub, 0, sizeof if_sub);
     memset(in_iad, 0, sizeof in_iad);
     memset(seen, 0, sizeof seen);
-    printf("-- USB descriptors: CDC %d (%s), UAC %d, layout %d\n", T_CDC,
-           !T_CDC ? "not built" : T_ON ? "presented" : "left out", T_UAC, T_LAYOUT);
+    printf("-- USB descriptors: CDC %d (%s), UAC %d%s, layout %d\n", T_CDC,
+           !T_CDC ? "not built" : T_ON ? "presented" : "left out", T_UAC, AUDIO_48K ? " (44.1 / 48 kHz)" : "",
+           T_LAYOUT);
     check("GET_DESCRIPTOR device", get_desc(0x0100, &dev, &dev_len) && dev_len == 18 && dev[0] == 18 && dev[1] == 1);
     check("GET_DESCRIPTOR configuration", get_desc(0x0200, &c, &n) && c[1] == 2);
 
@@ -75,8 +123,8 @@ int main(void)
               le16(dev + 2) == 0x0200 && !dev[4] && !dev[5] && dev[6] == (T_LAYOUT == 2));
     check("VID 1209 PID 0001, strings 1 2, one configuration",
           le16(dev + 8) == 0x1209 && le16(dev + 10) == 1 && dev[14] == 1 && dev[15] == 2 && dev[17] == 1);
-    snprintf(name, sizeof name, "bcdDevice 3.%02X", 0x10 * T_UAC + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0));
-    check(name, le16(dev + 12) == 0x300u + 0x10 * T_UAC + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0));
+    snprintf(name, sizeof name, "bcdDevice 3.%02X", 0x10 * (T_UAC + AUDIO_48K) + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0));
+    check(name, le16(dev + 12) == 0x300u + 0x10 * (T_UAC + AUDIO_48K) + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0));
 
     /* ---- the configuration, walked as a host does ---- */
     check("wTotalLength = the bytes sent", le16(c + 2) == n);
@@ -200,14 +248,34 @@ int main(void)
 
     /* ---- the released bytes ---- */
     if (CDC_SHOWN && T_LAYOUT == 0)
-        check("layout 0 = Felucca 1.0 byte for byte",
-              T_UAC ? !memcmp(dev, V10_CDC_DEV, 18) && n == sizeof V10_CDC_CFG && !memcmp(c, V10_CDC_CFG, n)
-                    : !memcmp(dev, V10_CDC_NOUAC_DEV, 18) && n == sizeof V10_CDC_NOUAC_CFG &&
-                          !memcmp(c, V10_CDC_NOUAC_CFG, n));
+        check(AUDIO_48K ? "layout 0 = Felucca 1.0 + the 48 kHz rate (format, EP 0x84 size, bcdDevice), nothing else"
+                        : "layout 0 = Felucca 1.0 byte for byte",
+              T_UAC ? same_as(dev, c, n, V10_CDC_DEV, V10_CDC_CFG, sizeof V10_CDC_CFG)
+                    : same_as(dev, c, n, V10_CDC_NOUAC_DEV, V10_CDC_NOUAC_CFG, sizeof V10_CDC_NOUAC_CFG));
     if (!CDC_SHOWN)
-        check("without the console = a FELUCCA_CDC=0 build of 1.0 byte for byte",
-              T_UAC ? !memcmp(dev, V10_NOCDC_DEV, 18) && n == sizeof V10_NOCDC_CFG && !memcmp(c, V10_NOCDC_CFG, n)
-                    : !memcmp(dev, V10_MIDI_DEV, 18) && n == sizeof V10_MIDI_CFG && !memcmp(c, V10_MIDI_CFG, n));
+        check(AUDIO_48K ? "without the console = 1.0's FELUCCA_CDC=0 build + the 48 kHz rate, nothing else"
+                        : "without the console = a FELUCCA_CDC=0 build of 1.0 byte for byte",
+              T_UAC ? same_as(dev, c, n, V10_NOCDC_DEV, V10_NOCDC_CFG, sizeof V10_NOCDC_CFG)
+                    : same_as(dev, c, n, V10_MIDI_DEV, V10_MIDI_CFG, sizeof V10_MIDI_CFG));
+    if (T_UAC) {                                       /* the audio streaming format, as a host lists the rates */
+        uint32_t rates = 0, r0 = 0, r1 = 0, maxp = 0, as = 0;
+        for (off = 0; off < n; off += c[off]) {
+            const uint8_t *d = c + off;
+            if (d[1] == 4)
+                as = d[5] == 1 && d[6] == 2;
+            if (as && d[1] == 0x24 && d[2] == 2 && d[0] == 8u + 3u * d[7]) {
+                rates = d[7];
+                r0 = d[8] | d[9] << 8 | (uint32_t)d[10] << 16;
+                r1 = rates > 1 ? d[11] | d[12] << 8 | (uint32_t)d[13] << 16 : 0;
+            }
+            if (d[1] == 5 && d[2] == 0x84)
+                maxp = le16(d + 4);
+        }
+        snprintf(name, sizeof name, "audio input: %u rate(s) %u%s, EP 0x84 %u B", rates, r0, rates > 1 ? " 48000" : "",
+                 maxp);
+        check(name, AUDIO_48K ? rates == 2 && r0 == 44100 && r1 == 48000 && maxp == 196
+                              : rates == 1 && r0 == 44100 && maxp == 184);
+    }
 
     /* ---- macOS: the IOUSBHostDevice personalities (macOS 27.2 kext Info.plists; -1 = "*") ---- */
     {

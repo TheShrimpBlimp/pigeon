@@ -35,9 +35,18 @@ ends with the item's tab on the device (index and name), after the bytes 1.0.4 s
 **Ratchet (1.0.5, INFO `52 01 04`):** a step gets a ratchet byte (its hits, 1..4) after its chance: one more byte at
 the end of the step replies, and an optional last byte of a step write (see "Ratchet" below). Nothing else changed.
 
+**Parameter locks (1.1, INFO `4C 01 01`):** a motion record can be a lock: its value sounds on its step only and
+goes back after it. `MOTION` (64) gets ops 5..7 (set a lock, clear a step's locks, the query with the kinds); the
+query and ops 1..4 reply byte for byte as before (see "Parameter locks" below). A lock takes no new bytes in a
+project (bit 7 of a motion record's id); 1.1 projects are FUN9 for the DRUM lane levels below.
+
 **Chord keys (91 parameters, 1.0):** two track parameters, `CHRD` (81) and `VOIC` (82), went in before the
 engine parameters, which moved from 81..88 to 83..90: P_COUNT 91, P_E0 83. No command changed; an editor that
 takes P_COUNT and P_E0 from `INFO` keeps working (see "The chord keys" below).
+
+**DRUM lane levels (99 parameters, 1.1):** eight track parameters, `KICK` .. `BELL` (83..90, the DRUM engine's lane
+levels), went in before the engine parameters, which moved from 83..90 to 91..98: P_COUNT 99, P_E0 91. No command
+changed; projects are FUN9 (3648 bytes, see "Projects (FUN9)"). See "The DRUM lane levels" below.
 
 ## Framing
 
@@ -64,7 +73,7 @@ watches (v2, `WATCH`), the device also sends push frames (cmds 23, 24, 26) at an
 | track | 0..3: tracks 1..4 (synth parts) |
 | engine byte | 0..NENGINES−1 (firmware before 1.0: NENGINES = its drum track, no engine). The numbers are fixed, new engines are appended: 0 ANALOG, 1 reserved (DIGITAL before 1.0: see below), 2 PHASE, 3 LOFI, 4 SAMPLE, 5 VOICE, 6 TRIO, 7 WHEEL, 8 GRAIN, 9 PHYS, 10 DRUM, 11 NOISE, 12 FM6, 13 SLICE (NENGINES 14; a build with `FELUCCA_SLICE=0` has 13). The device and the editor list them in another order (ANALOG FM6 PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS NOISE SLICE DRUM: `ENGINE_ORDER`); the numbers stay |
 
-The engine parameters are `P_E0..P_E7`: P_COUNT−8 .. P_COUNT−1 (83..90), and `INFO` gives `P_E0`.
+The engine parameters are `P_E0..P_E7`: P_COUNT−8 .. P_COUNT−1 (91..98), and `INFO` gives `P_E0`.
 Their meaning, range and names depend on the current engine, so re-read `DESC` for them
 after an engine change.
 
@@ -122,8 +131,15 @@ and live recording writes it into one step; MONO / LEGATO / UNISON play its root
 ignores it. Both defaults are 0: nothing changes until CHRD is set. They are the track's, like ARP and SCL: a
 sound load (a factory preset, `UP_LOAD`, an audition) keeps them, and motion never records them.
 
+The DRUM lane levels (EDIT > LANES / LANES 2 on the device, `firmware/src/eng_drum.c`) are eight track parameters at
+ids 83..90, one per lane: 83 KICK, 84 SNARE, 85 CLAP, 86 HATCL, 87 HATOP, 88 TOM, 89 RIM, 90 BELL. Percent (`F_PCT`),
+0..127, default 127 = 100 % (the kit as designed), square law (64: about −12 dB). Only the DRUM engine reads them; the
+editor shows them on a DRUM track only (the device's pages). They are the sound's (not the track's): a factory preset
+sets them back to 127, user presets and projects store them (older ones load at 127), motion records them.
+
 Other enums that grew: `P_SDIV` (DIV, id 30) has 10 names (1/4, 1/8, 1/16, 1/32, 8T, 16T, 1/2, 1/1, 2BAR,
-4BAR; the first six keep their numbers), `P_AMODE` (id 17) 7 (OFF, UP, DN, UPDN, RND, ORD, REPEAT) and the
+4BAR; the first six keep their numbers), `P_AMODE` (id 17) 15 (OFF, UP, DN, UPDN, RND, ORD, REPEAT, and since 1.2 DNUP, UP+8, CONV, DIVG, PINKY, THUMB, WALK,
+CHORD: values 7..14, appended; an editor that knows only 7 names shows the value by `DESC`'s name) and the
 global `G_CLOCK` (id 2, label "CLK") 3 (INT, USB, TRS). `G_MIDI` (id 12) is an enum of USB / TRS that nothing reads.
 
 **Retired enum values (aliases).** A value that no longer exists keeps its number, so stored sounds stay valid:
@@ -139,7 +155,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings) and (1.0.5) `52 01 4` (ratchet) (below); older firmware ends earlier |
+| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) (below); older firmware ends earlier |
 | 2 GET | scope, id | scope, id, v14 |
 | 3 SET | scope, id, v14 | scope, id, v14 (the value after clamping). Setting global `G_ENGSEL` (id from DESC label "ENG") changes the engine: its defaults, then its first preset (as on the device) |
 | 4 DUMP | — | engine, preset, then P_COUNT × v14 (the selected track), then G_COUNT × v14 (globals) |
@@ -180,7 +196,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 
 | cmd (v7) | Request args | Reply args |
 | --- | --- | --- |
-| 64 MOTION | track (query); track, 1, on 0/1 (play on / off); track, 2 (clear); track, 3, step, id, v14 (set an event); track, 4, step, id (delete an event) | track, rc, on (0/1), count (this track's events), max (64), then count × (step, id, v14) |
+| 64 MOTION | track (query); track, 1, on 0/1 (play on / off); track, 2 (clear); track, 3, step, id, v14 (set an event); track, 4, step, id (delete an event or a lock); (1.1) track, 5, step, id, v14 (set a lock); track, 6, step (clear the step's locks; step 127: every step's); track, 7 (query with the kinds) | track, rc, on (0/1), count (this track's events and locks), max (64), then count × (step, id, v14); after ops 5..7 (1.1) then count × kind (0 automation, 1 lock), in the same order |
 | 65 BACKUP_LIST | — | 1, rc, count (11), then per object: id, size u32, crc u32 |
 | 66 BACKUP_GET | id, offset u32, count lo, count hi (≤ 256) | id, rc, offset u32, count lo, count hi, pack7 data |
 | 67 BACKUP_PUT | op 0 begin: 0, id, size u32, crc u32; op 1 data: 1, id, offset u32, pack7 data; op 2 commit: 2, id; op 3 abort: 3, id | op, id, rc |
@@ -280,7 +296,9 @@ the twelve matrix parameters (ids 49..60): P_COUNT 69, P_E0 61. An editor takes 
 records stored with 53 load with the SLICER off and every matrix slot off, with 57 with every slot off. The
 twenty FM operator parameters (ids 61..80) went in before P_E0 after that: P_COUNT 89, P_E0 81. Records stored with 69 load with
 those at their defaults, which change nothing. Then the chord keys (ids 81, 82): P_COUNT 91, P_E0 83; records
-stored with 89 (or 69) load with CHRD OFF and VOIC CLOSE, their engine values at 83..90.
+stored with 89 (or 69) load with CHRD OFF and VOIC CLOSE, their engine values at 83..90. Then the DRUM lane levels
+(ids 83..90): P_COUNT 99, P_E0 91; records stored with 91 (1.0.x) or fewer load with every lane at 127 (100 %), their
+engine values at 91..98.
 
 ## v5: the drum grid
 
@@ -396,7 +414,8 @@ grid lives in the steps themselves, so every engine has it:
 - **Port.** The device's MIDI port is named "Felucca" (USB 1209:0001). Updates use the same
   port with other SysEx (the `F0 22 24 35 …` keys, `00 59 …` frames); never send those
   from the editor. Since 1.0 the same USB device also has an audio input ("Felucca",
-  44.1 kHz stereo; bcdDevice 3.11); the MIDI port and this protocol are unchanged, and both
+  44.1 kHz stereo; bcdDevice 3.11; since 1.1 44.1 or 48 kHz, the host's choice, bcdDevice 3.21
+  (3.20 with MENU > USB SERIAL OFF)); the MIDI port and this protocol are unchanged, and both
   work while the computer records.
 - **Global ids.** `G_ROUTE` (id 14, label "ROUT", GLO > SYSTEM) was a placeholder ("--", range 0..0);
   since 1.0 it is the MIDI IN routing: 0 "CH1-4" (channels 1..4 → tracks 1..4; what projects stored
@@ -482,7 +501,7 @@ when the track's engine is not the saved one).
   holds until another step changes it; the loop restarts from the sound's own value, and stopping puts the
   sound's own values back. Parameters that can be recorded (`motion_param`): ids 0..16 (LEVEL, ENV, LFO),
   33..36 (DIST, CHO, DLY, REV), 38 (GLIDE), 39 (PAN), 44 (DETUNE), 61..80 (the FM operator parameters) and
-  83..90 (the engine parameters; not the chord keys 81, 82). The device records them while the track is armed, playing and selected, from its knobs
+  83..90 (the DRUM lane levels), 91..98 (the engine parameters; not the chord keys 81, 82). The device records them while the track is armed, playing and selected, from its knobs
   and from `SET` / `TRACK_PARAM` alike.
   - `MOTION` with the track alone is the query. `on` 0 keeps the data and stops playing it; 1 plays it. Clear
     drops the track's events and turns it off; on the device it is undone by SAVE held.
@@ -495,15 +514,20 @@ when the track's engine is not the saved one).
     (the web editor does, while the sequencer tab shows).
   - `DUMP`, `TRACK_DUMP`, a user preset store and a project save give the sound's own (base) values;
     `GET`, `SET` and the pushes give what is sounding now, which differs while a motion event is in effect.
-  - A sound or pattern load, a pattern clear and INIT SOUND on the device drop the track's motion; the
-    device's UNDO brings it back. `MOTION` clear does the same through the same undo copy.
+  - A pattern load and a pattern clear on the device drop the track's motion; the device's UNDO brings it back.
+    `MOTION` clear does the same through the same undo copy. A sound load (a preset, `PRESET`, `G_ENGSEL`, `UP_LOAD`,
+    INIT SOUND) keeps it since 1.1.5 when the engine stays the same; when the engine changes the records on the
+    engine's own ids (E1..E8 `P_E0..P_E7`, DIGITAL's 61..80, the DRUM lane levels) go and the rest (both kinds)
+    stays, PLAY as it was (until 1.1 a sound load dropped the whole motion). Poll `MOTION` after a load.
+  - The device's own lock edits (a step held + a knob, SEQ > AUTO LIST, 1.1.5) go through its UNDO; `MOTION` ops
+    3..7 do not (the protocol is unchanged in 1.1.5).
 - **Projects (FUN7).** 3388 bytes, little endian, in the same A/B sectors as before: `46 55 4E 37` ("FUN7"),
   size u32 (3388), the 27 globals as i16 (bytes 8..61), sel, parts, phys (62..64), P_COUNT as stored (byte 66),
   then from byte 68 for each of the 4 tracks: P_COUNT bytes (value + 64), engine, preset, 64 steps of 9 bytes
   (4 notes; n | time << 3 | flags << 5; vel; hit; acc; chance byte where 0 = 100 %, 1..100, 101 = never; firmware
   with `52 01`: the ratchet − 1 in bit 7 of vel (bit 0) and of the chance byte (bit 1), see "Ratchet");
   then the song chain, then the motion (260 bytes: count, on mask, 2 reserved, 64 × (track << 6 | step, id,
-  i16 value)); the reserved tail is zero up to byte 3371; bytes 3372..3383 are the project's name (since
+  i16 value); 1.1: bit 7 of the id byte marks a parameter lock, see "Parameter locks"); the reserved tail is zero up to byte 3371; bytes 3372..3383 are the project's name (since
   1.0: ASCII 32..126, upper case, 0-padded; all zero = no name, as firmware before wrote them; a byte
   outside 32..126 reads as no name, it never refuses the project); the last 4 bytes are an FNV-1a hash of all
   before (the name included). The device names projects itself (SAVE > PROJECT, NAME); the editor's PROJECT
@@ -515,12 +539,19 @@ when the track's engine is not the saved one).
   byte 3040 as above (16 bytes to spare), the four tracks' FM6 patches as packed 128-byte records (see "FM6
   patches") at bytes 3056..3567, the name at 3568..3579, the hash last. FUN7 (3388) and older load with the
   init patch on every track. Backups, `PROJECT` and the editor's project files carry the 3584 bytes.
+- **Projects (FUN9, since 1.1).** FUN8 laid out the same way, `46 55 4E 39` ("FUN9"), size 3648: P_COUNT 99 made
+  the data 68 + 4 × (99 + 2 + 576) + chain + motion = 3072 bytes, which no longer fit before FUN8's patches. The
+  FM6 patches at 3120..3631 (48 bytes to spare before them), the name at 3632..3643, the hash last. FUN8 (3584,
+  91 parameters) loads mapped by count (the lane levels 127, the engine values and their motion events and locks
+  from 83..90 to 91..98, a lock's bit 7 kept); FUN7 and older as before. Firmware 1.0.x refuses a FUN9 (its size, magic and P_COUNT). Backups,
+  `PROJECT` and the editor's project files carry the 3648 bytes; a backup `PUT` takes 3648, 3584 or 3388.
 - **MIDI clock** has no SysEx. `G_CLOCK` selects the source: 0 INT, 1 USB, 2 TRS. With 1 or 2 the sequencer
   steps on that port's Clock pulses (the other port's are ignored), Start (0xFA) restarts from step 0,
   Continue (0xFB) resumes and Stop (0xFC) stops; BPM follows the incoming tempo (40..240), and 500 ms
   without a pulse stops the transport. Changing `G_CLOCK` stops it.
 - Pitch bend, sustain (CC64), RPN 0 (bend range, ±0..24 semitones), CC120 / 121 / 123 are MIDI only and
-  have no parameters, protocol or saved state.
+  have no parameters, protocol or saved state. The standard CC map (1.1: CC5 7 10 71..75 91 93 94, README "MIDI
+  in") sets parameters as a knob does: the editor sees those changes as `CHANGED` / `TRACK_CHANGED` pushes.
 
 ## Ratchet
 
@@ -540,6 +571,35 @@ ratchet byte (read every step as 1).
   before the ratchet refuses a project that holds one. A user preset's note pattern keeps it in its flags (8 | 16);
   a drum grid record has no room for it and loads x1.
 
+## Parameter locks
+
+INFO advertises `4C 01 1` after the ratchet tag (`52 01 4`). Firmware without it has no locks.
+
+- A **lock** is a motion record (the same 64 shared by the four tracks, one per track, step and id, of either kind)
+  whose value sounds on its step only. When the step plays (its chance passed; a step that does not play applies
+  none of its locks) the value is set at the step's start, before its notes, and lasts the whole step (its ratchet
+  parts too); the next step puts back what sounds without it: the latest automation event of that id at a step up
+  to that one in this pass, else the sound's own value. An **automation event** (what the device records with REC
+  armed) sets its value at its step and holds it, as before. The ids that can be locked are the ones motion can
+  record (`motion_param`, see above); AUTOMATION's PLAY OFF bypasses locks too, its CLEAR clears them.
+- `MOTION` 5 sets a lock (track, 5, step, id, v14): as op 3, the value inside the parameter's range for the track's
+  engine, rc 2 when the 64 are used. A lock and an automation event on the same step and id are one record: op 3
+  over a lock makes it an automation event, op 5 over an automation event makes it a lock. Op 4 deletes either
+  kind. Op 6 (track, 6, step) removes that step's locks (step 127: every step's), its automation events stay.
+  Op 7 (track, 7) is the query. Ops 5..7 reply as the query and then one kind byte per record, in the same order
+  (0 automation, 1 lock); the query and ops 1..4 reply as before 1.1, where a lock reads as an automation event.
+- In projects (FUN9; the motion block is laid out as in FUN7 / FUN8) a lock is a motion record with bit 7 of its id
+  byte set (ids are below 128: P_COUNT is 99). Every project before 1.1 has none; a FUN8 / FUN7 of a 1.1
+  development build may hold some, and on load their ids move to today's positions (83..90 to 91..98 for a FUN8)
+  with bit 7 kept. Firmware before 1.1 refuses a project that holds a lock (an id out of its range), as it does a
+  newer format; so do backups and song rows.
+- On the device: on SEQ > STEP hold a step and turn KNOB 1..4. The knobs lock the four parameters of the sound
+  page shown last before (HOME's four, ENV, LFO, FX, EDIT 1 / 2, ..; the cards show them while a step is held). On
+  the DRUM grid a step is its white key (several held: each gets the lock; a key pressed on a hit takes it away
+  only when let go without a knob turned); on the piano roll the step being entered (its note keys held). [EDIT]
+  tapped with a step held clears its locks; EDIT alone clears the step and its locks. The roll and the grid mark
+  the steps that hold a lock; AUTOMATION shows the count (LOCK).
+
 ## v7: full backup (65-67)
 
 INFO advertises `42 01 caps`: bit 0 = `BACKUP_LIST` / `BACKUP_GET` (read), bit 1 = `BACKUP_PUT` (restore);
@@ -547,9 +607,9 @@ this firmware sends 3. Requests name objects, never flash addresses.
 
 | id | object | size |
 | --- | --- | --- |
-| 0 | runtime: the music being played now, as a FUN8 project (firmware before FM6: FUN7, 3388) | 3584 |
+| 0 | runtime: the music being played now, as a FUN9 project (1.0.x: FUN8, 3584; firmware before FM6: FUN7, 3388) | 3648 |
 | 1 | settings (palette, speaker, HOLD time, favorites, panel calibration, ...) | the settings record's size |
-| 2..5 | PROJECT slots 1..4 (FUN8) | 3584, or 0 if empty |
+| 2..5 | PROJECT slots 1..4 (FUN9; 1.0.x: FUN8, 3584) | 3648, or 0 if empty |
 | 6, 7 | user preset banks (slots 1..16, 17..32) | the bank's size, or 0 if empty |
 | 8 | the FM6 patch bank of 1.0..1.0.2 (B1..B27). Since 1.0.3 always listed empty (see below) | 3472, or 0 if empty |
 | 9 | the user presets' FM6 patches (1.0.3; `up_fm6.c`: per slot a tag and the packed patch) | 3728, or 0 if none |
@@ -562,10 +622,10 @@ they are in RAM or flash. Then `BACKUP_GET` reads an object in pieces: `id, offs
 against the list; if it differs the device changed, so start again.
 
 Restoring: `BACKUP_PUT` takes ids 0..9 (firmware before 1.0.3: 0..8, id 9 answers rc 1 at begin and nothing is written) (the samples are written with `SMP_BEGIN` / `SMP_WRITE` / `SMP_END`,
-or `SMP_ERASE` for an empty slot). Begin: `0, id, size u32, crc u32`: size is 3584 (FUN8) or 3388 (FUN7, FUN6) for id 0,
-the settings record's size for id 1, 3584, 3388 or 0 (empty the slot) for ids 2..5, the bank's size or 0 for 6 and 7,
+or `SMP_ERASE` for an empty slot). Begin: `0, id, size u32, crc u32`: size is 3648 (FUN9), 3584 (FUN8) or 3388 (FUN7, FUN6) for id 0,
+the settings record's size for id 1, 3648, 3584, 3388 or 0 (empty the slot) for ids 2..5, the bank's size or 0 for 6 and 7,
 3472 or 0 for 8 (the FM6 bank: its magic, layout and every byte below 128 are checked), 3728 or 0 for 9 (its magic,
-version and slot count checked; 0 clears the patches). FUN7 and FUN6 become FUN8.
+version and slot count checked; 0 clears the patches). FUN8, FUN7 and FUN6 become FUN9.
 An archive without id 8 (written before FM6) still restores; the web editor reads all three kinds (11, 12, 13 objects).
 Since 1.0.3 an id 8 with data (an archive of 1.0..1.0.2) is not stored: like the first boot after the update, every FM6
 user preset whose stored SLOT is a B slot (8..34) and has no patch yet gets that bank slot's patch, and id 9 is written.
@@ -691,9 +751,11 @@ is told: no list of settings is fixed in the editor. INFO advertises `4E 01 coun
 | 72 MENU_DESC | index (0..count−1) | index, id, kind, value v14, min v14, max v14, name string, then for kind 0 (max−min+1) value-name strings, for kind 1 a unit string; then (1.0.5) tab, tab-name string. An index past the list: index, 127 (no more bytes) |
 | 73 MENU_SET | id, value v14 | rc, id, value v14: the device's value after the write (clamped to min..max) |
 
-- **index** is the position in the device's menu order (show them in this order); **id** names the setting and
-  never changes its meaning: a new setting takes a new id (append-only), wherever it shows in the menu. Ids are
-  0..126; 127 means "no item". Remember settings by id, not by index.
+- **index** is the position in the device's list: up to 1.0.5 the menu's order; from 1.1 a new setting is appended
+  (index = id), whatever tab it shows in, so an index keeps the setting it had and an older editor lists the ones it
+  knew where they were. Shown by tab (below), each tab's items in index order, they appear as on the device. **id**
+  names the setting and never changes its meaning: a new setting takes a new id (append-only), wherever it shows in
+  the menu. Ids are 0..126; 127 means "no item". Remember settings by id, not by index.
 - **kind**: 0 an enum (the value is an index into the names, min..max), 1 a number (min..max, its unit after the
   name; no setting uses it yet). An editor shows a kind it does not know read-only, or not at all.
 - Values are v14 like the rest of the protocol, so a setting may later go past 127; today every value is 0..9.
@@ -716,7 +778,8 @@ is told: no list of settings is fixed in the editor. INFO advertises `4E 01 coun
   A tab may hold items with no value that are not offered (this firmware: SYSTEM also holds CALIBRATION and ABOUT).
   For a kind it does not know, an editor cannot find the tab (it does not know that kind's bytes).
 
-This firmware (count 12; tabs 0 DISPLAY, 1 CONTROL, 2 AUDIO, 3 SYSTEM):
+This firmware (count 18; tabs 0 DISPLAY, 1 CONTROL, 2 AUDIO, 3 SYSTEM; 1.0.5 had the first 12, 1.1 the first 15, 1.2
+before SCALE LEDS the first 16, before SCREEN OFF the first 17):
 
 | index | id | name | kind | values (min 0) | default | tab |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -732,13 +795,39 @@ This firmware (count 12; tabs 0 DISPLAY, 1 CONTROL, 2 AUDIO, 3 SYSTEM):
 | 9 | 9 | SPEAKER EQ | 0 | 0 FLAT, 1 LOWCUT, 2 BASS+ | FLAT | 2 AUDIO |
 | 10 | 10 | USB LEVEL | 0 | 0 MASTER, 1 FIXED | MASTER | 2 AUDIO |
 | 11 | 11 | USB SERIAL | 0 | 0 ON, 1 OFF | ON | 3 SYSTEM |
+| 12 | 12 | CLICK | 0 | 0 OFF, 1 REC, 2 ON (1.1) | OFF | 2 AUDIO |
+| 13 | 13 | CLICK LEVEL | 0 | 0 LOW, 1 MID, 2 HIGH (1.1) | MID | 2 AUDIO |
+| 14 | 14 | COUNT-IN | 0 | 0 OFF, 1 "1 BAR", 2 "2 BARS" (1.1) | OFF | 2 AUDIO |
+| 15 | 15 | RESTORE LAST | 0 | 0 ON, 1 OFF (1.2) | ON | 3 SYSTEM |
+| 16 | 16 | SCALE LEDS | 0 | 0 OFF, 1 ON (1.2) | OFF | 1 CONTROL |
+| 17 | 17 | SCREEN OFF | 0 | 0 NEVER, 1 "5 MIN", 2 "15 MIN", 3 "30 MIN", 4 "60 MIN" (1.1.5) | 30 MIN | 0 DISPLAY |
+
+The device's AUDIO tab shows SPEAKER EQ, USB LEVEL, CLICK, CLICK LEVEL, COUNT-IN (index 9, 10, 12, 13, 14).
+CLICK: the metronome while the transport runs: OFF, REC (while a track is armed), ON (always); CLICK LEVEL its
+level; COUNT-IN: PLAY from stop with a track armed counts in that many bars first (internal clock only). The click
+goes to the headphones / speaker, never into USB audio or a recording (README: Metronome and count-in). Applied at
+once, as on the device.
+
+RESTORE LAST (id 15, 1.2; the SYSTEM tab shows USB SERIAL and RESTORE LAST, index 11 and 15): ON (the default)
+keeps the music as it is in an autosave while the device is stopped and idle, and brings it back at power-on; OFF
+writes no autosave and starts with the power-on sounds (README: Restore the last session).
+
+SCALE LEDS (id 16, 1.2, Discussion #127; the CONTROL tab shows HOLD, KNOB ACCEL, FX LATCH, BPM LOCK and SCALE LEDS,
+index 5..8 and 16): ON shows the selected track's scale on the key LEDs outside the layers (README: Key LEDs).
+Applied at once.
+
+SCREEN OFF (id 17, 1.1.5; the DISPLAY tab shows COLOR, STYLE, LARGE, ANIM, LEDS and SCREEN OFF, index 0..4 and 17):
+after that long without input on the panel (a button, a key, a knob; not MIDI, not the editor) the screen and its
+backlight go off while the sound, the sequencer, MIDI and USB go on; the next touch wakes it and does nothing else.
+NEVER keeps it on. A change counts from then (a MENU_SET to 5 MIN does not turn it off at once). Applied at once.
 
 Example (bytes in hex): `F0 7D 46 4C 48 04 F7` asks for index 4; the reply
 `F0 7D 46 4C 48 04 04 00 02 40 00 40 03 40 4C 45 44 53 00 4F 46 46 00 44 49 4D 20 4C 4F 00 44 49 4D 20 48 49 00 49 4E 56 00 00 44 49 53 50 4C 41 59 00 F7`
 is index 4, id 4, kind 0, value 2 (`02 40`), min 0 (`00 40`), max 3 (`03 40`), "LEDS", then "OFF" "DIM LO"
 "DIM HI" "INV", then tab 0 "DISPLAY" (1.0.4 firmware: the same reply without `00 44 49 53 50 4C 41 59 00`). `F0 7D 46 4C 49 04 03 40 F7` sets LEDS to INV and answers `F0 7D 46 4C 49 00 04 03 40 F7` (rc 0).
 `F0 7D 46 4C 49 00 32 40 F7` (COLOR 50) answers `F0 7D 46 4C 49 00 00 09 40 F7` (clamped to 9, MONO).
-`F0 7D 46 4C 48 0C F7` answers `F0 7D 46 4C 48 0C 7F F7` (no index 12).
+`F0 7D 46 4C 49 0E 01 40 F7` sets COUNT-IN to 1 BAR and answers `F0 7D 46 4C 49 00 0E 01 40 F7` (1.1).
+`F0 7D 46 4C 48 12 F7` answers `F0 7D 46 4C 48 12 7F F7` (no index 18; before SCREEN OFF: none past 16, `11`; 1.2 before SCALE LEDS: none past 15, `10`; 1.1 firmware: none past 14, `0F`; 1.0.5: none past 11, `0C`).
 
 **USB SERIAL (id 11).** The menu applies it when it closes; a MENU_SET applies it about 200 ms after its reply
 (`usb_serial_apply`), so the reply leaves first (if the device shows the MENU at that moment: when it closes).

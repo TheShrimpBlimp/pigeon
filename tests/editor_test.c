@@ -35,6 +35,8 @@ static void fm1_irq_off(void) {}
 static void fm1_irq_on(void) {}
 static int32_t fm1_enc_take(uint32_t e) { (void)e; return 0; }
 static void lcd_sync(void) {}
+static void lcd_power(uint32_t s) { (void)s; }   /* (MENU > SCREEN OFF: lcd.c) */
+static void lcd_wake_now(void) {}
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *p)
 { (void)x; (void)y; (void)w; (void)h; (void)p; }
 #include "../firmware/src/gfx.c"
@@ -106,6 +108,39 @@ static uint32_t pack7(const uint8_t *p, uint32_t n, uint8_t *a)
     return o;
 }
 
+/* 1.1 parameter locks over MOTION (64): ops 5 (set a lock), 6 (clear a step's locks, 127 every step's), 7 (the query
+ * with the kinds); the query and ops 1..4 reply as before (a lock's id without bit 7) */
+static int motion_locks(void)
+{
+    int bad = 0;
+    uint32_t n;
+    uint8_t a[8];
+    reset();
+    motion_clear(&trk[1]);
+    a[0] = 1; a[1] = 3; a[2] = 2; a[3] = P_REV; a[4] = (uint8_t)((60 + 8192) & 127); a[5] = (uint8_t)((60 + 8192) >> 7);
+    request(ED_MOTION, a, 6);                                           /* an automation event, step 2 */
+    a[1] = 5; a[2] = 5; a[4] = (uint8_t)((100 + 8192) & 127); a[5] = (uint8_t)((100 + 8192) >> 7);
+    n = request(ED_MOTION, a, 6);                                       /* a lock, step 5 */
+    bad += check("MOTION op 5 sets a lock: rc 0, two records, then their kinds 0 1",
+        host_wire[6] == 0 && host_wire[8] == 2 && host_wire[10] == 2 && host_wire[11] == P_REV &&
+        host_wire[14] == 5 && host_wire[15] == P_REV && n == 5u + 5u + 2u * 4u + 2u + 1u &&
+        host_wire[18] == 0 && host_wire[19] == 1 && motion_lock_count(&trk[1]) == 1u);
+    n = request(ED_MOTION, a, 1);
+    bad += check("MOTION query as before 1.1: no kinds, the lock's id without bit 7", n == 5u + 5u + 2u * 4u + 1u &&
+        host_wire[15] == P_REV);
+    a[1] = 7; n = request(ED_MOTION, a, 2);
+    bad += check("MOTION op 7: the query with the kinds", n == 5u + 5u + 2u * 4u + 2u + 1u && host_wire[19] == 1);
+    a[1] = 5; a[2] = 64; n = request(ED_MOTION, a, 6);
+    bad += check("MOTION op 5 refuses step 64 (rc 1)", host_wire[6] == 1);
+    a[1] = 6; a[2] = 2; request(ED_MOTION, a, 3);
+    bad += check("MOTION op 6 on step 2: its automation event stays", host_wire[6] == 0 && host_wire[8] == 2);
+    a[2] = 127; request(ED_MOTION, a, 3);
+    bad += check("MOTION op 6, 127: every lock goes, the automation stays", host_wire[6] == 0 && host_wire[8] == 1 &&
+        host_wire[14] == 0 && !motion_lock_count(&trk[1]));
+    motion_clear(&trk[1]);
+    return bad;
+}
+
 static int preferences(void)
 {
     int bad = 0;
@@ -114,17 +149,18 @@ static int preferences(void)
     uint32_t n = request(ED_INFO, a, 0);
     bad += check("INFO explicitly tags display capabilities after SONG without changing command 33",
         ED_SONG == 33 && ED_UI_STATE == 34 && ED_FAV_SET == 38 &&
-        host_wire[n - 28] == CHAIN_ROWS && host_wire[n - 27] == 0x55 &&
-        host_wire[n - 26] == 1 && host_wire[n - 25] == 9 &&
-        host_wire[n - 24] == 0x4d && host_wire[n - 23] == 1 &&
-        host_wire[n - 22] == MOTION_MAX && host_wire[n - 21] == 1 &&
-        host_wire[n - 20] == 0x42 && host_wire[n - 19] == 1 && host_wire[n - 18] == 3 &&
-        host_wire[n - 17] == 0x46 && host_wire[n - 16] == 1 && host_wire[n - 15] == FM6_NFACTORY &&
-        host_wire[n - 14] == 0 &&                        /* (no bank since 1.0.3) */
-        host_wire[n - 13] == 0x53 && host_wire[n - 12] == 1 && host_wire[n - 11] == 3 &&
-        host_wire[n - 10] == 0x50 && host_wire[n - 9] == 1 && host_wire[n - 8] == 3 &&   /* FM6 v2: no bank, preset patches */
-        host_wire[n - 7] == 0x4E && host_wire[n - 6] == 1 && host_wire[n - 5] == 12 &&   /* MENU settings: 12 items */
-        host_wire[n - 4] == 0x52 && host_wire[n - 3] == 1 && host_wire[n - 2] == 4);   /* RATCH */
+        host_wire[n - 31] == CHAIN_ROWS && host_wire[n - 30] == 0x55 &&
+        host_wire[n - 29] == 1 && host_wire[n - 28] == 9 &&
+        host_wire[n - 27] == 0x4d && host_wire[n - 26] == 1 &&
+        host_wire[n - 25] == MOTION_MAX && host_wire[n - 24] == 1 &&
+        host_wire[n - 23] == 0x42 && host_wire[n - 22] == 1 && host_wire[n - 21] == 3 &&
+        host_wire[n - 20] == 0x46 && host_wire[n - 19] == 1 && host_wire[n - 18] == FM6_NFACTORY &&
+        host_wire[n - 17] == 0 &&                        /* (no bank since 1.0.3) */
+        host_wire[n - 16] == 0x53 && host_wire[n - 15] == 1 && host_wire[n - 14] == 3 &&
+        host_wire[n - 13] == 0x50 && host_wire[n - 12] == 1 && host_wire[n - 11] == 3 &&   /* FM6 v2: no bank, preset patches */
+        host_wire[n - 10] == 0x4E && host_wire[n - 9] == 1 && host_wire[n - 8] == 18 &&   /* MENU settings: 18 items (1.2) */
+        host_wire[n - 7] == 0x52 && host_wire[n - 6] == 1 && host_wire[n - 5] == 4 &&   /* RATCH */
+        host_wire[n - 4] == 0x4C && host_wire[n - 3] == 1 && host_wire[n - 2] == 1);   /* 1.1 parameter locks */
     request(ED_UI_SET, a, 2);
     bad += check("UI_SET updates the actual palette and reports RAM-only saving",
         host_wire[5] == 3 && settings.palette == 7 && T_BG == UI_PALETTES[7].bg);
@@ -723,12 +759,15 @@ static uint32_t menu_set(uint32_t id, int32_t v)            /* -> rc; host_wire[
 }
 static int menu_protocol(void)
 {
-    static const char *const WANT[12][2] = {
+    static const char *const WANT[18][2] = {
         {"COLOR", 0}, {"STYLE", "FLAT,LINE"}, {"LARGE", "OFF,ON"}, {"ANIM", "ON,OFF"}, {"LEDS", "OFF,DIM LO,DIM HI,INV"},
         {"HOLD", "0.3 s,0.4 s,0.5 s,0.6 s"}, {"KNOB ACCEL", "OFF,ON"}, {"FX LATCH", "OFF,ON"}, {"BPM LOCK", "OFF,ON"},
-        {"SPEAKER EQ", "FLAT,LOWCUT,BASS+"}, {"USB LEVEL", "MASTER,FIXED"}, {"USB SERIAL", "ON,OFF"}};
-    static const int32_t DEF[12] = {-1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0};   /* (COLOR: the default palette) */
-    static const uint8_t TAB[12] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3};      /* DISPLAY CONTROL AUDIO SYSTEM */
+        {"SPEAKER EQ", "FLAT,LOWCUT,BASS+"}, {"USB LEVEL", "MASTER,FIXED"}, {"USB SERIAL", "ON,OFF"},
+        {"CLICK", "OFF,REC,ON"}, {"CLICK LEVEL", "LOW,MID,HIGH"}, {"COUNT-IN", "OFF,1 BAR,2 BARS"},   /* (1.1: appended) */
+        {"RESTORE LAST", "ON,OFF"}, {"SCALE LEDS", "OFF,ON"},                                        /* (1.2) */
+        {"SCREEN OFF", "NEVER,5 MIN,15 MIN,30 MIN,60 MIN"}};
+    static const int32_t DEF[18] = {-1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 3};   /* (COLOR: the default palette) */
+    static const uint8_t TAB[18] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 2, 2, 2, 3, 1, 0};      /* DISPLAY CONTROL AUDIO SYSTEM */
     static const char *const TABN[4] = {"DISPLAY", "CONTROL", "AUDIO", "SYSTEM"};
     int bad = 0, ok = 1;
     uint32_t i, k, n;
@@ -738,7 +777,7 @@ static int menu_protocol(void)
     FILE *jf = json ? fopen(json, "w") : 0;
     reset();
     if (jf) fprintf(jf, "[");
-    for (i = 0; i < 12u; i++) {
+    for (i = 0; i < 18u; i++) {
         n = menu_desc(i, &it);
         joined[0] = 0;
         for (k = 0; k < it.nnames; k++) { if (k) strcat(joined, ","); strcat(joined, it.names[k]); }
@@ -758,7 +797,7 @@ static int menu_protocol(void)
         }
     }
     if (jf) { fprintf(jf, "]\n"); fclose(jf); }
-    bad += check("MENU_DESC: 12 items in the menu's order, ids 0..11, every name and value name, the defaults", ok);
+    bad += check("MENU_DESC: 18 items (1.0.4's 12 in the menu's order, then 1.1's CLICK, CLICK LEVEL, COUNT-IN, 1.2's RESTORE LAST, SCALE LEDS, SCREEN OFF), ids 0..17, names, defaults", ok);
     bad += check("MENU_DESC (1.0.5): after the names each item's tab, index and name (DISPLAY CONTROL AUDIO SYSTEM)", ok);
     {   /* an older editor reads the names and stops: the tab is past them, nothing it reads moved */
         uint32_t m = menu_desc(4, &it), p = 14, q;
@@ -768,12 +807,12 @@ static int menu_protocol(void)
         bad += check("MENU_DESC: the tab comes after every byte of the 1.0.4 reply (older editors ignore it)", ok);
     }
     ok = 1;
-    for (i = 0; i < 12u; i++) {
+    for (i = 0; i < 18u; i++) {
         menu_desc(i, &it);
         ok &= strcmp(it.name, "CALIBRATION") && strcmp(it.name, "ABOUT");
     }
-    n = menu_desc(12, &it);
-    ok &= n == 2u && it.index == 12 && it.id == 127;
+    n = menu_desc(18, &it);
+    ok &= n == 2u && it.index == 18 && it.id == 127;
     n = menu_desc(127, &it);
     bad += check("MENU_DESC: no CALIBRATION / ABOUT; an index past the list answers index, 127 (no item)",
                  ok && n == 2u && it.index == 127 && it.id == 127);
@@ -799,12 +838,19 @@ static int menu_protocol(void)
     ok &= menu_set(8, 1) == 3 && (ui_prefs & PREF_BPM_LOCK);
     ok &= menu_set(9, 2) == 3 && settings.lowcut == 2u && fx_lowcut == 2u;
     ok &= menu_set(10, 1) == 3 && (ui_prefs & PREF_USB_FIXED) && fx_usb_fixed;
-    for (i = 0; i < 12u; i++) {                         /* MENU_DESC reads them back */
-        static const int32_t SET[12] = {2, 1, 1, 1, 1, 3, 1, 1, 1, 2, 1, 0};
+    ok &= menu_set(12, 1) == 3 && click_mode == CLICK_REC && menu_set(12, 2) == 3 && click_mode == CLICK_ON;
+    ok &= menu_set(13, 0) == 3 && click_lvl == 0u;
+    ok &= menu_set(14, 2) == 3 && cin_bars == 2u;
+    ok &= menu_set(15, 1) == 3 && (ui_prefs & PREF_RESTORE_OFF);
+    ok &= menu_set(16, 1) == 3 && (ui_rec_prefs & 0x40u) && click_mode == CLICK_ON && cin_bars == 2u;   /* (its own bit) */
+    ok &= menu_set(17, 0) == 3 && scr_get() == 0u && menu_set(17, 9) == 3 && scr_get() == 4u &&   /* (clamped) */
+          menu_set(17, 2) == 3 && scr_get() == 2u && ui_scr == 1u;
+    for (i = 0; i < 18u; i++) {                         /* MENU_DESC reads them back */
+        static const int32_t SET[18] = {2, 1, 1, 1, 1, 3, 1, 1, 1, 2, 1, 0, 2, 0, 2, 1, 1, 2};
         menu_desc(i, &it);
         ok &= it.value == SET[i];
     }
-    bad += check("MENU_SET: every setting applied as the menu does (palette, EQ, USB LEVEL at once), read back", ok);
+    bad += check("MENU_SET: every setting applied as the menu does (palette, EQ, USB LEVEL, CLICK, COUNT-IN at once, RESTORE LAST, SCALE LEDS, SCREEN OFF), read back", ok);
     ok = menu_set(3, 0) == 3 && !(ui_prefs & PREF_ANIM_OFF) && (ui_prefs & PREF_LARGE) && menu_set(10, 0) == 3 &&
          !fx_usb_fixed && menu_set(1, 0) == 3 && ui_style == ST_FLAT;
     bad += check("MENU_SET: a flag back to its default leaves the other flags", ok);
@@ -815,6 +861,8 @@ static int menu_protocol(void)
     ok &= menu_set(4, 99) == 3 && ed_rv(host_wire + 7) == 3 && settings_leds == LEDS_INV;
     ok &= menu_set(5, 8191) == 3 && ed_rv(host_wire + 7) == 3 && settings_hold == 3u;
     ok &= menu_set(2, 7) == 3 && ed_rv(host_wire + 7) == 1 && (ui_prefs & PREF_LARGE);
+    ok &= menu_set(14, 9) == 3 && ed_rv(host_wire + 7) == 2 && cin_bars == 2u;
+    ok &= menu_set(12, -1) == 3 && ed_rv(host_wire + 7) == 0 && click_mode == CLICK_OFF;
     bad += check("MENU_SET: out-of-range values clamped, the reply says the value the device took", ok);
 
     /* an id nobody has */
@@ -822,7 +870,7 @@ static int menu_protocol(void)
         static uint8_t fav0[sizeof favorites], set0[sizeof settings];
         uint8_t hold0 = settings_hold, leds0 = settings_leds;
         memcpy(fav0, &favorites, sizeof favorites); memcpy(set0, &settings, sizeof settings);
-        ok = menu_set(12, 1) == 1 && host_wire[6] == 12 && ed_rv(host_wire + 7) == 1;
+        ok = menu_set(18, 1) == 1 && host_wire[6] == 18 && ed_rv(host_wire + 7) == 1;
         ok &= menu_set(126, -3) == 1 && host_wire[6] == 126 && ed_rv(host_wire + 7) == -3;
         ok &= menu_set(127, 0) == 1 && host_wire[6] == 127;
         ok &= !memcmp(fav0, &favorites, sizeof favorites) && !memcmp(set0, &settings, sizeof settings) &&
@@ -929,10 +977,12 @@ static int drum_kit_retired(void)
     return bad;
 }
 
+#ifndef EDITOR_TEST_NO_MAIN                              /* (robust_test.c, fuzz_*.c: this file is their base) */
 int main(void)
 {
-    int bad = preferences() + framing() + uart_recovery() + steps() + samples() + song_protocol() + malformed_saves() +
+    int bad = preferences() + motion_locks() + framing() + uart_recovery() + steps() + samples() + song_protocol() + malformed_saves() +
               fm6_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired();
     printf("%s\n", bad ? "EDITOR TEST FAILED" : "editor test passed");
     return bad != 0;
 }
+#endif

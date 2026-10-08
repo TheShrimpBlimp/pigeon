@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* Icons: 4-bit alpha cells of the Fukiai icon font (MIT), 12 px (parameters, lists) and 16 px
+/* Icons: 4-bit alpha cells of the Fukiai icon font (MIT), Huffman-coded (cv_alpha_hc), 12 px (parameters, lists) and 16 px
  * (header, dialogs, menu): web/fukiai.ttf -> build/gen/ui_icons.h
  * (tools/gen_aa_icons.py; names from assets/icons.json). Which icon a parameter gets is decided
  * here, by its label. FELUCCA_ICONS=0 turns the parameter icons off (labels get their full width back). */
@@ -74,8 +74,8 @@ static int32_t cv_icon_on(int32_t x, int32_t y, uint32_t size, uint32_t id, uint
         return cv_trk(x, y, size, id - ICON_TRK, fg, bg);
     if ((k = icon_cell(&size, id)) < 0)
         return 0;
-    cv_alpha(x, y, size, size, (size == 24u ? AI24_DATA : size == 16u ? AI16_DATA : AI12_DATA) + (uint32_t)k * (size * size / 2u),
-             ramp(fg, bg));
+    cv_alpha_hc(x, y, size, size, size == 24u ? AI24_DATA + AI24_OFF[k] : size == 16u ? AI16_DATA + AI16_OFF[k] :
+                AI12_DATA + AI12_OFF[k], AI_HC, ramp(fg, bg));
     GFX_HOOK_ICON(x, y, size, id);
     GFX_HOOK_TEXT(x, y + cv_oy, x + (int32_t)size, y + cv_oy + (int32_t)size, "icon", 4u);
     return (int32_t)size;
@@ -266,6 +266,7 @@ static uint32_t page_icon(const page_t *pg)
     case GR_SONG: return ICON_X_SONG;         /* SONG: the disc */
     case GR_CHANCE: return ICON_PROB;         /* CHANCE: the die */
     case GR_MOTION: return motion_icon();
+    case GR_EVENTS: return ICON_X_MOTION;     /* AUTO LIST */
     default: return ICON_NONE;
     }
 }

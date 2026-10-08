@@ -108,13 +108,18 @@ class Identity:
         return self.model.lower().startswith("ota-")
 
 
+def printable(b):
+    """bytes from the device as text for the terminal: printable ASCII only (no escape sequences)"""
+    return "".join(chr(c) if 32 <= c < 127 else "?" for c in b)
+
+
 def parse_identity(pkt):
     if len(pkt) < 2 or pkt[0] != 0xF0 or pkt[-1] != 0xF7:
         return None
     d = unpack7(pkt[1:-1])
     if len(d) != 34 or d[:3] != b"\x00\x59\x11":
         return None
-    txt = d[6:33].rstrip(b"\0").decode("latin-1")
+    txt = printable(d[6:33].rstrip(b"\0"))
     m = re.fullmatch(r"([^_]+)_(\d+)", txt)
     return Identity(txt, m[1], int(m[2])) if m else None
 

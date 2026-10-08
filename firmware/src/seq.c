@@ -34,7 +34,11 @@ static const uint16_t SCALE_MASK[] = {
 
 #define KB_SILENT 255u
 static uint32_t kb_prev;
+static volatile uint8_t kb_boot_hold;    /* #137: set from power-on to the end of the splash (main.c): the keys sound nothing,
+                                          * and one held across its end stays silent until it is let go and pressed again */
 static uint8_t kb_note[27], kb_trk[27];  /* per key: the note it started and on which track */
+static volatile uint8_t kb_asleep;       /* MENU > SCREEN OFF (ui.c): the screen dark or waking, a key pressed now only
+                                          * wakes it (silent, no layer, its release nothing) */
 static uint8_t last_note = 60;
 static volatile uint8_t transport_req;   /* 1 start, 2 stop, 3 restart (from the UI) */
 static volatile uint8_t panic_req;       /* bit per track: release every sounding note (preset / engine change) */
@@ -150,17 +154,142 @@ static int rec_on(const track_t *t) { return ((song.rec >> trk_index(t)) & 1u) &
 
 #include "motion.c"
 
-static void arp_off(track_t *t)                  /* the sounding arp note ends (a recorded one too) */
+/* the ARP's modes (P_AMODE). Append-only: a stored value keeps its meaning (ORD plays as UP, the ORD switch of
+ * ARP 2 orders the notes). 1.2 (Discussion #95), over the note list (the held notes low to high, or as played,
+ * across OCT octaves), C E G held: DNUP G E C E; UP+8 C E G C' (the first note again an octave above the top);
+ * CONV C G E (outside in); DIVG E G C (inside out); PINKY C G E G (the top note between the others); THUMB
+ * C E C G (the bottom one); WALK a random step up or down the list (bouncing off its ends); CHORD all the held
+ * notes together (the first 4), an octave higher each step through OCT */
+enum { AM_OFF, AM_UP, AM_DN, AM_UPDN, AM_RND, AM_ORD, AM_REPEAT, AM_DNUP, AM_UP8, AM_CONV, AM_DIVG, AM_PINKY,
+       AM_THUMB, AM_WALK, AM_CHORD };
+
+static void arp_forget(track_t *t)               /* (its notes ended otherwise: trk_all_off) */
 {
+    t->arp_note = t->arp_ch[0] = t->arp_ch[1] = t->arp_ch[2] = 0;
+}
+
+/* CHORD's notes. Not inlined: they run once an arp step, and kept out of the audio ISR's loop over the tracks
+ * (tests/target_budget.py) */
+static __attribute__((noinline)) void arp_chord_off(track_t *t, int rec)   /* the other notes end */
+{
+    uint32_t i;
+    for (i = 0; i < 3u; i++)
+        if (t->arp_ch[i]) {
+            if (rec)
+                rec_release(t, t->arp_ch[i]);
+            trk_note_off(t, t->arp_ch[i]);
+            t->arp_ch[i] = 0;
+        }
+}
+
+static __attribute__((noinline)) void arp_chord(track_t *t, const uint32_t *list, uint32_t n)
+{
+    uint32_t i, nt, top = 0, o = t->arp_idx % (uint32_t)(t->p[P_AOCT] > 0 ? t->p[P_AOCT] : 1);
+    if (n > 4u)
+        n = 4u;
+    for (i = 0; i < n; i++) {                       /* the held notes (sorted or as played), o octaves up */
+        nt = (uint32_t)clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
+        if (nt == 127u && top++)
+            continue;                               /* (notes clamped onto the top one: once) */
+        if (!t->arp_note)
+            t->arp_note = (uint8_t)nt;
+        else
+            t->arp_ch[i - 1u] = (uint8_t)nt;
+        if (rec_on(t))
+            rec_note(t, nt, 100);
+        trk_note_on(t, nt, 100);
+    }
+}
+
+static void arp_silence(track_t *t)              /* the sounding arp note(s) end */
+{
+    if (t->arp_ch[0] | t->arp_ch[1] | t->arp_ch[2])
+        arp_chord_off(t, 0);
+    trk_note_off(t, t->arp_note);
+    t->arp_note = 0;
+}
+
+static void arp_off(track_t *t)                  /* the sounding arp note(s) end (a recorded one too) */
+{
+    if (t->arp_ch[0] | t->arp_ch[1] | t->arp_ch[2])
+        arp_chord_off(t, rec_on(t));
     trk_note_off(t, t->arp_note);
     if (rec_on(t))
         rec_release(t, t->arp_note);
     t->arp_note = 0;
 }
 
+/* the place in the note list (len notes) the step arp_idx plays (not inlined, as arp_chord); UP+8 adds its note */
+static __attribute__((noinline)) uint32_t arp_pick(track_t *t, uint32_t *list, uint32_t len)
+{
+    uint32_t i = t->arp_idx, m = (uint32_t)t->p[P_AMODE], cyc, k, w;
+    if (m == AM_UP8 && len < 64u)                   /* UP+8: the first note again over the top */
+        list[len++] = (uint32_t)clamp((int32_t)list[0] + 12 * t->p[P_AOCT], 0, 127);
+    cyc = len > 1u ? 2u * len - 2u : 1u;
+    k = i % cyc;
+    switch (m) {
+    case AM_DN:
+        return len - 1u - i % len;
+    case AM_UPDN:
+        return k < len ? k : cyc - k;
+    case AM_DNUP:
+        return k < len ? len - 1u - k : k - (len - 1u);
+    case AM_RND:
+        return rng() % len;
+    case AM_CONV:
+    case AM_DIVG:
+        k = i % len;
+        if (m == AM_DIVG)
+            k = len - 1u - k;
+        return (k & 1u) ? len - 1u - k / 2u : k / 2u;
+    case AM_PINKY:
+        return len < 2u ? 0u : (k & 1u) ? len - 1u : k / 2u;
+    case AM_THUMB:
+        return len < 2u ? 0u : (k & 1u) ? 1u + k / 2u : 0u;
+    case AM_WALK:
+        w = t->arp_walk;
+        if (!i)
+            w = 0;                                  /* (from the bottom) */
+        else if (w >= len)
+            w = len - 1u;                           /* (notes let go) */
+        else if (len > 1u)
+            w = !w ? 1u : w == len - 1u ? w - 1u : (rng() >> 7) & 1u ? w + 1u : w - 1u;
+        t->arp_walk = (uint8_t)w;
+        return w;
+    default:
+        return i % len;
+    }
+}
+
 /* n: samples the arp advances by (the external clock's while it runs, 0 stopped); gate_n: samples its
  * gate counts down by (real time when the external transport stops: a tapped or latched note still ends) */
 static volatile uint32_t beat_pos, beat_n;      /* samples into the beat, the beat of the bar (0..3) */
+
+/* the metronome (click.c) and the count-in (1.1, Discussion #131). The click follows the song tempo's quarter notes
+ * (BPM, or the external clock's 24 pulses), 4 to the bar, the first accented, whatever a track's DIV or SWING: a beat is
+ * four 1/16 steps as the sequencer counts them (click_beat_len: 4 x div_samples(1/16), which may be a few samples
+ * shorter than beat_samples, so the click never drifts from the 1/16 tracks it is recorded against). clk_pos and
+ * clk_step count the 1/16 steps as seq_tick counts a 1/16 track's (and midi_clock_pulse rescales clk_pos with them when
+ * an external clock's tempo moves): CLK_START at seq_start clicks the first beat in the block step 0 starts in, and
+ * beat k in the block a 1/16 track's step 4k starts in (every 4th step; step 0 of 16, the bar's first, accented).
+ * The count-in: with MENU > COUNT-IN on, PLAY from stop with a track armed (REC while stopped starts PLAY too) on
+ * the internal clock counts cin_total beats first (1 or 2 bars, clicked whatever CLICK is), then
+ * starts the sequencer at step 1 exactly that many beats later (song.playing stays 0 until then: nothing plays or
+ * records; the keys sound). A note into an armed track in the count-in's last eighth (the second half of its last
+ * beat) is recorded onto step 1 when it starts (cin_keep, cin_flush), held on or let go as it was. An external clock
+ * never counts in (its Start starts). STOP (seq_stop) cancels it. */
+#define CLK_START 0xFFFFFFFFu
+static uint32_t clk_pos = CLK_START, clk_step;  /* samples into the 1/16 step, the step of the bar (0..15) */
+static volatile uint8_t cin_left, cin_total;    /* the count-in's beats still to come (0: none), of how many */
+static volatile uint32_t cin_pos;               /* samples into its beat playing */
+static uint8_t cin_flush;                       /* the count-in ended in this block: record what was kept */
+static uint8_t cin_note[NTRK][4], cin_vel[NTRK][4], cin_n[NTRK], cin_up[NTRK];   /* kept notes; cin_up bit k: let go */
+static int seq_counting(void) { return cin_left != 0u; }
+static uint32_t click_beat_len(void) { return 4u * div_samples(2); }   /* DIV 2: 1/16 */
+static int click_wanted(void)                  /* CLICK REC: while a track is armed (not in a song: no recording) */
+{
+    return click_mode == CLICK_ON || (click_mode == CLICK_REC && song.rec && !chain.running);
+}
 static void arp_step(track_t *t, uint32_t n, uint32_t gate_n)
 {
     uint32_t period, cnt, list[64], len = 0, i, j, o;
@@ -196,29 +325,18 @@ static void arp_step(track_t *t, uint32_t n, uint32_t gate_n)
     for (o = 0; o < (uint32_t)t->p[P_AOCT]; o++)
         for (i = 0; i < cnt && len < 64u; i++)
             list[len++] = clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
-    if (t->p[P_AMODE] == 6) { list[0] = t->held[t->nheld - 1u]; len = 1; } /* REPEAT: last played note, no octave traversal */
+    if (t->p[P_AMODE] == AM_REPEAT) { list[0] = t->held[t->nheld - 1u]; len = 1; } /* REPEAT: last played note, no octave traversal */
     t->arp_idx++;
-    switch (t->p[P_AMODE]) {
-    case 2:
-        j = len - 1u - t->arp_idx % len;
-        break;
-    case 3: {
-        uint32_t cyc = len > 1u ? 2u * len - 2u : 1u, k = t->arp_idx % cyc;
-        j = k < len ? k : cyc - k;
-        break;
-    }
-    case 4:
-        j = rng() % len;
-        break;
-    default:
-        j = t->arp_idx % len;
-        break;
-    }
+    j = t->p[P_AMODE] == AM_CHORD ? 0u : arp_pick(t, list, len);
     if (t->arp_note)
         arp_off(t);
     if ((uint32_t)(rng() & 127u) <= (uint32_t)t->p[P_APROB]) {
-        t->arp_note = (uint8_t)list[j];
         t->arp_off = period * (uint32_t)t->p[P_AGATE] / 128u;
+        if (t->p[P_AMODE] == AM_CHORD) {            /* CHORD: the first 4 notes, an octave up each step */
+            arp_chord(t, list, cnt);
+            return;
+        }
+        t->arp_note = (uint8_t)list[j];
         if (rec_on(t))
             rec_note(t, t->arp_note, 100);           /* recording: what the arp plays */
         trk_note_on(t, t->arp_note, 100);
@@ -364,9 +482,29 @@ static void rec_release(track_t *t, uint32_t note)
         t->step[t->rh_last] = t->rh_bak;            /* released early in it: not held into this step */
 }
 
+/* a note into armed track t in the count-in's last eighth: kept for step 1 (cin_flush); once each, 4 per track */
+static __attribute__((noinline)) void cin_keep(track_t *t, uint32_t note, uint32_t vel)
+{
+    uint32_t i = trk_index(t), k;
+    if (cin_left != 1u || cin_pos < click_beat_len() / 2u || !((song.rec >> i) & 1u) || t->p[P_AMODE])
+        return;
+    for (k = 0; k < cin_n[i] && cin_note[i][k] != note; k++)
+        ;
+    if (k == cin_n[i]) {
+        if (k == 4u)
+            return;
+        cin_n[i]++;
+    }
+    cin_note[i][k] = (uint8_t)note;
+    cin_vel[i][k] = (uint8_t)vel;
+    cin_up[i] &= (uint8_t)~(1u << k);
+}
+
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
     last_note = (uint8_t)note;
+    if (cin_left)
+        cin_keep(t, note, vel);
     if (rec_on(t) && !t->p[P_AMODE])               /* (ARP on: arp_tick records its notes) */
         rec_note(t, note, vel);
     if (t->p[P_AMODE])
@@ -381,6 +519,12 @@ static void input_off(track_t *t, uint32_t note)
 {
     if (midi_note_held(t, note))
         return;
+    if (cin_left) {                                 /* a kept note let go before step 1: recorded, then let go */
+        uint32_t i = trk_index(t), k;
+        for (k = 0; k < cin_n[i]; k++)
+            if (cin_note[i][k] == note)
+                cin_up[i] |= (uint8_t)(1u << k);
+    }
     rec_release(t, note);
     arp_remove(t, note);                            /* both: the note may have started in the */
     trk_note_off(t, note);                          /* other mode (ARP switched while held) */
@@ -450,6 +594,13 @@ static void keyboard_block(void)
     ch = cur ^ kb_prev;                           /* keys also sound while entering steps */
     if (!ch)
         return;
+    if (kb_boot_hold) {                           /* #137: under the splash; their release is silent too */
+        for (k = 0; k < 27u; k++)
+            if ((ch & cur) >> k & 1u)
+                kb_note[k] = KB_SILENT;
+        kb_prev = cur;
+        return;
+    }
     lay = (fm1_in.buttons & kb_mask) || kb_lock;  /* (#83: kb_lock, a layer locked open with no button held) */
     fx = (fm1_in.buttons & perf_mask) || (kb_lock & 2u);
     for (k = 0; k < 27u; k++) {
@@ -457,6 +608,10 @@ static void keyboard_block(void)
             continue;
         if ((cur >> k) & 1u) {                    /* the selected track; the key-up goes to the same one */
             kb_trk[k] = song.sel;
+            if (kb_asleep) {                      /* (SCREEN OFF: the wake press is swallowed) */
+                kb_note[k] = KB_SILENT;
+                continue;
+            }
             if (lay) {                            /* a layer's button held (or locked): the key is the layer's */
                 kb_note[k] = KB_SILENT;           /* (ui_layer.c), with FX an effect (perform.c) */
                 kb_layer |= 1u << k;
@@ -506,6 +661,7 @@ static void seq_start(void)
     }
     song.tick = 0;
     beat_pos = 0; beat_n = 0;                      /* the ARP LED's beat from the top too */
+    clk_pos = CLK_START;                           /* the metronome's first beat with step 0 */
     song.playing = 1;
     slicer_start();                                /* slicer.c: its step 0 with the sequencer's */
     perf_start();                                  /* perform.c: its 1/16 grid too */
@@ -525,6 +681,9 @@ static void seq_stop(void)
 {
     uint32_t i;
     song.playing = 0;
+    cin_left = 0;                                  /* (a count-in: cancelled, nothing recorded) */
+    cin_flush = 0;
+    memset(cin_n, 0, sizeof cin_n);
     if (song.g[G_CLOCK])                           /* external clock: the arp stops with the transport, */
         for (i = 0; i < NPART; i++)                /* its sounding note too (HOLD keeps the latched chord) */
             if (trk[i].arp_note)
@@ -547,6 +706,8 @@ static void seq_stop(void)
  * a slide into it glides into the first part only, and it never slides or ties out (its last part ends at its
  * gate). x1, what every older pattern holds, is the step exactly as before. */
 #define SEQ_REP (1u << 16)
+#define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
+#define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
 static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint32_t period, uint32_t skip)
 {
     uint32_t i, j, gate = period * (uint32_t)t->p[P_SGATE] / 128u;
@@ -563,7 +724,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t qseq = t->p[P_QUANT] == QN_SEQ && !(e->keys && e->keys(t, 0) >= 0);
     if (!(skip & SEQ_REP)) {
         t->rat_left = 0;
-        if (step_chance(s) < 100u && rng() % 100u >= step_chance(s)) {
+        if ((skip & SEQ_MISS) ||
+            (!(skip & SEQ_ROLLED) && step_chance(s) < 100u && rng() % 100u >= step_chance(s))) {
             seq_release(t);
             return;
         }
@@ -662,11 +824,15 @@ static void seq_tick(track_t *t, uint32_t n)
             break;
         t->seq_pos = t->seq_pos >= 0x7FFFFFFFu ? (chain.running ? chain.carry : 0u) : t->seq_pos - cur_len;
         t->seq_idx = (uint16_t)((t->seq_idx + 1u) % (len ? len : 1u));
-        motion_step(t, t->seq_idx, chain.running ? &chain.source[chain.slot].motion : &motion);
         rec_hold(t, t->seq_idx, len ? len : 1u);
         {
             const step_t *s = &seq_steps(t)[t->seq_idx];
-            uint32_t skip = 0, i, k;
+            uint32_t skip = SEQ_ROLLED, i, k;
+            /* the chance first (the one roll, as seq_step made it): a step that does not play applies no lock; the
+             * automation and the locks before the notes, so a note-on reads them (eng_drum's KIT, ..) */
+            if (step_chance(s) < 100u && rng() % 100u >= step_chance(s))
+                skip = SEQ_MISS;
+            motion_step(t, t->seq_idx, chain.running ? &chain.source[chain.slot].motion : &motion, skip == SEQ_ROLLED);
             if (t->rskip_n && t->rskip_idx == t->seq_idx) {
                 for (k = 0; k < t->rskip_n; k++) {
                     for (i = 0; i < s->n; i++)
@@ -693,6 +859,78 @@ static track_t *midi_track(uint32_t ch) { return ch < NPART && !song.g[G_ROUTE] 
 #include "midi_control.c"
 #include "midi_clock.c"
 
+/* the count-in: its first beat now (accented) */
+static __attribute__((noinline)) void cin_begin(void)
+{
+    cin_total = cin_left = (uint8_t)(4u * cin_bars);
+    cin_pos = 0;
+    memset(cin_n, 0, sizeof cin_n);
+    click_req = 2;
+}
+/* n samples on: a beat ends; the last one starts the sequencer (in this block, before seq_tick: step 0 with it) */
+static __attribute__((noinline)) void cin_block(uint32_t n)
+{
+    uint32_t b = click_beat_len();
+    cin_pos += n;
+    if (cin_pos < b)
+        return;
+    cin_pos -= b;
+    cin_pos = cin_pos < b ? cin_pos : 0u;
+    if (--cin_left) {
+        click_req = (uint8_t)((cin_total - cin_left) % 4u ? 1u : 2u);
+        return;
+    }
+    seq_start();
+    cin_flush = 1;
+}
+/* the count-in's kept notes onto step 1, which has just started (events_block, after seq_tick): as if played now */
+static __attribute__((noinline)) void cin_record(void)
+{
+    uint32_t i, k;
+    cin_flush = 0;
+    for (i = 0; i < NTRK; i++) {
+        track_t *t = &trk[i];
+        for (k = 0; k < cin_n[i]; k++)
+            if (rec_on(t)) {
+                rec_note(t, cin_note[i][k], cin_vel[i][k]);
+                if ((cin_up[i] >> k) & 1u)
+                    rec_release(t, cin_note[i][k]);
+            }
+        cin_n[i] = 0;
+    }
+}
+/* the metronome's beat: adv samples on while the transport runs (click.c sounds it in this block) */
+static void click_tick(uint32_t adv)
+{
+    uint32_t p = div_samples(2), beat = 0;
+    if (clk_pos == CLK_START) {
+        clk_pos = 0;
+        clk_step = 0;
+        beat = 2;
+    } else {
+        clk_pos += adv;
+        while (clk_pos >= p) {                      /* (as seq_tick: the remainder kept) */
+            clk_pos -= p;
+            clk_step = (clk_step + 1u) & 15u;
+            if (!(clk_step & 3u))
+                beat = clk_step ? 1u : 2u;
+        }
+    }
+    if (beat && click_wanted())
+        click_req = (uint8_t)beat;
+}
+/* the beat of the bar the click is on (0..3: 0 the accented first), -1 stopped: the count-in's, else the playing
+ * transport's (clk_step, internal or external clock). It moves in the block a beat clicks in (the header's metronome,
+ * ui_draw.c, swings on it; CLICK OFF it moves all the same) */
+static int32_t click_beat_now(void)
+{
+    if (cin_left)
+        return (int32_t)((uint32_t)(cin_total - cin_left) % 4u);
+    if (!song.playing)
+        return -1;
+    return clk_pos == CLK_START ? 0 : (int32_t)(clk_step >> 2);
+}
+
 /* everything that happens between two rendered blocks */
 static void events_block(uint32_t n)
 {
@@ -704,9 +942,15 @@ static void events_block(uint32_t n)
         midi_clock.mode = (uint8_t)clock_mode;
         midi_beat_samples = 0;
     }
+    if (cin_left && !clock_mode)
+        cin_block(n);
     if (transport_req == 1u) {
         if (clock_mode)
             midi_clock_transport(0xFAu, fm1_ms);
+        else if (cin_left)
+            ;                                       /* counting in already (the UI's PLAY stops it: seq_counting) */
+        else if (cin_bars && song.rec && !song.playing && !chain.armed)
+            cin_begin();                            /* recording from stop: the count-in first */
         else
             seq_start();
         transport_req = 0;
@@ -749,7 +993,7 @@ static void events_block(uint32_t n)
             trk_all_off(t);
             t->nheld = 0;
             t->arp_phys = 0;
-            t->arp_note = 0;
+            arp_forget(t);
         }
         engine_block(t);                              /* engine switch: fade, then switch (voice.c) */
         /* ARP turned off, or HOLD released with no key down: drop the latched chord */
@@ -757,10 +1001,8 @@ static void events_block(uint32_t n)
             t->nheld = 0;
             if (!t->p[P_AMODE])
                 t->arp_phys = 0;
-            if (t->arp_note) {
-                trk_note_off(t, t->arp_note);
-                t->arp_note = 0;
-            }
+            if (t->arp_note)
+                arp_silence(t);
         }
         t->armp = t->p[P_AMODE];
         t->aholdp = t->p[P_AHOLD];
@@ -796,6 +1038,10 @@ static void events_block(uint32_t n)
     chain_tick(seq_n);
     for (i = 0; i < NTRK; i++)
         seq_tick(&trk[i], seq_n);
+    if (cin_flush)
+        cin_record();
+    if (song.playing)
+        click_tick(seq_n);
     for (i = 0; i < NPART; i++)
         arp_step(&trk[i], clock_mode ? seq_n : n, clock_mode && song.playing ? seq_n : n);
     beat_pos += clock_mode ? seq_n : n;               /* the beat the ARP LED flashes on (ui_leds) */

@@ -13,6 +13,17 @@
  *              engines.c eng_vis), the next white key INIT (LY_INIT: E5)
  *              (the dialog); KNOB 1 ENG, 2 No. (the engine's sounds), 3 FAV. Sound loads as on PRESETS: the steps
  *              stay, SAVE held undoes, the editor gets RELOAD; they apply while playing too
+ *   SEQ  SET   (1.2, on the SEQ pages that show the pattern: STEP / the DRUM grid, PATTERN, CHANCE, AUTOMATION; elsewhere
+ *              SEQ held opens SONG as before) TOOLS: the white keys from F3 the sequence tools (ui_tools.c: CLEAR,
+ *              REVERSE, SHIFT < >, RANDOM, COOK; on a DRUM track BEAT and the lane's CLEAR REVERSE FILL RANDOM), black
+ *              keys 1..8 the lane (DRUM); KNOB 1..4 the PATTERN page's LEN DIV SWING GATE. Each action one undo (SAVE
+ *              held), OCT- the track as the layer opened (tl_open)
+ *   REC  SET   (1.1.5, on every page; REC's tap still arms / disarms) the white keys from F3: CLEAR (the selected
+ *              track's steps and automation, no dialog: one undo, SAVE held), CLICK (OFF REC ON), COUNT-IN (OFF 1 BAR
+ *              2 BARS), CLICK LEVEL (LOW MID HIGH), each press the next value; KNOB 1..3 the same three. The settings
+ *              are MENU > AUDIO's (ui.c rp_get / rp_put: one store), saved when the layer closes; OCT- puts back the
+ *              settings and the track as the layer opened (tl_open). Replaces the old REC held on SEQ (Discussion #91:
+ *              the CLEAR Tn SEQUENCE? dialog and its "HOLD: CLEAR" hint)
  * The gesture: let go before HOLD (the menu: 0.3 .. 0.6 s) with nothing else touched: a tap, the button's page.
  * Held past HOLD alone: the map (a peek), letting go does nothing. A key, a knob or a button meanwhile: a combo,
  * the map at once, no tap. Keys pressed with the button down are the layer's (seq.c keyboard_block): silent, no
@@ -31,6 +42,7 @@
  * left (lys.nv); the second tap locks the layer over that page, put back, so a double tap leaves the page as it was.
  * A first tap that acted instead of opening a page (EDIT on STEP: clear the step; on USER / PROJECT: rename) arms no
  * double tap: two quick taps there still act twice. */
+#include "ui_tools.c"                                   /* SEQ TOOLS' actions */
 enum { LK_HOLD, LK_SET };
 typedef struct {
     uint8_t btn, kind, fam;            /* the button, HOLD / SET, the family whose first page KNOB 1..4 edit */
@@ -43,10 +55,15 @@ static const layer_t LAYERS[LAYER_N] = {
     {B_GLO, LK_SET, FAM_HOME, "[GLO] SET", {{KC_PLAY, "RESTART"}, {KC_OCTDN, "UNDO"}, {KC_GLO, "DONE"}}},
     {B_SCL, LK_SET, FAM_SCL, "[SCL] SET", {{KC_KEYS, "ROOT"}, {KC_OCTDN, "UNDO"}, {KC_SCL, "DONE"}}},
     {B_EDIT, LK_SET, FAM_HOME, "[EDIT] SET", {{KC_KEYS, "ENGINE"}, {KC_OCTDN, "UNDO"}, {KC_EDIT, "DONE"}}},
+    {B_SEQ, LK_SET, FAM_SEQ, "[SEQ] TOOLS", {{KC_KEYS, "TOOLS"}, {KC_OCTDN, "UNDO"}, {KC_SEQ, "DONE"}}},
+    {B_REC, LK_SET, FAM_HOME, "[REC] SET", {{KC_KEYS, "RECORDING"}, {KC_OCTDN, "UNDO"}, {KC_REC, "DONE"}}},
 };
-static const uint8_t LY_KC[LAYER_N] = {0, KC_FX, KC_GLO, KC_SCL, KC_EDIT};
+static const uint8_t LY_KC[LAYER_N] = {0, KC_FX, KC_GLO, KC_SCL, KC_EDIT, KC_SEQ, KC_REC};
 /* SCL's knobs: the key and its chord (cur_page() while the layer edits or draws them: page_over) */
 static const page_t LY_SCL = {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT, P_SCALE, P_CHRD, P_VOIC}};
+/* SEQ TOOLS' knobs: the PATTERN page's (the length the tools work in) */
+static const page_t LY_SEQ = {"PATTERN", FAM_SEQ, SC_TRACK, GR_STEPS, {P_SLEN, P_SDIV, P_SSWING, P_SGATE}};
+static const page_t *ly_page(uint32_t l) { return l == LAYER_SCL ? &LY_SCL : l == LAYER_SEQ ? &LY_SEQ : 0; }
 #define LY_OPEN 2u                     /* ui.ly_t0: the map opened (no tap any more) */
 #define LY_COMBO 4u                    /* .. by a combo */
 #define LY_DEAD 8u                     /* .. pressed where there is no layer: does nothing */
@@ -57,8 +74,11 @@ static const khint_t FX_LATCH_FOOT[3] = {{KC_KEYS, "ON / OFF"}, {KC_K14, "MACROS
 
 static struct {
     uint8_t l, trk, loaded, oct;       /* SET: the layer and the track of the snapshot; EDIT: a sound loaded since
-                                        * it opened; OCT- / OCT+ pressed in a SET layer (bits) */
-    int16_t v[9];                      /* the values when it opened: GLO mutes, levels, BPM; SCL ROOT..TRN, CHRD VOIC */
+                                        * it opened (SEQ: a tool used); OCT- / OCT+ pressed in a SET layer (bits) */
+    uint8_t cook;                      /* SEQ: COOK pressed since it opened */
+    uint8_t rp_dirty;                  /* REC: a setting changed (settings_save when the layer lets go) */
+    int16_t v[9];                      /* the values when it opened: GLO mutes, levels, BPM; SCL ROOT..TRN, CHRD VOIC;
+                                        * SEQ LEN DIV SWING GATE; REC the settings (ui_rec_prefs) */
     uint32_t solo;                     /* GLO: the keys held that solo */
     uint32_t tap[4];                   /* GLO TAP: the last taps (fm1_ms) */
     uint8_t ntap;
@@ -67,19 +87,28 @@ static struct {
     uint8_t dt_l, dt_hint, dtap;       /* #83: the layer of the last tap that opened a page (0 none), its hint said; the
                                         * press now armed is that tap's second (a double tap) */
     uint32_t dt_ms;                    /* .. when that tap was let go (fm1_ms) */
-    struct { uint8_t home, page, act, seq, fam[FAM_COUNT]; } nv;   /* .. the page it left (put back by the lock) */
+    struct { uint8_t home, page, act, seq, fam[FAM_COUNT], rec, go; } nv;   /* .. the page it left (put back by the
+                                        * lock); REC: the arming before its tap, the transport that tap started */
 } lys;
 #define LY_QUIET_MS 250u
 #define LY_DTAP_MS 300u                /* #83: the second press of a double tap at most this long after the first tap */
 
 static int layer_allowed(void) { return !ui.menu && !ui.confirm && !ui.uboot && !name_on(); }
 static uint32_t ly_bit(uint32_t l) { return 1u << panel.btn[LAYERS[l].btn]; }
+/* SEQ's layer is there on the SEQ pages that show the pattern only (elsewhere SEQ held opens SONG: ui_input) */
+static int tools_page(void)
+{
+    const page_t *pg = &PAGES[ui.page];
+    return !ui.home && pg->fam == FAM_SEQ &&
+           (pg->graph == GR_ROLL || pg->graph == GR_STEPS || pg->graph == GR_CHANCE || pg->graph == GR_MOTION);
+}
+static int ly_avail(uint32_t l) { return l != LAYER_SEQ || tools_page(); }   /* (REC: on every page) */
 static uint32_t ly_down(uint32_t l) { return l && ((fm1_in.buttons & ly_bit(l)) != 0u || ui.lock == l); }   /* (locked: held) */
 static uint32_t layer_bits(void)
 {
     uint32_t l, m = 0;
     for (l = LAYER_FX; l < LAYER_N; l++)
-        m |= ly_bit(l);
+        m |= ly_avail(l) ? ly_bit(l) : 0u;
     return m;
 }
 static uint32_t layer_btn(void) { return LAYERS[ui.layer % LAYER_N].btn; }
@@ -111,7 +140,7 @@ static void layer_arm(uint32_t pressed, uint32_t now)
     if (ui.ly)
         return;
     for (l = LAYER_FX; l < LAYER_N; l++)
-        if (pressed & ly_bit(l)) {
+        if ((pressed & ly_bit(l)) && ly_avail(l)) {
             ui.ly = (uint8_t)l;
             ui.ly_t0 = (now & ~15u) | 1u | (layer_allowed() ? 0u : LY_DEAD);
             lys.dtap = lys.dt_l == l && fm1_ms - lys.dt_ms <= LY_DTAP_MS;   /* (#83: the second tap of a double tap?) */
@@ -126,6 +155,10 @@ static void layer_let_go(uint32_t quiet)
 {
     if (ui.ly == LAYER_FX && !perf_latch_on)
         perf_k[0] = perf_k[1] = perf_k[2] = perf_k[3] = 0;
+    if (lys.rp_dirty) {                                 /* REC: its settings kept, as MENU does when it closes */
+        lys.rp_dirty = 0;
+        settings_save();                                /* (deferred while playing) */
+    }
     if (quiet) {
         lys.quiet = 1;
         lys.quiet_t = fm1_ms;
@@ -163,8 +196,16 @@ static void layer_lock(uint32_t l, uint32_t now)
     ui.act = lys.nv.act;
     song.seq_mode = lys.nv.seq;
     ui.entry_open = 0;
-    if (lys.dt_hint)
-        ui.msg_t = 0;                                   /* (the first tap's "HOLD [..] QUICK") */
+    if (lys.dt_hint || l == LAYER_REC)
+        ui.msg_t = 0;                                   /* (the first tap's "HOLD [..] QUICK", REC's) */
+    if (l == LAYER_REC) {                               /* REC: the arming as before the first tap, and the */
+        song.rec = lys.nv.rec;                          /* transport it started stopped again */
+        if (lys.nv.go && transport_req == 1u)
+            transport_req = 0;
+        else if (lys.nv.go && (song.playing || seq_counting()))
+            transport_req = 2;
+        ui.force = 1;
+    }
     ui.lock = (uint8_t)l;
     ui.ly_t0 = (now & ~15u) | 1u | LY_OPEN;
     ui.force = 1;
@@ -182,8 +223,15 @@ static void layer_opened(uint32_t l)
     lys.l = (uint8_t)l;
     lys.trk = song.sel;
     lys.loaded = 0;
+    lys.cook = 0;
+    if (l == LAYER_SEQ || l == LAYER_REC) {             /* the track as it is now (OCT-) */
+        memcpy(tl_open.step, TSEL->step, sizeof tl_open.step);
+        motion_snapshot_track(TSEL, &tl_open.mo);
+    }
     for (k = 0; k < 4u; k++)
-        if (l == LAYER_GLO) {
+        if (l == LAYER_SEQ) {
+            lys.v[k] = TSEL->p[P_SLEN + k];
+        } else if (l == LAYER_GLO) {
             lys.v[k] = trk[k].p[P_MUTE];
             lys.v[4u + k] = trk[k].p[P_LEVEL];
         } else {
@@ -191,6 +239,8 @@ static void layer_opened(uint32_t l)
             lys.v[4u + k] = k < 2u ? TSEL->p[P_CHRD + k] : 0;
         }
     lys.v[8] = song.g[G_BPM];
+    if (l == LAYER_REC)
+        lys.v[0] = ui_rec_prefs;
 }
 
 /* the armed button: 0, or the layer whose button was tapped (let go) */
@@ -252,7 +302,14 @@ static void layer_tap(uint32_t l)
     lys.nv.act = ui.act;
     lys.nv.seq = song.seq_mode;
     memcpy(lys.nv.fam, ui.fam_last, sizeof lys.nv.fam);
-    acted = page_tap(LAYERS[l].btn);
+    lys.nv.rec = song.rec;
+    if (l == LAYER_REC) {                               /* REC: arms / disarms (no page); said nothing: no double tap */
+        uint32_t idle = !song.playing && !seq_counting() && transport_req != 1u;
+        acted = !rec_tap();
+        lys.nv.go = (uint8_t)(idle && transport_req == 1u);
+    } else {
+        acted = page_tap(LAYERS[l].btn);
+    }
     lys.dt_hint = 0;
     if (!((layer_seen >> l) & 1u) && ui.msg_t == m && !name_on() && !ui.confirm && !ui.menu) {
         ui_say("HOLD [", KC[LY_KC[l]].label);
@@ -309,6 +366,84 @@ static void glo_tap(void)
     }
 }
 
+/* SEQ TOOLS: white key place p's action on the selected track (ui_tools.c), "STOP TO EDIT" while a song plays */
+static void tools_key(uint32_t p)
+{
+    const char *m;
+    char n[4];
+    if (!tl_cell(TSEL, p))
+        return;
+    if (chain_busy()) {
+        ui_message("STOP TO EDIT");
+        return;
+    }
+    if (!(m = tl_do(TSEL, p, ui.lane)))
+        return;
+    if (p == TL_COOK && lys.cook < 99u) {               /* "COOKED 3": the third since the layer opened */
+        lys.cook++;
+        fmt_int(n, lys.cook);
+        ui_say("COOKED ", n);
+    } else {
+        ui_message(m);
+    }
+    if (!lys.loaded)                                    /* (the first one: how to take it back) */
+        str_cpy(ui.msg2, "[SAVE] HOLD TO UNDO", sizeof ui.msg2);
+    lys.loaded = 1;
+    ui.force = 1;
+}
+
+/* REC: CLEAR, the selected track's steps and automation (and ARP's latched chord): one undo (SAVE held), no dialog,
+ * as SEQ TOOLS' CLEAR (up to 1.1.4 REC held on SEQ asked first, CF_CLEAR_SEQ). Its own undo copy (not a sound load's) */
+static void rec_clear(void)
+{
+    track_t *t = TSEL;
+    if (chain_busy()) {
+        ui_message("STOP TO EDIT");
+        return;
+    }
+    if (seq_is_empty(t) && !motion_count(t)) {
+        ui_message("NOTHING TO CLEAR");
+        return;
+    }
+    undo.keep = 0;
+    load_begin(t, UNDO_PAT);
+    track_defaults_steps(t);
+    load_end(t);
+    t->nheld = 0;
+    t->arp_phys = 0;
+    ui_message("SEQUENCE CLEARED");
+    if (!lys.loaded)                                    /* (the first one: how to take it back) */
+        str_cpy(ui.msg2, "[SAVE] HOLD TO UNDO", sizeof ui.msg2);
+    lys.loaded = 1;
+    ui.force = 1;
+}
+/* REC's settings, row r (G3 A3 B3, KNOB 1..3): CLICK, COUNT-IN, CLICK LEVEL as MENU > AUDIO steps them (ui.c rp_*) */
+static const uint8_t RL_F[3] = {RP_CLICK, RP_COUNTIN, RP_LEVEL};
+static const char *const RL_LABEL[3] = {"CLICK", "COUNT", "LEVEL"};   /* (COUNT-IN: too wide for a card or a key cell) */
+static const uint8_t RL_ICON[3] = {ICON_TEMPO, ICON_TIME, ICON_LEVEL};
+static const char *rl_name(uint32_t r, uint32_t v)
+{
+    return (r == 0u ? CLICK_N : r == 1u ? COUNTIN_N : CLKLVL_N)[v % 3u];
+}
+static void rec_set(uint32_t r, uint32_t v)
+{
+    if (v == rp_get(RL_F[r]))
+        return;
+    rp_put(RL_F[r], v);
+    lys.rp_dirty = 1;
+}
+static void rec_key(uint32_t p)
+{
+    uint32_t r = p - 1u, v;
+    if (p == 0u) {
+        rec_clear();
+        return;
+    }
+    v = (rp_get(RL_F[r]) + 1u) % 3u;                    /* the next value, round */
+    rec_set(r, v);
+    ui_say(r == 2u ? "CLICK LEVEL " : r ? "COUNT-IN " : "CLICK ", rl_name(r, v));
+}
+
 /* a key pressed in layer l (k: 0 = F3 .. 26 = G5) */
 static void layer_key(uint32_t l, uint32_t k)
 {
@@ -334,6 +469,14 @@ static void layer_key(uint32_t l, uint32_t k)
             ui_message("STOP TO EDIT");
         else if (p == LY_INIT)
             confirm_open(CF_INIT_SOUND, song.sel);      /* (the dialog closes the layer) */
+    } else if (l == LAYER_REC) {
+        if (!key_black(k) && p < 4u)
+            rec_key(p);
+    } else if (l == LAYER_SEQ) {
+        if (!key_black(k))
+            tools_key(p);
+        else if (p < NLANE && drum_track(TSEL))
+            ui.lane = (uint8_t)p;                       /* (black keys 1..8: the lane, as on the grid) */
     }
 }
 /* each pass: the keys the layer got now; then GLO's solo: the tracks of its keys still held (perform.c) */
@@ -357,10 +500,11 @@ static void layer_knob(uint32_t k, int32_t s)
     if (l == LAYER_FX) {                                /* perform.c perf_k, not recorded */
         if (k == 3u && !perf_harm_on())
             s = -s;                                     /* DEPTH (100 - perf_k[3]) rises to the right (#40: it fell) */
-        perf_k[k] = (int8_t)clamp(perf_k[k] + s, k ? 0 : -100, 100);
+        perf_k[k] = (int8_t)clamp(perf_k[k] + accel(EN_K1 + k, s, k ? 100 : 200), k ? 0 : -100, 100);   /* (#126) */
     } else if (l == LAYER_GLO) {                        /* T1..T4 LEVEL, recorded as on MIXER */
         int16_t *vp = &trk[k].p[P_LEVEL];
-        *vp = (int16_t)clamp(*vp + s, TP[P_LEVEL].min, TP[P_LEVEL].max);
+        *vp = (int16_t)clamp(*vp + accel(EN_K1 + k, s, TP[P_LEVEL].max - TP[P_LEVEL].min), TP[P_LEVEL].min,
+                             TP[P_LEVEL].max);
         motion_capture(&trk[k], P_LEVEL, *vp);
     } else if (l == LAYER_EDIT) {                       /* ENG, No., FAV */
         if (k == 0u)
@@ -369,11 +513,14 @@ static void layer_knob(uint32_t k, int32_t s)
             edit_load(NENGINES, s);
         else if (k == 2u)
             preset_mark(s > 0);
+    } else if (l == LAYER_REC) {                        /* CLICK, COUNT-IN, LEVEL (KNOB 4: none) */
+        if (k < 3u)
+            rec_set(k, (uint32_t)clamp((int32_t)rp_get(RL_F[k]) + s, 0, 2));
     } else if (l) {                                     /* the page's knobs, wherever the page is */
         uint8_t h = ui.home, pg = ui.page;
         ui.home = 0;
         ui.page = (uint8_t)page_first(LAYERS[l].fam);
-        page_over = l == LAYER_SCL ? &LY_SCL : 0;
+        page_over = ly_page(l);
         edit_param(k, s);
         page_over = 0;
         ui.home = h;
@@ -422,6 +569,29 @@ static uint32_t layer_oct(uint32_t pressed, uint32_t oct)
             if (lys.loaded)
                 undo_swap();                            /* (the copy from its first load) */
             lys.loaded = 0;
+        } else if (lys.l == LAYER_SEQ || lys.l == LAYER_REC) {
+            track_t *t = &trk[lys.trk % NTRK];
+            if (lys.loaded && chain_busy()) {
+                ui_message("STOP TO EDIT");
+            } else {
+                if (lys.loaded) {                       /* (SAVE held then: the tools / the clear again) */
+                    tl_undo_take(t);
+                    memcpy(t->step, tl_open.step, sizeof t->step);
+                    if (motion_replace_track(t, &tl_open.mo))
+                        motion_full = 1;
+                }
+                if (lys.l == LAYER_REC) {               /* REC: the settings as it opened */
+                    lys.rp_dirty |= (uint8_t)(ui_rec_prefs != (uint8_t)lys.v[0]);
+                    ui_rec_prefs = (uint8_t)lys.v[0];
+                    rp_apply();
+                } else {
+                    for (k = 0; k < 4u; k++)
+                        t->p[P_SLEN + k] = lys.v[k];
+                }
+                lys.loaded = 0;
+                lys.cook = 0;
+                ui_message(lys.l == LAYER_REC ? "REC PUT BACK" : "SEQUENCE PUT BACK");
+            }
         } else if (lys.l == LAYER_GLO) {
             for (k = 0; k < NTRK; k++) {
                 trk[k].p[P_MUTE] = lys.v[k];
@@ -445,6 +615,7 @@ static uint32_t layer_oct(uint32_t pressed, uint32_t oct)
 /* lit = in effect now (held, the value, a track sounding), breathing = can be pressed (*br: dark .. ~60 % and
  * back, ~1.1 s, hal/fm1_input.h fm1_led_breath; was a hard 250 ms blink, #119), dark = nothing there */
 static int glo_sounding(uint32_t t) { return !trk[t].p[P_MUTE] && (!perf_solo || ((perf_solo >> t) & 1u)); }
+static int rec_clearable(void) { return !seq_is_empty(TSEL) || motion_count(TSEL) != 0u; }
 static uint32_t layer_leds(uint32_t *br)
 {
     uint32_t k, m = 0, n = 0, l = ui.layer, held = perf_held | perf_latched, ok = perf_avail();
@@ -465,6 +636,13 @@ static uint32_t layer_leds(uint32_t *br)
         } else if (l == LAYER_EDIT && !b) {             /* the engine lit, the others and INIT breathe */
             on = p < NENG_SHOWN && p < LY_INIT && eng_vis(p) == TSEL->eng_req % NENGINES;
             can = p < NENG_SHOWN && p < LY_INIT ? 1u : p == LY_INIT && !chain_busy();
+        } else if (l == LAYER_SEQ) {                    /* the tools breathe (not while a song plays); DRUM: the lane */
+            on = b && p < NLANE && drum_track(TSEL) && p == ui.lane;   /* lit, the other lanes breathe */
+            can = b ? p < NLANE && drum_track(TSEL) : tl_cell(TSEL, p) && !chain_busy();
+        } else if (l == LAYER_REC && !b && p < 4u) {    /* a setting on (LEVEL: the click on) lit, the rest breathe; */
+            on = p == 1u ? rp_get(RP_CLICK) != 0u : p == 2u ? rp_get(RP_COUNTIN) != 0u :   /* CLEAR: something to */
+                 p == 3u && rp_get(RP_CLICK) != 0u;    /* clear, not while a song plays */
+            can = p ? 1u : !chain_busy() && rec_clearable();
         }
         m |= on << k;
         n |= (can & !on) << k;
@@ -641,6 +819,76 @@ static void layer_edit(void)                            /* the engines from F3, 
     engine_sound_row(104);
 }
 
+/* SEQ TOOLS: the white keys' tools, 4 a row from F3 (the whole sequence; RANDOM COOK BEAT; the lane's), on a DRUM
+ * track the lanes of black keys 1..8 under them (the selected one: the selection's fill). A melodic track: the two
+ * rows of the sequence's tools only */
+static const uint8_t TL_ICON[TL_N] = {ICON_CLEAR, ICON_X_REVERSE, ICON_X_LEFT, ICON_X_RIGHT, ICON_PROB, ICON_W_SH,
+    ICON_DRUM, 0, ICON_CLEAR, ICON_X_REVERSE, ICON_STEPS, ICON_PROB};
+static const char *const TL_NAME[TL_N] = {"CLEAR", "REVERSE", "SHIFT", "SHIFT", "RANDOM", "COOK", "BEAT", 0,
+    "CLR", "REV", "FILL", "RND"};
+static void layer_seq(void)
+{
+    uint32_t p, st = chain_busy() ? LS_DIM : LS_OFF, drum = (uint32_t)drum_track(TSEL);
+    char n[3] = {0, 0, 0}, nm[8];
+    for (p = 0; p < TL_N; p++) {
+        if (!tl_cell(TSEL, p))
+            continue;
+        n[0] = W_NOTE[p];
+        str_cpy(nm, TL_NAME[p], sizeof nm);
+        if (p >= TL_LCLR) {                             /* the lane's: "CLR BD" */
+            str_cpy(nm + str_len(nm), " ", 2);
+            str_cpy(nm + str_len(nm), drum_lane_abbr(TSEL, ui.lane), sizeof nm - str_len(nm));
+        }
+        lcell(LC_X(p % 4u), 4 + 32 * (int32_t)(p / 4u), 28, n, TL_ICON[p], 0, nm, st, 0);
+    }
+    for (p = 0; drum && p < NLANE; p++) {               /* the lanes (black keys 1..8): 8 cells of 25 px, 4 px apart */
+        int32_t x = 6 + 29 * (int32_t)p;
+        uint16_t ink, fill = lc_box(x, 100, 25, 18, lc_fill(p == ui.lane % NLANE ? LS_SEL : LS_OFF, &ink));
+        GFX_HOOK_ALIGN(x, 100, x + 25, 118, AL_HV, "tools lane cell name centred");
+        cv_text_in(x, 100 + CAP_IN(S, 18), 25, &AF_S, drum_lane_abbr(TSEL, p), ink, fill);
+    }
+}
+
+/* REC: a row a key (26 px, 4 apart): the key's cell (its note, icon and name), then CLEAR's track and what it holds,
+ * or the setting's three values, the one now with the selection's fill (as MENU > AUDIO steps them) */
+#define LR_KW 78                                         /* the key's cell; the values 46 px each: x 6 .. 234 */
+#define LR_VW 46
+#define LR_H 26
+static void layer_rec(void)
+{
+    uint32_t r, v;
+    char n[3] = {0, 0, 0}, b[16];
+    for (r = 0; r < 4u; r++) {
+        int32_t y = 4 + (LR_H + 4) * (int32_t)r, x = 6, vx = 6 + LR_KW + 4;
+        uint32_t dim = r == 0u && (chain_busy() || !rec_clearable());
+        uint16_t ink, fill = lc_box(x, y, LR_KW, LR_H, lc_fill(dim ? LS_DIM : LS_OFF, &ink));
+        n[0] = W_NOTE[r];
+        GFX_HOOK_ALIGN(0, y, 0, y + LR_H, AL_V, "rec layer key cell on its middle");
+        cv_text_on(x + 5, y + CAP_IN(S, LR_H), &AF_S, n, fill == T_RAISE || fill == T_SURF ? T_MID : ink, fill);
+        GFX_HOOK_ALIGN(0, y, 0, y + LR_H, AL_V, "rec layer key cell on its middle");
+        cv_icon_in(x + 15, y, 0, LR_H, 12, r ? RL_ICON[r - 1u] : ICON_CLEAR, ink, fill);
+        GFX_HOOK_ALIGN(0, y, 0, y + LR_H, AL_V, "rec layer key cell on its middle");
+        cv_text_r(x + LR_KW - 5, y + CAP_IN(S, LR_H), &AF_S, r ? RL_LABEL[r - 1u] : "CLEAR", ink, fill);
+        if (r == 0u) {                                   /* "T2 SEQUENCE" / "T2 EMPTY" (a song playing: why not) */
+            int32_t w = 234 - vx;
+            b[0] = 'T';
+            b[1] = (char)('1' + song.sel);
+            str_cpy(b + 2, rec_clearable() ? " SEQUENCE" : " EMPTY", sizeof b - 2);
+            if (chain_busy())
+                str_cpy(b, "STOP TO EDIT", sizeof b);
+            fill = lc_box(vx, y, w, LR_H, lc_fill(dim ? LS_DIM : LS_OFF, &ink));
+            GFX_HOOK_ALIGN(vx, y, vx + w, y + LR_H, AL_HV, "rec layer clear cell centred");
+            cv_text_in(vx, y + CAP_IN(S, LR_H), w, &AF_S, b, ink, fill);
+            continue;
+        }
+        for (v = 0; v < 3u; v++, vx += LR_VW + 4) {
+            fill = lc_box(vx, y, LR_VW, LR_H, lc_fill(v == rp_get(RL_F[r - 1u]) ? LS_SEL : LS_OFF, &ink));
+            GFX_HOOK_ALIGN(vx, y, vx + LR_VW, y + LR_H, AL_HV, "rec layer value cell centred");
+            cv_text_in(vx, y + CAP_IN(S, LR_H), LR_VW, &AF_S, rl_name(r - 1u, v), ink, fill);
+        }
+    }
+}
+
 static void layer_cards(uint32_t l)
 {
     char val[12];
@@ -673,11 +921,17 @@ static void layer_cards(uint32_t l)
         }
     } else if (l == LAYER_EDIT) {
         engine_columns();
+    } else if (l == LAYER_REC) {                        /* CLICK COUNT-IN LEVEL, an empty card */
+        for (c = 0; c < 3u; c++) {
+            uint32_t v = rp_get(RL_F[c]);
+            draw_column(c, RL_LABEL[c], rl_name(c, v), "", c < 2u && !v ? T_DIM : VAL(c), (int32_t)v * 500, RL_ICON[c]);
+        }
+        draw_column(3, "", "", "", T_THEME, -1, ICON_NONE);
     } else {                                            /* the page's four (SCL: LY_SCL) */
         uint8_t h = ui.home, pg = ui.page;
         ui.home = 0;
         ui.page = (uint8_t)page_first(LAYERS[l].fam);
-        page_over = l == LAYER_SCL ? &LY_SCL : 0;
+        page_over = ly_page(l);
         draw_columns();
         page_over = 0;
         ui.home = h;
@@ -696,6 +950,10 @@ static void draw_layer(void)
                (uint32_t)(trk[0].p[P_MUTE] | trk[1].p[P_MUTE] << 1 | trk[2].p[P_MUTE] << 2 | trk[3].p[P_MUTE] << 3) * 131u;
     else if (l == LAYER_SCL)
         sig += (uint32_t)TSEL->p[P_SCALE] * 31u;
+    else if (l == LAYER_REC)
+        sig += (uint32_t)ui_rec_prefs * 31u + (uint32_t)chain_busy() * 3u + (uint32_t)rec_clearable() * 5u + song.sel * 977u;
+    else if (l == LAYER_SEQ)
+        sig += (uint32_t)drum_track(TSEL) * 31u + ui.lane * 5u + (uint32_t)chain_busy() * 3u + (uint32_t)TSEL->p[P_E0] * 131u + song.sel * 977u;
     else
         sig += snd_id() * 31u + (uint32_t)preset_favorite() * 5u + (uint32_t)chain_busy() * 3u + up_gen * 101u;
     if (ui.force || sig != ui.layer_sig) {
@@ -709,6 +967,10 @@ static void draw_layer(void)
             layer_glo();
         else if (l == LAYER_SCL)
             layer_scl();
+        else if (l == LAYER_SEQ)
+            layer_seq();
+        else if (l == LAYER_REC)
+            layer_rec();
         else
             layer_edit();
         cv_blit(0, Y_GRAPH);

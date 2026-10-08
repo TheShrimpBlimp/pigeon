@@ -25,6 +25,25 @@ HDR = [0x7D, 0x46, 0x4C]
 RC = {1: "size", 2: "header", 3: "data CRC", 4: "flash", 5: "zones"}
 
 
+def printable(b):
+    """bytes from the device as text for the terminal: printable ASCII only (no escape sequences)"""
+    return "".join(chr(c) if 32 <= c < 127 else "?" for c in b)
+
+
+def slot_info(r):
+    """the SMP_INFO reply -> one line per slot; ValueError when it is malformed"""
+    try:
+        n, i, out = r[0], 2, []
+        for k in range(n):
+            nz = r[i]
+            j = r.index(0, i + 1)
+            out.append(f"USR{k + 1}: {'empty' if not nz else f'{nz} zones, {printable(r[i + 1:j])}, {r[j + 1]} KiB'}")
+            i = j + 2
+        return out
+    except (IndexError, ValueError):
+        raise ValueError("malformed SMP_INFO reply from the device") from None
+
+
 def pack7(b):
     """groups of up to 7 bytes, each preceded by their top bits"""
     out = []
@@ -106,13 +125,10 @@ def main():
         slot = int(sys.argv[2]) - 1
     link = Link()
     if cmd == "info":
-        r = link.req(15, [])
-        n, i = r[0], 2
-        for k in range(n):
-            nz = r[i]
-            j = r.index(0, i + 1)
-            print(f"USR{k + 1}: {'empty' if not nz else f'{nz} zones, {bytes(r[i + 1:j]).decode()}, {r[j + 1]} KiB'}")
-            i = j + 2
+        try:
+            print("\n".join(slot_info(link.req(15, []))))
+        except ValueError as e:
+            sys.exit(str(e))
         return
     if cmd == "erase":
         print("erase:", "ok" if link.req(14, [slot], 10)[1] == 0 else "FAILED")

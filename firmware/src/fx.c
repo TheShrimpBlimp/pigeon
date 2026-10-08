@@ -77,6 +77,8 @@ static int32_t lim_env = LIM_T;
  * (usb_fixed_dac). MASTER (0, the default): MASTER before master_out, as always (USB follows the knob) */
 static volatile uint8_t fx_usb_fixed;
 #define MASTER_FULL 4096                /* main.c: the MASTER knob's top, Q12 */
+/* the MASTER pot (ADC 0..1023, smoothed in main.c) to its level, square law: 0 .. 4088 (Q12) */
+static inline uint32_t master_of_pot(uint32_t k10) { return (k10 * k10) >> 8; }
 static __attribute__((noinline)) void usb_fixed_dac(int32_t *out, uint32_t n)   /* audio ISR, after uac_tap */
 {
     uint32_t i;
@@ -179,6 +181,7 @@ static uint32_t div_samples(uint32_t div)
 }
 
 #include "perform.c"                                 /* the FX hold layer's effects (the master) */
+#include "click.c"                                   /* the metronome's click (after the master: audio.c) */
 
 static uint32_t delay_samples(void)
 {

@@ -298,7 +298,8 @@ static void song_setup(void)
     trk[0].p[P_PAN] = -40;                         /* the mix itself stereo */
     trk[1].p[P_PAN] = 40;
 }
-static int32_t song_l[NT], song_r[NT];
+static int32_t song_l[10u * 44100u + CTL], song_r[10u * 44100u + CTL];   /* the longest render (harm_demos: 9.7 s), and
+                                                         * the last block may run past the frames asked */
 static void song_render(uint32_t frames, void (*at)(uint32_t t))
 {
     uint32_t t, i;

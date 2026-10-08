@@ -170,6 +170,287 @@ static void run(uint32_t id, uint32_t until)
     }
 }
 
+/* #126 a turned encoder 0: the toggle times of its A (0) and B (1) contacts; a turn of n detents (dir +1 clockwise:
+ * B A B A from the detent state 0, -1: A B A B), per us a detent, its 4 transitions bunched over w (1 = even) of each,
+ * each edge bouncing (runs of 30..bmax us) for up to bspan us (at most half the way to the next edge) */
+#define ENE 8192
+static struct { uint32_t t[ENE], n, i, s; } enl[2];
+static void en_clear(void) { memset(enl, 0, sizeof enl); }
+static void en_add(uint32_t l, uint32_t t) { if (enl[l].n < ENE && (!enl[l].n || t > enl[l].t[enl[l].n - 1u])) enl[l].t[enl[l].n++] = t; }
+static uint32_t en_turn(uint32_t t0, int32_t n, int32_t dir, double per, double w, uint32_t bspan, uint32_t bmax)
+{
+    int32_t i, j;
+    for (i = 0; i < n; i++)
+        for (j = 0; j < 4; j++) {
+            double f = 0.5 - w / 2 + (j + 0.5) * w / 4, nf = j < 3 ? 0.5 - w / 2 + (j + 1.5) * w / 4 : 1.0 + 0.5 - w / 2 + 0.5 * w / 4;
+            uint32_t t = t0 + (uint32_t)(per * (i + f)), gap = (uint32_t)(per * (nf - f)), l = (uint32_t)((j & 1) ^ (dir > 0)), end;
+            end = t + (bspan < gap / 2u ? bspan : gap / 2u);
+            en_add(l, t);
+            while (bspan && bmax) {          /* bounce: back and forth in pairs, the new level last */
+                uint32_t a = t + 30u + rnd(bmax), b = a + 30u + rnd(bmax);
+                if (b >= end)
+                    break;
+                en_add(l, a);
+                en_add(l, b);
+                t = b;
+            }
+        }
+    return t0 + (uint32_t)(per * n);
+}
+static uint32_t en_at(uint32_t l, uint32_t us)     /* (us only rises between en_clear and the next) */
+{
+    while (enl[l].i < enl[l].n && enl[l].t[enl[l].i] <= us) {
+        enl[l].i++;
+        enl[l].s ^= 1u;
+    }
+    return enl[l].s;
+}
+/* the TIMER5 scan of encoder 0 (A on its column, B on its own) up to `until` us; the steps it counted */
+static int32_t en_run(uint32_t until)
+{
+    const uint8_t *m = FM1_ENC[0];
+    uint32_t us, col = 0;
+    for (us = 0; us < until; us += TICK_US) {
+        fm1_in.raw[col] = 0;
+        if (col == m[0])
+            fm1_in.raw[col] |= (uint8_t)(en_at(0, us) << m[1]);
+        if (col == m[2])
+            fm1_in.raw[col] |= (uint8_t)(en_at(1, us) << m[3]);
+        col = col + 1u == FM1_NCOL ? 0u : col + 1u;
+        if (!col)
+            fm1__frame();
+    }
+    return fm1_in.enc_steps[0];
+}
+
+/* The power-on LED sweep (hal/fm1_led_anim.h, fm1_led_anim_start) through fm1_input_tick, from the trace of the line
+ * writes: each LED's state each scan frame (lit: the lines left on for its column; the glow: its dim pulse alone).
+ * Checked, with the idle glow (LEDS DIM HI), without (OFF), and with a key pressed half way:
+ *   - it runs FM1_ANIM_FRAMES frames (~0.70 s) and its end picture, then fm1_led_anim_on() is 0 (a press: the frame after);
+ *   - every LED, every frame, as its level asks (an own first order sigma-delta, lit frames /64; the glow under them
+ *     or alone): exactly; over any 32 frames its lit frames within 1 of the level's sum; a dark run between lit frames
+ *     at a level of 4 /64 or more <= 16 frames (~18 ms);
+ *   - the picture: one peak at a time on the keys, falling away from it on both sides (a bright head, a fading tail),
+ *     the head full and reaching every key left to right in place order (white and black interleaved), a tail of 4..6
+ *     keys over the glow; the buttons dark until the keys are nearly done, then up to a quarter of lit and down;
+ *   - the end: nothing lit, the glow on every LED (DIM) or none (OFF), breath / mid clear: the idle glow as the UI
+ *     shows it; then the tick as before (the same line writes as with no sweep ever started).
+ * Prints the sweep: a row every 32 frames, the 27 keys left to right and the buttons' level. */
+static void anim_test(void)
+{
+    enum { NF = FM1_ANIM_FRAMES + 48u };
+    static uint8_t on[NF][FM1_NKEY], gl[NF][FM1_NKEY], lvq[NF][FM1_NKEY];
+    static int32_t fa[NF];
+    uint32_t g;
+    for (g = 0; g < 3u; g++) {                       /* 0 DIM (the glow), 1 OFF (no glow), 2 DIM, a key down at frame 200 */
+        uint32_t litcur[FM1_NCOL] = {0}, fr = 0, t, i, c, r, bad = 0, badsd = 0, badrun = 0, frames_on = 0, end_fr = 0;
+        uint32_t acc[FM1_NKEY], idle_bad = 0, tr_n = 0;
+        uint32_t tr[3u * FM1_NCOL][LED_NW + 1u];
+        char what[128];
+        reset();
+        fm1_led_dim_level(0);
+        FM1_PR(FM1_PA, FM1_IN) = FM1_PR(FM1_PB, FM1_IN) = 0xFFFFFFFFu;   /* rows open */
+        memset(fm1_led, 0x1E, sizeof fm1_led);         /* (whatever was there: the start clears it) */
+        memset(fm1_led_dim, 0x1E, sizeof fm1_led_dim);
+        memset(fm1_led_breath, 0x02, sizeof fm1_led_breath);
+        memset(on, 0, sizeof on);
+        memset(gl, 0, sizeof gl);
+        memset(lvq, 0, sizeof lvq);
+        host_step = 1u;
+        host_bus = 1u;
+        while (fm1__tick_col != 3u)                    /* (started mid-frame) */
+            fm1_input_tick();
+        fm1_led_anim_start(g != 1u);
+        for (i = 0; i < NF; i++)
+            fa[i] = -1;
+        for (t = 0; fr + 1u < NF; t++) {
+            uint32_t p = fm1__tick_col, n, run = fm1__an_f != 0u, f = fm1__an_f - 1u, relit, pulse;
+            if (g == 2u && fr == 200u)
+                fm1_in.notes = 1u << 5;               /* a key down */
+            led_nw = 0;
+            fm1_input_tick();
+            n = fm1__tick_col;
+            relit = n == 0u && run;                    /* the sweep's frame: column 0 written again */
+            pulse = led_nw - relit == 4u ? led_w[1] & ~litcur[p] : 0u;   /* column p's pulse, of frame fr */
+            for (r = 1; r < 5u; r++)
+                if (FM1_KEYMAP[r][p] >= 0)
+                    gl[fr][FM1_KEYMAP[r][p]] = (uint8_t)((pulse >> r) & 1u);
+            if (n == 0u) {
+                fr++;
+                if (run) {
+                    fa[fr] = (int32_t)f;
+                    frames_on++;
+                    if (!fm1_led_anim_on() && !end_fr)
+                        end_fr = fr;
+                }
+            }
+            litcur[n] = led_w[led_nw - 1u];
+            for (r = 1; r < 5u; r++)
+                if (FM1_KEYMAP[r][n] >= 0)
+                    on[fr][FM1_KEYMAP[r][n]] = (uint8_t)((litcur[n] >> r) & 1u);
+            if (end_fr && fr >= end_fr + 4u && tr_n < 3u * FM1_NCOL) {   /* idle: three frames of writes */
+                tr[tr_n][0] = led_nw;
+                for (i = 0; i < led_nw; i++)
+                    tr[tr_n][1u + i] = led_w[i];
+                tr_n++;
+            }
+        }
+        /* the model: the same levels, the same sigma-delta, frame by frame */
+        for (i = 0; i < FM1_NKEY; i++)
+            acc[i] = FM1_ANIM_FULL / 2u;
+        for (fr = 1; fr + 1u < NF; fr++) {
+            if (fa[fr] < 0)
+                continue;
+            for (i = 0; i < FM1_NKEY; i++) {
+                uint32_t f = (uint32_t)fa[fr], q, lit;
+                if (g == 2u && fr > 200u)              /* (the key down: the end at once) */
+                    f = FM1_ANIM_FRAMES;
+                q = fm1_anim_level(f, i, g != 1u);
+                acc[i] += q & 0x7Fu;
+                lit = acc[i] >= FM1_ANIM_FULL;
+                if (lit)
+                    acc[i] -= FM1_ANIM_FULL;
+                lvq[fr][i] = (uint8_t)q;
+                bad += on[fr][i] != lit || gl[fr][i] != ((q & FM1_ANIM_GLOW) && !lit);
+            }
+        }
+        /* over any 32 frames: lit frames against the level's sum; the dark runs at 4 /64 and up */
+        for (i = 0; i < FM1_NKEY; i++) {
+            uint32_t s = 0, k = 0, run = 0;
+            for (fr = 1; fr + 32u < NF; fr++) {
+                if (fa[fr] < 0 || fa[fr + 31u] < 0)
+                    continue;
+                for (k = s = 0, t = fr; t < fr + 32u; t++) {
+                    s += lvq[t][i] & 0x7Fu;
+                    k += on[t][i];
+                }
+                badsd += (k * 64u + 64u < s) || (k * 64u > s + 64u);
+            }
+            for (fr = 1; fr < NF; fr++) {
+                if (fa[fr] < 0 || (lvq[fr][i] & 0x7Fu) < 4u || on[fr][i]) {
+                    run = 0;
+                    continue;
+                }
+                badrun += ++run > 16u;
+            }
+        }
+        if (g == 2u) {
+            snprintf(what, sizeof what, "power-on sweep: a key down at frame 200: done the next frame, the glow left");
+            check(what, !bad && end_fr == 201u && frames_on == 201u);
+            fm1_in.notes = 0;
+            continue;
+        }
+        snprintf(what, sizeof what, "power-on sweep %s: %u frames (%u ms) and its end, then fm1_led_anim_on() 0",
+                 g ? "OFF" : "DIM", (unsigned)(frames_on - 1u), (unsigned)((frames_on - 1u) * FM1_NCOL * TICK_US / 1000u));
+        check(what, frames_on == FM1_ANIM_FRAMES + 1u && !fm1_led_anim_on());
+        check("  every LED every frame as its level asks: lit frames (sigma-delta), the glow under / alone", !bad);
+        check("  32 frames: lit frames within 1 of the level; at 4 /64 and up a dark run <= 16 frames", !badsd && !badrun);
+        {   /* the picture (DIM / OFF alike): over the sweep's frames, the keys' levels by place */
+            uint32_t peak_fr[FM1_ANIM_NKEY] = {0}, peak[FM1_ANIM_NKEY] = {0}, k, badpic = 0, tmin = 99, tmax = 0, bmax = 0, bbad = 0;
+            for (fr = 1; fr < NF; fr++) {
+                int32_t f = fa[fr];
+                uint32_t lv[FM1_ANIM_NKEY], top = 0, j, tail = 0;
+                if (f < 0 || f >= (int32_t)FM1_ANIM_FRAMES)
+                    continue;
+                for (k = 0; k < FM1_ANIM_NKEY; k++) {
+                    lv[k] = fm1_anim_level((uint32_t)f, 14u + k, g != 1u) & 0x7Fu;
+                    if (lv[k] > peak[k]) {
+                        peak[k] = lv[k];
+                        peak_fr[k] = (uint32_t)f;
+                    }
+                    if (lv[k] > lv[top])
+                        top = k;
+                }
+                for (j = top; j > 0; j--)              /* falling away from the head on both sides */
+                    badpic += lv[j - 1u] > lv[j];
+                for (j = top; j + 1u < FM1_ANIM_NKEY; j++)
+                    badpic += lv[j + 1u] > lv[j];
+                for (j = top; j > 0 && lv[j - 1u]; j--)
+                    tail++;                            /* keys over the glow behind the head */
+                if (lv[top] >= 48u && top >= 6u && top + 3u < FM1_ANIM_NKEY) {   /* (the head well on the keyboard) */
+                    tmin = tail < tmin ? tail : tmin;
+                    tmax = tail > tmax ? tail : tmax;
+                }
+                {
+                    uint32_t b = fm1_anim_level((uint32_t)f, 0, g != 1u) & 0x7Fu;
+                    static uint32_t bprev;
+                    if (f < (int32_t)FM1_ANIM_BTN0)
+                        bbad += b != 0u;
+                    else if (f <= (int32_t)FM1_ANIM_BTN_PK)
+                        bbad += b < bprev;
+                    else
+                        bbad += b > bprev;
+                    bprev = b;
+                    bmax = b > bmax ? b : bmax;
+                }
+            }
+            for (k = 0; k < FM1_ANIM_NKEY; k++) {
+                badpic += peak[k] != FM1_ANIM_FULL;
+                badpic += k && (peak_fr[k] <= peak_fr[k - 1u] || FM1_ANIM_X[k] <= FM1_ANIM_X[k - 1u]);
+            }
+            snprintf(what, sizeof what, "  the picture: one head, full, left to right in place order; a tail of %u..%u keys",
+                     (unsigned)tmin, (unsigned)tmax);
+            check(what, !badpic && tmin >= 4u && tmax <= 6u);
+            snprintf(what, sizeof what, "  the buttons: dark until frame %u, up to %u /64, down to the end",
+                     (unsigned)FM1_ANIM_BTN0, (unsigned)bmax);
+            check(what, !bbad && bmax == 16u);
+        }
+        {   /* the end: the idle picture's glow (DIM) or dark (OFF) */
+            uint32_t ok = 1, all = 0;
+            for (c = 0; c < FM1_NCOL; c++) {
+                uint32_t m = 0;
+                for (r = 1; r < 5u; r++)
+                    m |= FM1_KEYMAP[r][c] >= 0 ? 1u << r : 0u;
+                all |= m;
+                ok &= !fm1_led[c] && fm1_led_dim[c] == (g ? 0u : m) && !fm1_led_breath[c] && !fm1_led_mid[c];
+            }
+            for (fr = end_fr + 1u; fr < NF - 1u; fr++)
+                for (i = 0; i < FM1_NKEY; i++)
+                    ok &= !on[fr][i] && gl[fr][i] == (g ? 0u : 1u);
+            snprintf(what, sizeof what, "  the end: nothing lit, %s; nothing breathing or mid", g ? "dark (no glow)" : "the glow on every LED");
+            check(what, ok && all);
+        }
+        {   /* idle: the same writes as a scan that never ran the sweep (the same LEDs) */
+            uint32_t j;
+            uint16_t f0 = fm1__an_f;
+            while (fm1__tick_col != FM1_NCOL - 1u)    /* (traced from the tick that lights column 0) */
+                fm1_input_tick();
+            for (t = 0; t < tr_n; t++) {
+                led_nw = 0;
+                fm1_input_tick();
+                idle_bad += tr[t][0] != led_nw || (led_nw != 2u && led_nw != 4u);
+                for (j = 0; j < led_nw && j < tr[t][0]; j++)
+                    idle_bad += tr[t][1u + j] != led_w[j];
+            }
+            snprintf(what, sizeof what, "  then the tick as before: %u ticks, the same line writes, no extra one", (unsigned)tr_n);
+            check(what, !idle_bad && tr_n == 3u * FM1_NCOL && !f0);
+        }
+        if (!g) {                                      /* the sweep, a row every 32 frames: the keys F3..G5 left to right */
+            static const char SH[] = " .:-=+*#%@";    /* the glow '.', then lit frames /64 by eighths */
+            uint32_t f;
+            printf("power-on sweep (DIM): frame  ms  keys F3..G5 (black and white by place)  buttons\n");
+            for (f = 0; f <= FM1_ANIM_FRAMES; f += 32u) {
+                char row[FM1_ANIM_NKEY + 1u], b;
+                uint32_t k, q;
+                for (k = 0; k < FM1_ANIM_NKEY; k++) {
+                    q = fm1_anim_level(f, 14u + k, 1);
+                    row[k] = (q & 0x7Fu) ? SH[2u + ((q & 0x7Fu) - 1u) * 8u / 64u] : q ? SH[1] : SH[0];
+                }
+                row[FM1_ANIM_NKEY] = 0;
+                q = fm1_anim_level(f, 0, 1);
+                b = (q & 0x7Fu) ? SH[2u + ((q & 0x7Fu) - 1u) * 8u / 64u] : q ? SH[1] : SH[0];
+                printf("  %4u %4u  |%s|  %c %2u/64\n", (unsigned)f, (unsigned)(f * FM1_NCOL * TICK_US / 1000u), row, b,
+                       (unsigned)(q & 0x7Fu));
+            }
+        }
+    }
+    host_step = 2400u;
+    host_bus = 0;
+    memset(fm1_led, 0, sizeof fm1_led);
+    memset(fm1_led_dim, 0, sizeof fm1_led_dim);
+    memset(fm1_led_breath, 0, sizeof fm1_led_breath);
+}
+
 int main(void)
 {
     uint32_t id, k, lat_max = 0, lat_sum = 0, lat_n = 0, worst_rel = 0, bad = 0;
@@ -340,6 +621,57 @@ int main(void)
                 }
             }
         check("#63 a still knob: one contact chattering or both lost together never steps", !moved);
+    }
+    {   /* #126 turns at speed through the scan (a frame ~1.1 ms): every detent counted, 12-detent turns over every phase
+         * of the scan; slow turns with bouncy contacts; fast ones each way; a reversal. Was: the decoder took a state
+         * only when two frames in a row saw it, so above ~110 detents/s (even) or ~60/s (bunched) whole clicks went
+         * missing (12 at 150/s -> ~8, at 200/s -> 0) */
+        static const double EVEN[] = {50, 100, 150, 200, 250, 300}, BUNCH[] = {50, 100, 150};
+        static const double SLOW[] = {3, 8, 20, 40};
+        uint32_t r, ph, d, bad = 0, n = 0, worst = 0;
+        char what[112];
+        for (r = 0; r < 2u * 6u; r++)
+            for (ph = 0; ph < 40u; ph++)
+                for (d = 0; d < 2u; d++) {
+                    int32_t dir = d ? -1 : 1, s;
+                    double rate = r < 6u ? EVEN[r] : BUNCH[(r - 6u) % 3u];
+                    if (r >= 6u + 3u)
+                        continue;
+                    reset();
+                    en_clear();
+                    s = en_run(en_turn(5000u + ph * 53u, 12, dir, 1e6 / rate, r < 6u ? 1.0 : 0.5, 0u, 0u) + 20000u);
+                    n++;
+                    if (s != 12 * dir) {
+                        bad++;
+                        if ((uint32_t)(s * dir < 12 ? 12 - s * dir : s * dir - 12) > worst)
+                            worst = (uint32_t)(s * dir < 12 ? 12 - s * dir : s * dir - 12);
+                    }
+                }
+        printf("encoder at speed: %u turns of 12 detents, %u miscounted (worst by %u)\n", (unsigned)n, (unsigned)bad, (unsigned)worst);
+        check("#126 12-detent turns up to 300 detents/s (even) / 150/s (bunched in half a click): every detent", !bad);
+        for (bad = 0, r = 0; r < 4u; r++)
+            for (ph = 0; ph < 20u; ph++)
+                for (d = 0; d < 2u; d++) {
+                    int32_t dir = d ? -1 : 1;
+                    reset();
+                    en_clear();
+                    bad += en_run(en_turn(5000u + ph * 71u, 6, dir, 1e6 / SLOW[r], ph & 1u ? 1.0 : 0.4, 1500u, 400u) + 20000u) != 6 * dir;
+                }
+        snprintf(what, sizeof what, "#126 slow turns (3..40 detents/s), contacts bouncing 1.5 ms: one step a click (%u off)", (unsigned)bad);
+        check(what, !bad);
+        for (bad = 0, ph = 0; ph < 40u; ph++) {
+            uint32_t t;
+            int32_t s1;
+            reset();
+            en_clear();
+            t = en_turn(5000u + ph * 37u, 8, 1, 1e6 / 120.0, 0.7, 200u, 60u);   /* 8 right, 6 left at once */
+            s1 = en_run(t + 2000u);
+            t = en_turn(t + 2000u, 6, -1, 1e6 / 120.0, 0.7, 200u, 60u);
+            reset();                                    /* (replayed from the start: the same scan) */
+            enl[0].i = enl[1].i = enl[0].s = enl[1].s = 0;
+            bad += s1 != 8 || en_run(t + 20000u) != 2;
+        }
+        check("#126 120 detents/s, bouncing 0.2 ms: 8 right then 6 left at once -> 8, then 2", !bad);
     }
 
     {   /* the LEDs through fm1_input_tick (the GPIO as memory): each tick writes the lines dark (the key read),
@@ -570,6 +902,85 @@ int main(void)
                      (unsigned)(wmax * 1000u / FM1_TICKS_PER_US), (unsigned)(T * 1000u / FM1_TICKS_PER_US));
             check(what, wmin * 10u >= T * 7u && wmax * 10u <= T * 13u);
         }
+        for (bi = 0; bi < 2u; bi++) {                   /* 1.1 the mid level (fm1_led_mid, the DRUM grid's beats): HI, LO */
+            enum { MF = 240u };                         /* (a multiple of 8 and 12) */
+            static uint32_t on[MF][FM1_NCOL][5];
+            const uint32_t lo = bi, N = lo ? FM1_LED_MID_N_LO : FM1_LED_MID_N, TICK = FM1_LED_TICK_US * FM1_TICKS_PER_US;
+            uint32_t t, f, c, r, i, bad = 0, others = 0, nlit = 0, gap = 0, last = ~0u, glow = 0, lit = 0, mean, dark = 0;
+            uint32_t lastw = 0, lastt = 0, tstart;
+            uint64_t sum6 = 0, litsum = 0;
+            char what[160];
+            reset();
+            fm1_led_dim_level(lo);
+            FM1_PR(FM1_PA, FM1_IN) = FM1_PR(FM1_PB, FM1_IN) = 0xFFFFFFFFu;
+            memset(fm1_led, 0, sizeof fm1_led);
+            memset(fm1_led_dim, 0, sizeof fm1_led_dim);
+            memset(fm1_led_breath, 0, sizeof fm1_led_breath);
+            memset(fm1_led_mid, 0, sizeof fm1_led_mid);
+            fm1_led[7] = 1u << 3;                       /* the reference: lit */
+            fm1_led_dim[6] = 1u << 1;                   /* column 6 row 1: the mid level over the glow (as ui_leds) */
+            fm1_led_mid[6] = 1u << 1;
+            fm1_led_mid[5] = 1u << 2;                   /* column 5 row 2: mid alone (lit frames, dark between) */
+            host_step = 1u;
+            host_bus = 1u;
+            for (t = 0; t < 20u * FM1_NCOL || fm1__tick_col; t++)
+                fm1_input_tick();
+            memset(on, 0, sizeof on);
+            latch_lit = 0;
+            tstart = host_now + TICK;
+            for (t = 0; t <= MF * FM1_NCOL; t++) {
+                uint32_t p = fm1__tick_col, pre;
+                f = t / FM1_NCOL;
+                if (host_now < tstart + t * TICK)
+                    host_now = tstart + t * TICK;
+                led_nw = 0;
+                fm1_input_tick();
+                if (t) {
+                    uint32_t fl = (t - 1u) / FM1_NCOL;
+                    for (r = 1; r < 5u; r++)
+                        on[fl][p][r] += (lastw >> r & 1u) * (led_wt[0] - lastt);
+                }
+                if (t == MF * FM1_NCOL)
+                    break;
+                pre = fm1_led[p] | fm1_led_dim[p] | fm1_led_mid[p];
+                for (i = 0; i + 1u < led_nw; i++) {
+                    bad += (led_w[i] & ~pre) != 0u;
+                    for (r = 1; r < 5u; r++)
+                        on[f][p][r] += (led_w[i] >> r & 1u) * (led_wt[i + 1u] - led_wt[i]);
+                }
+                lastw = led_w[led_nw - 1u];
+                lastt = led_wt[led_nw - 1u];
+            }
+            for (f = 0; f < MF; f++)
+                litsum += on[f][7][3];
+            lit = (uint32_t)(litsum / MF);
+            for (f = 0; f < MF; f++) {
+                uint32_t a = on[f][6][1] * 2u >= lit, b = on[f][5][2] * 2u >= lit;
+                sum6 += on[f][6][1];
+                bad += a != b;                          /* in step on both columns */
+                if (a) {
+                    nlit++;
+                    if (last != ~0u && f - last != N) gap++;
+                    last = f;
+                    bad += on[f][6][1] * 10u < lit * 9u || on[f][5][2] * 10u < lit * 9u;   /* as lit */
+                } else {
+                    glow += on[f][6][1] > 0u && on[f][6][1] * 8u < lit;   /* the glow between */
+                    dark += on[f][5][2] == 0u;                            /* mid alone: dark between */
+                }
+                for (c = 0; c < FM1_NCOL; c++)
+                    for (r = 1; r < 5u; r++)
+                        others += on[f][c][r] && !((c == 7u && r == 3u) || (c == 6u && r == 1u) || (c == 5u && r == 2u));
+            }
+            mean = (uint32_t)(sum6 * 1000u / ((uint64_t)lit * MF));
+            snprintf(what, sizeof what, "mid level %s: lit 1 frame in %u, evenly (every %u frames, ~%u Hz), the glow between, in step",
+                     lo ? "LO" : "HI", (unsigned)N, (unsigned)N, (unsigned)(1000000u / (N * FM1_NCOL * FM1_LED_TICK_US)));
+            check(what, !bad && !others && !latch_lit && nlit == MF / N && !gap && glow == MF - nlit && dark == MF - nlit);
+            snprintf(what, sizeof what, "  its level %u.%u %% of lit (1/%u + the glow), above the glow, below a breath's peak",
+                     (unsigned)(mean / 10u), (unsigned)(mean % 10u), (unsigned)N);
+            check(what, mean * N >= 1000u && mean * N <= 1000u + 1000u * N / 12u && mean * 256u < (lo ? FM1_LED_BREATH_PK_LO : FM1_LED_BREATH_PK) * 1000u);
+            memset(fm1_led_mid, 0, sizeof fm1_led_mid);
+        }
+        anim_test();
         memset(fm1_led_breath, 0, sizeof fm1_led_breath);
         host_bus = 0;
         host_step = 2400u;

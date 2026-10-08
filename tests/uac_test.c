@@ -3,15 +3,32 @@
 /* Host test of the USB audio input in src/usb.c (FELUCCA_UAC):
  *   descriptors  the configuration parsed as a host does: lengths, interface and endpoint counts,
  *                class codes, the UAC1 chain (AC header collection, terminals, AS general, type I
- *                format, the isochronous endpoint), the IADs; with and without CDC (-DT_CDC=0/1)
+ *                format: 44100 and 48000 Hz, the isochronous endpoint: 49 frames), the IADs; with and
+ *                without CDC (-DT_CDC=0/1)
  *   ring         uac_render_start / uac_tap (the audio ISR) against uac_packet (TIMER5): renders of 256
  *                frames at the I2S rate, as late as the load makes them, packets at 1 kHz: sizes 43..46,
- *                44.1 on average, every frame delivered in order, then an underrun (repeats), an
- *                overrun (drops, the ring never overfills) and a restart.
+ *                44.1 on average, every frame delivered in order (bit for bit: 44.1 kHz is not resampled),
+ *                then an underrun (repeats), an overrun (drops, the ring never overfills) and a restart.
+ *   rate         SET_CUR's value -> the rate (uac_rate_set), GET_CUR / MIN / MAX answers.
+ *   resampler    44.1 -> 48 kHz (uac_tap48, uac_fir.h): every output frame against a double-precision
+ *                resampler with the prototype computed here (sinc x Kaiser, not read from the table);
+ *                the response (20 Hz .. 20 kHz), SNR of sines at -1 dBFS (in band <= 20 kHz: the error
+ *                after a fitted sine, through an FFT), the cost (instructions / ns per frame).
+ *   ring 48      the same stream tests at 48 kHz: packets of 47..49 (48 on average), every resampled frame
+ *                in order (against the reference), a fast and a slow I2S clock (adj up / down), the switch
+ *                44.1 -> 48 -> 44.1 mid-stream (silence, primed again, then clean).
  * The SIE is never touched (uac_service and usb_poll are not called). */
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 #ifndef HALF_FRAMES
 #error "-DHALF_FRAMES=n (src/core.h; run_tests.sh passes it)"
 #endif
@@ -48,7 +65,8 @@ static void test_descriptors(void)
     char name[96];
 
     check("device descriptor: 18 bytes, type 1, EP0 64", DEV_DESC[0] == 18 && DEV_DESC[1] == 1 && DEV_DESC[7] == 64);
-    check("bcdDevice bumped for the audio input (x.1x)", (DEV_DESC[12] & 0xF0u) == 0x10u && DEV_DESC[13] == 3);
+    check("bcdDevice bumped for the audio input at 44.1 / 48 kHz (x.2x)", (DEV_DESC[12] & 0xF0u) == 0x20u &&
+          DEV_DESC[13] == 3);
     check(T_CDC ? "device class misc / IAD (EF 02 01)" : "device class 0 (per interface)",
           T_CDC ? DEV_DESC[4] == 0xEF && DEV_DESC[5] == 2 && DEV_DESC[6] == 1 : DEV_DESC[4] == 0);
     check("configuration: type 2, wTotalLength = the bytes sent", c[1] == 2 && total == n);
@@ -123,8 +141,8 @@ static void test_descriptors(void)
                 if (d[2] == 1)
                     asg_ok = d[0] == 7 && d[3] == 2 && le16(d + 5) == 1u;
                 else if (d[2] == 2)
-                    fmt_ok = d[0] == 11 && d[3] == 1 && d[4] == 2 && d[5] == 2 && d[6] == 16 && d[7] == 1 &&
-                             (d[8] | d[9] << 8 | d[10] << 16) == 44100;
+                    fmt_ok = d[0] == 14 && d[3] == 1 && d[4] == 2 && d[5] == 2 && d[6] == 16 && d[7] == 2 &&
+                             (d[8] | d[9] << 8 | d[10] << 16) == 44100 && (d[11] | d[12] << 8 | d[13] << 16) == 48000;
             }
             break;
         case 0x25:
@@ -152,8 +170,8 @@ static void test_descriptors(void)
     check("output terminal 2: USB streaming, source 1", ot_ok);
     check("AS alt 0 has no endpoint", alt0_ok);
     check("AS general: terminal 2, PCM", asg_ok);
-    check("type I format: 2 ch, 2-byte subframe, 16 bit, 44100 Hz only", fmt_ok);
-    check("EP 0x84: isochronous async, 184 B (46 frames), every frame, alt 1", iso_ok);
+    check("type I format: 2 ch, 2-byte subframe, 16 bit, 44100 and 48000 Hz", fmt_ok);
+    check("EP 0x84: isochronous async, 196 B (49 frames), every frame, alt 1", iso_ok && UA_MAXF == 49u);
     check("CS endpoint: sampling frequency control", csep_ok);
     check("MIDI bulk endpoints 0x01 / 0x81 unchanged", midi_ok == 2);
     snprintf(name, sizeof name, "IADs: %s", T_CDC ? "audio IF 0-2, CDC IF 3-4" : "none");
@@ -164,7 +182,8 @@ static void test_descriptors(void)
 /* time in ns. The producer renders HALF_FRAMES frames at FS_DEV, a render taking `rend` ns in
  * HALF_FRAMES / 32 blocks of 32 (the samples count up: L = n, R = ~n, so the order can be checked); the consumer
  * takes one packet per ms. */
-#define FS_DEV 44117.6
+static double fs_dev = 44117.6;                       /* the I2S rate (DAC_TICKS: 24 MHz / 544) */
+#define FS_DEV fs_dev
 static uint32_t prod_n, cons_n, cons_bad, cons_rep, cons_zero, sizes[64], npk;
 static uint32_t last_frame;
 static int32_t blk[64];
@@ -179,9 +198,15 @@ static void render_block(void)
     uac_tap(blk, 32);
 }
 
+static void take_packet48(void);
 static void take_packet(void)
 {
-    uint32_t d[UA_MAXF + 2], n = uac_packet(d), i;
+    uint32_t d[UA_MAXF + 2], n, i;
+    if (uac.r48) {
+        take_packet48();
+        return;
+    }
+    n = uac_packet(d);
     sizes[n]++;
     npk++;
     for (i = 0; i < n; i++) {
@@ -207,6 +232,7 @@ static void take_packet(void)
     }
 }
 
+static void on_prime(void);
 /* run for `ms`; renders take `rend_ns` (or vary with the load when 0); consumer / producer can be paused */
 static uint64_t now_ns, next_half, next_pkt;
 static uint32_t blocks_left;
@@ -233,9 +259,12 @@ static void run(uint32_t ms, uint64_t rend_ns, int produce, int consume)
         if (now_ns == next_half) {
             next_half += (uint64_t)((double)HALF_FRAMES / FS_DEV * 1e9);
             if (produce) {
+                int primed = uac.go && uac.ring48 == uac.r48;
                 lcg = lcg * 1103515245u + 12345u;
                 rend_len = rend_ns ? rend_ns : REND_MIN + (lcg >> 8) % (REND_MAX - REND_MIN);
                 uac_render_start();
+                if (!primed && uac.go)
+                    on_prime();
                 blocks_left = HALF_FRAMES / 32u;
                 next_block = now_ns + rend_len / blocks_left;
             }
@@ -314,11 +343,455 @@ static void test_ring(void)
           uac.underruns + uac.overruns == base_p);
 }
 
+/* ------------------------------------------------------------------ the rate --- */
+static void test_rate(void)
+{
+    static const struct { uint32_t hz; uint8_t r48; } T[] = {
+        {44100, 0}, {48000, 1}, {44100, 0}, {32000, 0}, {46049, 0}, {46050, 1}, {96000, 1}, {0, 0}};
+    uint32_t i, ok = 1;
+    memset(&uac, 0, sizeof uac);
+    for (i = 0; i < sizeof T / sizeof T[0]; i++) {
+        uac.go = 1;
+        uac.pkts = 7;
+        uac_rate_set(T[i].hz);
+        ok &= uac.r48 == T[i].r48;
+        if (i && T[i].r48 != T[i - 1].r48)
+            ok &= !uac.go && !uac.pkts;                 /* a change restarts the stream */
+        else if (i)
+            ok &= uac.go && uac.pkts == 7;              /* the same rate again: nothing happens */
+    }
+    check("SET_CUR: 44100 / 48000, the nearer of the two; a change re-primes", ok);
+}
+
+/* --------------------------------------------------------------- the resampler --- */
+/* the prototype computed here (as tools/gen_uac_fir.py describes it), not read from the table */
+#define RL 160
+#define RN 24
+static double H[RL * RN];
+
+static double bessel_i0(double x)
+{
+    double s = 1, t = 1;
+    int k;
+    for (k = 1; k < 60; k++) {
+        t *= (x / (2.0 * k)) * (x / (2.0 * k));
+        s += t;
+    }
+    return s;
+}
+
+static void proto_init(void)
+{
+    const int n = RL * RN;
+    const double fc = 22000.0 / (44100.0 * RL), beta = 9.0;
+    double sum = 0;
+    int i;
+    for (i = 0; i < n; i++) {
+        double t = i - (n - 1) / 2.0, a = 2.0 * i / (n - 1) - 1.0, x = 2 * fc * t;
+        double sinc = x == 0 ? 1.0 : sin(M_PI * x) / (M_PI * x);
+        H[i] = 2 * fc * sinc * bessel_i0(beta * sqrt(1 - a * a)) / bessel_i0(beta);
+        sum += H[i];
+    }
+    for (i = 0; i < n; i++)
+        H[i] *= RL / sum;
+}
+
+/* output frame k of the double-precision resampler on input frames x(0), x(1), .. (x(< 0) = 0) */
+static double ref_out(uint64_t k, double (*x)(int64_t, void *), void *ctx)
+{
+    uint64_t t = k * 147u;
+    int64_t base = (int64_t)(t / RL);
+    uint32_t p = (uint32_t)(t % RL), j;
+    double y = 0;
+    for (j = 0; j < RN; j++)
+        if (base - (int64_t)j >= 0)
+            y += H[p + RL * j] * x(base - (int64_t)j, ctx);
+    return y;
+}
+
+static int32_t s16r(double v)
+{
+    v = floor(v + 0.5);
+    return v > 32767 ? 32767 : v < -32768 ? -32768 : (int32_t)v;
+}
+
+/* the C resampler alone (uac_tap with a ring primed for 48 kHz), drained after each block */
+static void rs_reset(void)
+{
+    memset(&uac, 0, sizeof uac);
+    memset(&rs, 0, sizeof rs);
+    usb.config = 1;
+    uac.feed = 1;
+    uac.ring48 = uac.r48 = 1;
+    ua_w = ua_r = 0;
+}
+
+static uint32_t rs_block(const int32_t *in, uint32_t n, int32_t *l, int32_t *r)
+{
+    uint32_t k = 0;
+    uac_tap(in, n);
+    while (ua_r != ua_w) {
+        uint32_t f = ua_ring[ua_r++ & (UA_N - 1u)];
+        if (l)
+            l[k] = (int16_t)f;
+        if (r)
+            r[k] = (int16_t)(f >> 16);
+        k++;
+    }
+    return k;
+}
+
+static void fft(double *re, double *im, uint32_t n)
+{
+    uint32_t i, j, len;
+    for (i = 1, j = 0; i < n; i++) {
+        uint32_t bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            double t = re[i];
+            re[i] = re[j];
+            re[j] = t;
+            t = im[i];
+            im[i] = im[j];
+            im[j] = t;
+        }
+    }
+    for (len = 2; len <= n; len <<= 1) {
+        double a = -2 * M_PI / len, wr = cos(a), wi = sin(a);
+        for (i = 0; i < n; i += len) {
+            double cr = 1, ci = 0;
+            for (j = 0; j < len / 2; j++) {
+                uint32_t u = i + j, v = i + j + len / 2;
+                double xr = re[v] * cr - im[v] * ci, xi = re[v] * ci + im[v] * cr, t;
+                re[v] = re[u] - xr;
+                im[v] = im[u] - xi;
+                re[u] += xr;
+                im[u] += xi;
+                t = cr * wr - ci * wi;
+                ci = cr * wi + ci * wr;
+                cr = t;
+            }
+        }
+    }
+}
+
+/* a sine of f Hz in y (48 kHz): the fitted amplitude, the SNR in band (<= 20 kHz: the residual after the fit,
+ * Hann-windowed through an FFT) and over the whole band (0..24 kHz) */
+#define NF 65536u
+static double fre[NF], fim[NF];
+static void sine_fit(const int32_t *y, double f, double *amp, double *snr_band, double *snr_full)
+{
+    double m[3][4], c[3], w2 = 0, pb = 0, pf = 0, ps;
+    uint32_t i, j, k, kmax = (uint32_t)(20000.0 * NF / 48000.0);
+    memset(m, 0, sizeof m);
+    for (i = 0; i < NF; i++) {
+        double v[3] = {sin(2 * M_PI * f * i / 48000.0), cos(2 * M_PI * f * i / 48000.0), 1};
+        for (j = 0; j < 3; j++) {
+            for (k = 0; k < 3; k++)
+                m[j][k] += v[j] * v[k];
+            m[j][3] += v[j] * y[i];
+        }
+    }
+    for (i = 0; i < 3; i++)                             /* Gauss-Jordan, 3 x 3 */
+        for (j = 0; j < 3; j++)
+            if (j != i) {
+                double q = m[j][i] / m[i][i];
+                for (k = 0; k < 4; k++)
+                    m[j][k] -= q * m[i][k];
+            }
+    for (i = 0; i < 3; i++)
+        c[i] = m[i][3] / m[i][i];
+    for (i = 0; i < NF; i++) {
+        double e = y[i] - (c[0] * sin(2 * M_PI * f * i / 48000.0) + c[1] * cos(2 * M_PI * f * i / 48000.0) + c[2]);
+        double w = 0.5 - 0.5 * cos(2 * M_PI * i / NF);
+        pf += e * e;
+        fre[i] = e * w;
+        fim[i] = 0;
+        w2 += w * w;
+    }
+    fft(fre, fim, NF);
+    for (k = 0; k <= kmax; k++)
+        pb += (k ? 2.0 : 1.0) * (fre[k] * fre[k] + fim[k] * fim[k]);
+    pb /= (double)NF * w2;
+    pf /= NF;
+    *amp = sqrt(c[0] * c[0] + c[1] * c[1]);
+    ps = *amp * *amp / 2;
+    *snr_band = 10 * log10(ps / pb);
+    *snr_full = 10 * log10(ps / pf);
+}
+
+static double sine_x(int64_t i, void *ctx)               /* the 16-bit input of the reference (see sine_run) */
+{
+    const double *f = ctx;
+    return floor(f[1] * sin(2 * M_PI * f[0] * (double)i / 44100.0) + 0.5);
+}
+
+#define SKIP 2000u                                       /* the start (silence ahead of the sine) */
+static int32_t yl[NF + SKIP + 64], yr[NF + SKIP + 64];
+
+/* a sine at -1 dBFS on L (R: the same, inverted) through the C resampler; reference = 1: the double one */
+static uint32_t sine_run(double f, int reference)
+{
+    double ctx[2] = {f, 32767.0 * pow(10, -1 / 20.0)};
+    int32_t blk[64];
+    uint32_t n = 0, i, k = 0;
+    rs_reset();
+    if (reference) {
+        for (k = 0; k < NF + SKIP; k++)
+            yl[k] = s16r(ref_out(k, sine_x, ctx));
+        return k;
+    }
+    while (k < NF + SKIP) {
+        for (i = 0; i < 32u; i++, n++) {
+            blk[2 * i] = (int32_t)sine_x(n, ctx);
+            blk[2 * i + 1] = -blk[2 * i];
+        }
+        k += rs_block(blk, 32, yl + k, yr + k);
+    }
+    return k;
+}
+
+static uint64_t instr_now(void)
+{
+#ifdef __APPLE__
+    struct rusage_info_v4 ri;
+    if (!proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&ri))
+        return ri.ri_instructions;
+#endif
+    return 0;
+}
+
+static double rnd_x(int64_t i, void *ctx)                 /* input frame i: noise of period 1000 at -6 dBFS */
+{
+    uint32_t seed = (uint32_t)(i % 1000) * 2654435761u + *(uint32_t *)ctx;
+    return (double)((int16_t)(seed >> 16) / 2);
+}
+
+static void test_resampler(void)
+{
+    static const double FQ[] = {20, 100, 1000, 5000, 10000, 15000, 18000, 20000};
+    double amp, sb, sf, a0 = 32767.0 * pow(10, -1 / 20.0), worst = 0, gmin = 0, gmax = -99;
+    uint32_t i, k, n, bad = 0, tab_ok = 1, sum_ok = 1;
+    int32_t blk[64];
+    uint32_t seed = 0x1234;
+    char s[160];
+
+    proto_init();
+    /* the table: each phase sums to 1 << 30 and is the prototype computed here (oldest input first) */
+    for (i = 0; i < UAC_FIR_L / 2u; i++) {
+        int64_t t = 0;
+        for (k = 0; k < UAC_FIR_N; k++) {
+            double want = H[i + RL * (RN - 1u - k)] * (1 << 30);
+            t += UAC_FIR[i][k];
+            if (fabs(UAC_FIR[i][k] - want) > 2e-5 * (1 << 30))
+                tab_ok = 0;
+        }
+        sum_ok &= t == (int64_t)1 << 30;
+    }
+    check("FIR table = sinc x Kaiser (24 x 160 taps, beta 9, 22 kHz); phases sum to 1.0", tab_ok && sum_ok);
+
+    /* every frame against the double-precision resampler: noise (period 1000), +-1 LSB */
+    rs_reset();
+    for (k = n = 0; k < 48000u;) {
+        int32_t l[40], r[40];
+        uint32_t m, j;
+        for (i = 0; i < 32u; i++, n++) {
+            blk[2 * i] = (int32_t)rnd_x(n, &seed);
+            blk[2 * i + 1] = -blk[2 * i];
+        }
+        m = rs_block(blk, 32, l, r);
+        for (j = 0; j < m; j++, k++) {
+            int32_t want = s16r(ref_out(k, rnd_x, &seed));
+            if (abs(l[j] - want) > 1 || abs(r[j] + want) > 1)
+                bad++;
+        }
+    }
+    snprintf(s, sizeof s, "1 s of noise: every frame = the double-precision resampler +-1 LSB (%u off)", bad);
+    check(s, bad == 0);
+    snprintf(s, sizeof s, "  frames out / in: %u / %u (160 / 147)", k, n);
+    check(s, k == (160u * n - 1u) / 147u + 1u);          /* the outputs whose newest input frame is < n */
+
+    /* response and SNR (in band <= 20 kHz; full band 0..24 kHz) of sines at -1 dBFS */
+    for (i = 0; i < sizeof FQ / sizeof FQ[0]; i++) {
+        double rb, rf, ra, g;
+        sine_run(FQ[i], 1);
+        sine_fit(yl + SKIP, FQ[i], &ra, &rb, &rf);
+        sine_run(FQ[i], 0);
+        sine_fit(yl + SKIP, FQ[i], &amp, &sb, &sf);
+        g = 20 * log10(amp / a0);
+        snprintf(s, sizeof s, "  %5.0f Hz -1 dBFS: gain %+.3f dB, SNR %.1f dB in band, %.1f full (exact taps %.1f)",
+                 FQ[i], g, sb, sf, rb);
+        if (FQ[i] <= 18000) {
+            if (g < gmin)
+                gmin = g;
+            if (g > gmax)
+                gmax = g;
+        }
+        if (FQ[i] >= 100 && FQ[i] <= 15000 && (worst == 0 || sb < worst))
+            worst = sb;
+        if (FQ[i] == 1000)
+            check(s, sb >= 90.0);
+        else if (FQ[i] <= 15000)
+            check(s, sb >= 88.0);
+        else if (FQ[i] == 18000)
+            check(s, sb >= 80.0 && g > -0.2);
+        else
+            check(s, g > -1.5);                         /* 20 kHz: the transition band */
+    }
+    snprintf(s, sizeof s, "  flat 20 Hz .. 18 kHz within %+.3f .. %+.3f dB; SNR 100 Hz .. 15 kHz >= %.1f dB", gmin,
+             gmax, worst);
+    check(s, gmin > -0.2 && gmax < 0.05);
+
+    /* the cost: 10 s of stereo input through uac_tap (48 kHz) */
+    {
+        uint64_t i0, i1, t0;
+        struct timespec a, b;
+        uint32_t frames_in = 441000u, out = 0;
+        rs_reset();
+        for (i = 0; i < 64u; i++)
+            blk[i] = (int32_t)(i * 997u % 30000u) - 15000;
+        i0 = instr_now();
+        clock_gettime(CLOCK_MONOTONIC, &a);
+        for (n = 0; n < frames_in; n += 32u) {
+            uac_tap(blk, 32);
+            out += ua_w - ua_r;
+            ua_r = ua_w;
+            __asm__ volatile("" : : "r"(blk) : "memory");
+        }
+        clock_gettime(CLOCK_MONOTONIC, &b);
+        i1 = instr_now();
+        t0 = (uint64_t)(b.tv_sec - a.tv_sec) * 1000000000u + (uint64_t)(b.tv_nsec - a.tv_nsec);
+        if (i0 && i1 > i0)
+            printf("  cost (host): %.0f instructions / 44.1 kHz frame (%.0f / 48 kHz frame), %.1f ns / 44.1 kHz frame\n",
+                   (double)(i1 - i0) / frames_in, (double)(i1 - i0) / out, (double)t0 / frames_in);
+        else
+            printf("  cost (host): %.1f ns / 44.1 kHz frame (no instruction counter)\n", (double)t0 / frames_in);
+    }
+}
+
+/* ------------------------------------------------------------------ the ring at 48 kHz --- */
+static uint64_t k48, n0_48;
+static uint32_t bad48, zero48;
+
+static void on_prime(void)
+{
+    k48 = 0;
+    n0_48 = prod_n;
+}
+
+static double ring_x(int64_t i, void *ctx)              /* render_block's L (R = ~L), counted from the prime */
+{
+    (void)ctx;
+    return (double)(int16_t)(uint16_t)(n0_48 + (uint64_t)i);
+}
+
+static double ring_xr(int64_t i, void *ctx)
+{
+    (void)ctx;
+    return (double)(int16_t)~(uint16_t)(n0_48 + (uint64_t)i);
+}
+
+static void take_packet48(void)
+{
+    uint32_t d[UA_MAXF + 2], i, from = uac.go && uac.ring48 == uac.r48, n = uac_packet(d);
+    sizes[n]++;
+    npk++;
+    for (i = 0; i < n; i++) {
+        int32_t l = (int16_t)d[i], r = (int16_t)(d[i] >> 16);
+        if (!from || k48 < UA_PRIME48) {                /* silence: not primed yet, the primed lead */
+            zero48++;
+            bad48 += d[i] != 0;
+            k48 += from;
+            continue;
+        }
+        if (abs(l - s16r(ref_out(k48 - UA_PRIME48, ring_x, 0))) > 1 ||
+            abs(r - s16r(ref_out(k48 - UA_PRIME48, ring_xr, 0))) > 1)
+            bad48++;
+        k48++;
+    }
+}
+
+static void test_ring48(void)
+{
+    uint32_t i, sum, base_p;
+    char s[160];
+    double mean;
+    memset(&uac, 0, sizeof uac);
+    usb.config = 1;
+    uac_rate_set(48000);
+    uac_stream(1);
+    uac.flowing = 1;
+    bad48 = 0;
+    run(2000, 0, 1, 1);
+    memset(sizes, 0, sizeof sizes);
+    npk = 0;
+    base_p = uac.underruns + uac.overruns;
+    run(10000, 0, 1, 1);
+    for (i = sum = 0; i < 64u; i++)
+        sum += sizes[i] * i;
+    mean = (double)sum / npk;
+    snprintf(s, sizeof s, "48 kHz, 10 s, random render times: sizes 47..49 (48:%u 49:%u 47:%u), mean %.4f", sizes[48],
+             sizes[49], sizes[47], mean);
+    check(s, sizes[47] + sizes[48] + sizes[49] == npk && mean > 48.0 && mean < 48.05);
+    snprintf(s, sizeof s, "  every frame = the resampled render, in order (%u off); no underrun / overrun", bad48);
+    check(s, bad48 == 0 && uac.underruns + uac.overruns == base_p);
+    snprintf(s, sizeof s, "  fill at render start %u..%u (band %u..%u), adj up %u down %u (I2S %.1f Hz: fast)",
+             uac.fill_lo, uac.fill_hi, UA_LO48, UA_HI48, uac.adj_up, uac.adj_down, FS_DEV);
+    check(s, uac.fill_lo >= UA_MAXF && uac.fill_hi + UA_REND48 <= UA_N && uac.adj_up > uac.adj_down);
+    for (i = 0; i < 1000u; i++)
+        run(1, REND_MAX, 1, 1);
+    snprintf(s, sizeof s, "  1000 packets, %.1f ms renders: no glitch", REND_MAX / 1e6);
+    check(s, bad48 == 0 && uac.underruns + uac.overruns == base_p);
+
+    /* a slow I2S clock: the ring drains, packets one frame shorter now and then */
+    fs_dev = 44085.0;
+    uac_stream(1);
+    uac.flowing = 1;
+    run(1000, 0, 1, 1);
+    memset(sizes, 0, sizeof sizes);
+    npk = 0;
+    bad48 = 0;
+    base_p = uac.underruns + uac.overruns;
+    uac.adj_up = uac.adj_down = 0;
+    run(10000, 0, 1, 1);
+    for (i = sum = 0; i < 64u; i++)
+        sum += sizes[i] * i;
+    mean = (double)sum / npk;
+    snprintf(s, sizeof s, "48 kHz, I2S %.0f Hz (slow): mean %.4f, adj up %u down %u, no glitch", FS_DEV, mean,
+             uac.adj_up, uac.adj_down);
+    check(s, mean < 48.0 && mean > 47.95 && uac.adj_down > uac.adj_up && bad48 == 0 &&
+                 uac.underruns + uac.overruns == base_p);
+    fs_dev = 44117.6;
+
+    /* 48 -> 44.1 -> 48 while streaming */
+    uac_rate_set(44100);
+    cons_n = cons_bad = cons_rep = 0;
+    base_p = uac.underruns + uac.overruns;
+    run(3000, 0, 1, 1);
+    check("switch to 44.1 mid-stream: silence, primed again, every frame in order, bit for bit",
+          cons_n > 2900u * 44u && cons_bad == 0 && cons_rep == 0 && uac.underruns + uac.overruns == base_p);
+    uac_rate_set(48000);
+    bad48 = zero48 = 0;
+    memset(sizes, 0, sizeof sizes);
+    npk = 0;
+    run(3000, 0, 1, 1);
+    for (i = sum = 0; i < 64u; i++)
+        sum += sizes[i] * i;
+    check("switch to 48 mid-stream: silence, primed again, every frame in order",
+          bad48 == 0 && sum - zero48 > 2900u * 48u && uac.underruns + uac.overruns == base_p);
+    uac_rate_set(44100);
+}
+
 int main(void)
 {
     printf("-- USB audio input, CDC %s\n", T_CDC ? "on" : "off");
     test_descriptors();
     test_ring();
+    test_rate();
+    test_resampler();
+    test_ring48();
     printf(fails ? "UAC TEST FAILED (%d)\n" : "uac: all ok\n", fails);
     return fails != 0;
 }

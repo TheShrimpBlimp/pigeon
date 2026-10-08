@@ -16,6 +16,7 @@ static uint8_t nor[0x100000], *logical;
 static size_t logical_len;
 static uint8_t rx[1024];
 static uint32_t rx_len, rx_full, now_ms, requests, erases, bad_range, record_cleared, f0_asked;
+static uint32_t flip_addr = 0xFFFFFFFFu, flip_seen, flip_on;   /* serve addr's flip_on-th reply with a byte changed */
 
 static uint32_t pack7(const uint8_t *in, uint32_t n, uint8_t *out)
 {
@@ -59,6 +60,8 @@ static int ota_wire_send(const uint8_t *p, uint32_t n)
     } else {
         if (addr + len > logical_len) { printf("read past the package %#x\n", addr); exit(1); }
         memcpy(m + 14, logical + addr, len);
+        if (addr == flip_addr && ++flip_seen == flip_on)
+            m[14 + len / 2u] ^= 0x10;                /* a transfer error the frame checksum does not see */
     }
     for (i = 6; i < 14 + len; i++) s += m[i];
     m[14 + len] = (uint8_t)~s;
@@ -80,7 +83,7 @@ static void ota_commit(const uint8_t *parm) { (void)parm; }
 static int ldr_fread(uint32_t off, void *p, uint32_t n) { memcpy(p, nor + off, n); return 0; }
 static int ldr_erase(uint32_t off)
 {
-    if (off < 0x4000u || off >= 0xFC000u || (off & 0xFFFu)) bad_range++;
+    if (off < 0x4000u || off >= 0xFC000u || (off & 0xFFFu) || (off >= 0x97000u && off < 0xE0000u)) bad_range++;
     if (off < 0x4000u) { printf("ERASE IN THE HEAD %#x\n", off); exit(1); }
     erases++;
     memset(nor + off, 0xFF, 0x1000);
@@ -106,6 +109,7 @@ static uint8_t *load_logical(const char *path, size_t *len)
     if (!f) { perror(path); exit(2); }
     n = fread(raw, 1, 0x200000, f);
     fclose(f);
+    if (n < 20 * 48 + 0x400) { printf("%s: too short for a package\n", path); exit(2); }
     lg = malloc(n);
     for (i = 0; i < 20; i++) memcpy(lg + i * 47, raw + i * 48, 47);
     memcpy(lg + 20 * 47, raw + 20 * 48, n - 20 * 48);
@@ -134,15 +138,17 @@ static int check(const char *what, int ok) { printf("%-56s %s\n", what, ok ? "ok
 int main(int argc, char **argv)
 {
     size_t olen;
+    static uint8_t user[0x1000];
     uint8_t *old, head[0x4000];
-    uint32_t ofo, nfo;
+    uint32_t ofo, nfo, i;
     int bad = 0, rc;
     if (argc < 3) { printf("usage: ldr_test OLD.fwsc NEW.fwsc\n"); return 2; }
     old = load_logical(argv[1], &olen);
     logical = load_logical(argv[2], &logical_len);
     ofo = flash_off(old);
     nfo = flash_off(logical);
-    /* device: OLD installed, plus a valid update record at 0xE4F00 */
+    /* device: OLD installed, plus a valid update record at 0xE4F00 (Felucca's step 1) and 0xE8F00 (the stock
+     * firmware's, a first install from it); user sample data in Felucca's store that looks like a record */
     memset(nor, 0xFF, sizeof nor);
     memcpy(nor, old + ofo, 0x93000);
     memcpy(head, nor, sizeof head);
@@ -151,14 +157,35 @@ int main(int argc, char **argv)
         r[2] = 0x0D; r[3] = 0x5A; r[4] = 0x01; r[5] = 0x5A; r[6] = 0x41; r[7] = 0x54;
         ota_wr16(r, ota_crc16(r + 2, 78, 0));
         memcpy(nor + 0xE4F00, r, sizeof r);
+        memcpy(nor + 0xE8F00, r, sizeof r);
+        for (i = 0; i < 0x1000u; i++) nor[0xA0000 + i] = (uint8_t)(i * 7u);
+        memcpy(nor + 0xA0F00, r, sizeof r);
+        memcpy(user, nor + 0xA0000, sizeof user);
     }
+    /* a damaged package (one byte deep in the app area): refused before anything is erased */
+    {
+        size_t at = nfo + 0x50123u;
+        logical[at] ^= 0x01;
+        erases = 0;
+        rc = ldr_session();
+        bad += check("damaged package (flash.bin CRC) refused, nothing erased", rc == -12 && erases == 0 &&
+                     !memcmp(nor + 0x4000, old + ofo + 0x4000, 0x93000 - 0x4000) && nor[0xE4F06] == 0x41);
+        logical[at] ^= 0x01;
+        requests = 0;
+    }
+    /* a sector that comes in different the second time (a transfer error after the check) is read again */
+    flip_addr = nfo + 0x20000u; flip_on = 2; flip_seen = 0;
     rc = ldr_session();
     printf("  rc %d, %u requests, %u sector erases\n", rc, requests, erases);
     bad += check("install completes", rc == 0);
+    bad += check("a sector changed in transfer after the check is read again", flip_seen == 3);
+    flip_addr = 0xFFFFFFFFu;
     bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
     bad += check("flash head [0, 0x4000) untouched", !memcmp(nor, head, sizeof head));
     bad += check("finish asked (0xF0000000)", f0_asked >= 1);
-    bad += check("update record cleared (RAM + flash)", record_cleared && nor[0xE4F06] == 0xFF);
+    bad += check("update records cleared (RAM + flash 0xE4F00, the stock firmware's 0xE8F00)",
+                 record_cleared && nor[0xE4F06] == 0xFF && nor[0xE8F06] == 0xFF);
+    bad += check("user data in Felucca's store that looks like a record is kept", !memcmp(nor + 0xA0000, user, sizeof user));
     bad += check("no write outside the allowed windows", bad_range == 0);
     /* same package again: nothing to erase */
     erases = 0; requests = 0;

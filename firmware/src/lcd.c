@@ -129,3 +129,34 @@ static void lcd_init(void)
     lcd_fill(0, 0, 240, 240, 0);
     lcd_cmd(0x29);
 }
+
+/* MENU > SCREEN OFF (ui.c scr_frame): the panel and its backlight off while the sound goes on. s 0: backlight off,
+ * DISPOFF, SLPIN; 1: SLPOUT (the panel wants 120 ms after it, and 120 ms after SLPIN before it: ui.c waits, a frame
+ * at a time, never here); 2: DISPON, backlight on (after the frame that redrew it all). The panel keeps its RAM
+ * asleep, but the UI redraws everything before it shows (ui.force) */
+static void lcd_power(uint32_t s)
+{
+    if (s == 1u) {
+        lcd_cmd(0x11);                             /* SLPOUT */
+        return;
+    }
+    if (s == 2u)
+        lcd_cmd(0x29);                             /* DISPON */
+    fm1_irq_off();                                 /* (port A: the key scan's rows too) */
+    fm1_lcd_backlight(s == 2u);
+    fm1_irq_on();
+    if (s == 0u) {
+        lcd_cmd(0x28);                             /* DISPOFF */
+        lcd_cmd(0x10);                             /* SLPIN */
+    }
+}
+/* the crash screen, UPDATE, UBOOT: the panel on at once if SCREEN OFF had it asleep (blocking, ~240 ms; the IRQs
+ * left as they are: the crash handler calls it) */
+static void lcd_wake_now(void)
+{
+    lcd_spin(3000000u);                            /* (120 ms after a SLPIN) */
+    lcd_cmd(0x11);
+    lcd_spin(3000000u);
+    lcd_cmd(0x29);
+    fm1_lcd_backlight(1);
+}

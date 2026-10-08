@@ -162,6 +162,7 @@ int main(int argc, char **argv)
     raw = malloc(0x200000);
     n = fread(raw, 1, 0x200000, f);
     fclose(f);
+    if (n < 20 * 48 + 0x4400) { printf("%s: too short for a package\n", argv[1]); return 2; }
     logical = malloc(n);
     for (i = 0; i < 20; i++) memcpy(logical + i * 47, raw + i * 48, 47);   /* drop the marker bytes */
     memcpy(logical + 20 * 47, raw + 20 * 48, n - 20 * 48);

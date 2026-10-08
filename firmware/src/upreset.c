@@ -90,16 +90,27 @@ static void up_migrate(up_rec_t *r)
     }
 }
 
-static void up_bank_check(uint32_t b, int len)  /* after loading bank b (len bytes, -1 = none): wrong shape -> empty */
+static void up_pat_norm(uint8_t *note, uint8_t *flags);
+/* after loading bank b (len bytes, -1 = none): wrong shape -> empty; each record's pattern inside its fields, as
+ * UP_PUT and SAVE store it (flash or a restored backup may hold anything there) */
+static void up_bank_check(uint32_t b, int len)
 {
     up_bank_t *bk = &up_bank[b];
-    uint32_t i;
+    uint32_t i, k;
     if (len != (int)sizeof *bk || bk->magic != UP_BANK_MAGIC || bk->rsize != sizeof(up_rec_t) ||
         bk->nslot != UP_PER_BANK)
         memset(bk, 0, sizeof *bk);
-    for (i = 0; i < UP_PER_BANK; i++)
-        if (up_valid(&bk->r[i]))
-            up_migrate(&bk->r[i]);
+    for (i = 0; i < UP_PER_BANK; i++) {
+        up_rec_t *r = &bk->r[i];
+        if (!up_valid(r))
+            continue;
+        up_migrate(r);
+        for (k = 0; k < 16u; k++)
+            if (up_grid(r))
+                r->flags[k] &= r->note[k];          /* a drum grid: accents only on its hits */
+            else
+                up_pat_norm(&r->note[k], &r->flags[k]);
+    }
 }
 
 /* the record's values in today's P_* order (mapped by count, see above); def = the defaults */

@@ -66,9 +66,37 @@ static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {      /* as hal/fm1_input.h: key 
     { 0,  1, 15, 14, 17, 16, 19, 18, 20, 21, 22},
     {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 };
-static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL];
+static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL], fm1_led_mid[FM1_NCOL];
 static uint32_t web_dim_lo;
 static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo; }
+/* the power-on LED sweep (hal/fm1_input.h fm1_led_anim_start, the picture hal/fm1_led_anim.h): its frame from the
+ * clock (a scan frame 1.1 ms), the page draws each LED's level (web_anim_levels); at its end, or on a key or a button
+ * down, the last picture (the glow everywhere, or dark) and the UI's LEDs from the next frame, as the scan does */
+#include "../../firmware/hal/fm1_led_anim.h"
+static uint32_t web_anim_t0, web_anim_glow, web_anim_run;
+static uint32_t web_anim_frame(void) { return (web_ticks - web_anim_t0) / (1100u * FM1_TICKS_PER_US); }
+static void fm1_led_anim_start(uint32_t glow)
+{
+    memset(fm1_led, 0, sizeof fm1_led);
+    memset(fm1_led_dim, 0, sizeof fm1_led_dim);
+    memset(fm1_led_breath, 0, sizeof fm1_led_breath);
+    memset(fm1_led_mid, 0, sizeof fm1_led_mid);
+    web_anim_t0 = web_ticks;
+    web_anim_glow = glow != 0u;
+    web_anim_run = 1;
+}
+static int fm1_led_anim_on(void)
+{
+    if (web_anim_run && (web_anim_frame() >= FM1_ANIM_FRAMES || fm1_in.notes || fm1_in.buttons)) {
+        uint32_t c, r;
+        web_anim_run = 0;
+        for (c = 0; c < FM1_NCOL; c++)
+            for (r = 1; r < 5u; r++)
+                if (web_anim_glow && FM1_KEYMAP[r][c] >= 0)
+                    fm1_led_dim[c] |= (uint8_t)(1u << r);
+    }
+    return (int)web_anim_run;
+}
 static uint32_t web_pressed, web_released, web_notes_pressed;
 static int32_t web_enc_steps[7];
 static uint32_t fm1_input_edges(uint32_t *released)
@@ -108,6 +136,14 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
     web_draws++;
 }
 static void lcd_sync(void) {}
+static void lcd_power(uint32_t s)              /* MENU > SCREEN OFF (lcd.c): off, the page dark; on: redrawn before */
+{
+    if (!s) {
+        memset(web_fb, 0, sizeof web_fb);
+        web_draws++;
+    }
+}
+static void lcd_wake_now(void) {}
 static void lcd_init(void) {}
 
 #include "../../firmware/src/gfx.c"
@@ -160,7 +196,9 @@ static void fl_plain_window_init(void) {}
 #include "../../firmware/src/project.c"
 
 /* ------------------------------------------------- main.c and its HAL --- */
-typedef struct { uint32_t vec, pc, emu, dbg, rets; } fm1_crash_t;
+typedef struct { uint32_t magic, count, vec, pc, emu, dbg, rets; } fm1_crash_t;
+#define FM1_CRASH_MAGIC 0x43525348u
+static fm1_crash_t fm1_crash;                     /* (none: main.c boot_leds runs the sweep) */
 static struct { uint8_t p3_rst, wdt_con; uint32_t rst_src; } fm1_boot;
 uint32_t _data_start[1], _data_end[1], _data_load[1], _bss_start[1], _bss_end[1];
 uint32_t _pool_start[1], _pool_end[1], _rt_start[1], _rt_end[1], _rt_load[1];
@@ -190,6 +228,7 @@ static void cdc_task(void) {}
 #define usb_start() ((void)0)
 #define usb_retry(ms) ((void)(ms))
 #define usb_detach() ((void)0)
+#include "../../firmware/src/master.c"
 #include "../../firmware/src/main.c"
 #undef usb_poll
 #undef usb_start
@@ -198,7 +237,6 @@ static void cdc_task(void) {}
 
 /* --------------------------------------------------------- the device --- */
 static uint32_t web_booted, web_boot_ms, web_last_frame;
-static int32_t web_knob = 512 * 16;           /* main.c: the MASTER filter (ADC x 16) */
 
 /* main.c fm1_main's boot, up to the main loop (no USB, no UART, no panel setup) */
 static void web_power_on(void)
@@ -207,33 +245,33 @@ static void web_power_on(void)
     settings_init();
     usb_serial_apply();
     lcd_init();
-    lcd_fill(0, 0, 240, 240, T_BG);
-    draw_text_box(0, 94, 240, &AF_L, "FELUCCA", T_THEME, 1);
-    draw_text_box(0, 134, 240, &AF_S, "MULTI-ENGINE SYNTH", T_MID, 1);
+    draw_splash();                        /* main.c: the splash (ui_draw.c) */
     memset(&felucca_dbg, 0, sizeof felucca_dbg);
     felucca_dbg.magic = DBG_MAGIC;
     fm1_input_init();
     fm1_adc_init();
     panel_init();
     felucca_init();
+    master_boot();                        /* main.c (#137): the pot's level from the first block */
+    kb_boot_hold = 1;                     /* main.c (#137): the keys silent under the splash */
     audio_init();
-    web_boot_ms = fm1_ms + 430u;          /* main.c: 30 + 400 ms before the first frame */
+    boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
+    autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
+    web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
 }
 
 /* one pass of main.c fm1_main's loop (what the browser has: no USB, editor, UBOOT, console) */
 static void web_frame(void)
 {
-    int32_t b = fm1_adc_read(FM1_ADC_BATT), a = fm1_adc_read(FM1_ADC_MASTER);
-    uint32_t k10;
+    int32_t b = fm1_adc_read(FM1_ADC_BATT);
     if (b > 0)
         song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
-    web_knob += (a * 16 - web_knob) / 8;
-    k10 = (uint32_t)(web_knob / 16);
-    song.master_q12 = (k10 * k10) >> 8;
+    master_poll();
     felucca_dbg.ui_frames++;
     ui_input();
     settings_poll();
+    autosave_poll();
     ui_leds();
     ui_draw();
 }
@@ -265,6 +303,7 @@ static void web_ms(void)
         return;
     if (web_boot_ms) {                                    /* main.c: the splash goes, the loop starts */
         web_boot_ms = 0;
+        kb_boot_hold = 0;
         lcd_fill(0, 0, 240, 240, T_BG);
         web_last_frame = fm1_ms - 15u;
     }
@@ -378,6 +417,19 @@ EXPORT uint32_t web_dim_keys(void) { return led_keys(fm1_led_dim); }
 EXPORT uint32_t web_dim_level(void) { return web_dim_lo; }
 EXPORT uint32_t web_breath_buttons(void) { return led_buttons(fm1_led_breath); }   /* #119: dark .. ~60 % of lit */
 EXPORT uint32_t web_breath_keys(void) { return led_keys(fm1_led_breath); }
+EXPORT uint32_t web_mid_keys(void) { return led_keys(fm1_led_mid); }   /* the DRUM grid's beats: a steady mid level */
+/* the power-on sweep running: each LED's level now (hal/fm1_led_anim.h: 0..64 /64 of lit, | 0x80 the glow under
+ * it), 0..13 the buttons by label, 14..40 the keys F3..G5; 0 when it is not */
+EXPORT uint8_t *web_anim_levels(void)
+{
+    static uint8_t lv[FM1_ANIM_NBTN + FM1_ANIM_NKEY];
+    uint32_t f = web_anim_frame(), i;
+    if (!fm1_led_anim_on())
+        return 0;
+    for (i = 0; i < FM1_ANIM_NBTN + FM1_ANIM_NKEY; i++)
+        lv[i] = (uint8_t)fm1_anim_level(f, i < FM1_ANIM_NBTN ? (i < NB ? panel.btn[i] : i) : i, web_anim_glow);
+    return lv;
+}
 
 /* for the test and the bench (web/emu/emu_test.mjs), a heavy song straight into the tracks (as hostsim's
  * renders set them): T1 FM6 PAD, T2 PHYS DRONE STRING (SYMP), T3 GRAIN CLOUD PAD, 4-note chords on all 16

@@ -280,7 +280,7 @@ int main(void)
         r.p[i] = (int16_t)(2000 + i);
     up_params(&r, v, def);
     ok = P_SLCR == 45 && P_SLDEPTH + 1 == P_M1SRC && P_M4AMT + 1 == P_FM1_ATK && P_FM4_LEVEL + 1 == P_CHRD &&
-         P_VOIC + 1 == P_E0 && P_E0 == 83 && P_COUNT == 91;
+         P_VOIC + 1 == P_LN0 && P_LN7 + 1 == P_E0 && P_E0 == 91 && P_COUNT == 99;
     for (i = 0; i < 45u; i++)
         ok &= v[i] == (int16_t)(2000 + i);
     for (i = P_SLCR; i < P_E0; i++)
@@ -302,15 +302,16 @@ int main(void)
     for (i = 0; i < 8u; i++)
         ok &= v[P_E0 + i] == (int16_t)(3000 + 49 + i);
     bad += check("old record (np 57): SLICER kept, matrix defaults, E0..E7 kept", ok);
-    /* records of versions 4 (packed bytes) and 5 (a drum grid) saved before the chord keys (P_COUNT 89, P_E0
-     * 81) and before the FM operator ENVs (69, P_E0 61): their engine values land on today's E0..E7 (83..90),
-     * the chord keys take their defaults (OFF, CLOSE), the operator parameters too for 69 */
+    /* records of versions 4 (packed bytes) and 5 (a drum grid) saved before the DRUM lane levels (1.0.x: P_COUNT 91,
+     * P_E0 83), before the chord keys (89, P_E0 81) and before the FM operator ENVs (69, P_E0 61): their engine
+     * values land on today's E0..E7 (91..98), the lane levels (100 %) and the chord keys their defaults (OFF, CLOSE), the
+     * operator parameters too for 69 */
     {
-        static const uint8_t VERS[2] = {UP_VER, UP_VER_GRID}, NPS[2] = {89, 69};
+        static const uint8_t VERS[2] = {UP_VER, UP_VER_GRID}, NPS[3] = {91, 89, 69};
         uint32_t a, b;
         ok = 1;
         for (a = 0; a < 2u; a++)
-            for (b = 0; b < 2u; b++) {
+            for (b = 0; b < 3u; b++) {
                 uint32_t np = NPS[b];
                 up_rec_t o;
                 memset(&o, 0, sizeof o);
@@ -327,7 +328,7 @@ int main(void)
                 for (i = 0; i < 8u; i++)
                     ok &= v[P_E0 + i] == (int16_t)((np - 8u + i) % 100u - 30);
             }
-        bad += check("v4 / v5 records of 89 and 69 parameters: E0..E7 at 83..90, the chord keys their defaults", ok);
+        bad += check("v4 / v5 records of 91, 89 and 69 parameters: E0..E7 at P_E0, lane levels and chord keys defaults", ok);
     }
     r.ver = UP_VER;
     r.np = P_COUNT;

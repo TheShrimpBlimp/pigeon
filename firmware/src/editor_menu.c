@@ -4,13 +4,20 @@
  * INFO 4E 01 count. The editor builds its settings from these; the values, names and the apply path are the menu's
  * own (menu_items.c), so the two cannot differ. CALIBRATION and ABOUT are not offered (no value). 1.0.5: each reply
  * ends with the row's MENU tab (MI_TAB: its index and name), so the editor can group the settings as the device does.
- * ED_MENU: {row, id} in the menu's order. An id keeps its meaning for good: a new setting takes the next free id
+ * ED_MENU: {row, id}, the 1.0.4 settings in the menu's order, then the later ones as they came (1.1: CLICK, CLICK LEVEL,
+ * COUNT-IN, rows of AUDIO; 1.2: RESTORE LAST, SYSTEM; SCALE LEDS, CONTROL; 1.1.5: SCREEN OFF, DISPLAY): an index keeps its
+ * setting too, so an older editor lists what it knew where it was (the
+ * editor groups them by their tab). An id keeps its meaning for good: a new setting takes the next free id
  * (append-only), wherever its row goes; ids 0..126 (127: none). */
 enum { ED_MENU_DESC = 72, ED_MENU_SET };
 enum { EDM_ENUM, EDM_INT };                            /* kind: names follow; or a unit (none yet) */
 static const uint8_t ED_MENU[][2] = {
     {MI_COLOR, 0}, {MI_STYLE, 1}, {MI_LARGE, 2}, {MI_ANIM, 3}, {MI_LEDS, 4}, {MI_HOLD, 5}, {MI_ACCEL, 6},
     {MI_LATCH, 7}, {MI_BPMLOCK, 8}, {MI_LOWCUT, 9}, {MI_USB, 10}, {MI_SERIAL, 11},
+    {MI_CLICK, 12}, {MI_CLKLVL, 13}, {MI_COUNTIN, 14},
+    {MI_RESTORE, 15},                                  /* 1.2 (Discussion #130), a row of SYSTEM */
+    {MI_SCLLED, 16},                                   /* 1.2 (Discussion #127), a row of CONTROL */
+    {MI_SCROFF, 17},                                   /* 1.1.5, a row of DISPLAY */
 };
 #define ED_MENU_N NELEM(ED_MENU)
 

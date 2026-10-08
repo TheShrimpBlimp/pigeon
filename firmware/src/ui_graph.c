@@ -219,6 +219,7 @@ static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_
 static void graph_roll(const track_t *t, uint16_t c)
 {
     uint32_t i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, ncol, mask = scale_mask(t), held = pr_held();
+    uint64_t locks = motion_lock_steps(trk_index(t));
     int32_t r, ybot = PR_Y0 + PR_ROWS * PR_RH, gw;
     char nb[8];
     ncol = base < len ? (len - base < 16u ? len - base : 16u) : 0u;
@@ -254,6 +255,8 @@ static void graph_roll(const track_t *t, uint16_t c)
             cv_frame(x, PR_Y0 - 2, PR_CW + 1, ybot - PR_Y0 + 4, T_TEXT);
         if (song.playing && si == t->seq_idx)
             cv_rect(x + 6, PR_Y0, 1, ybot - PR_Y0, T_ACCENT);
+        if ((locks >> si) & 1u)                       /* a parameter lock: a mark under the step */
+            cv_rect(x + 3, ybot + 3, 7, 2, T_ACCENT);
     }
     for (i = 0; i < ncol; i++) {                      /* the notes */
         uint32_t si = base + i, s = pr_src(t, si, len), nx = (si + 1u) % len;
@@ -282,7 +285,11 @@ static void graph_roll(const track_t *t, uint16_t c)
 static void graph_grid(const track_t *t, uint16_t c)
 {
     uint32_t l, i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u;
+    uint64_t locks = motion_lock_steps(trk_index(t));
     int32_t y0 = 6;
+    for (i = 0; i < 16u && base + i < len; i++)     /* a parameter lock: a mark over the step */
+        if ((locks >> (base + i)) & 1u)
+            cv_rect(41 + (int32_t)i * 12, 1, 8, 2, T_ACCENT);
     for (l = 0; l < NLANE; l++) {
         int32_t y = y0 + 4 + (int32_t)l * 14;
         int sel = l == ui.lane;
@@ -922,6 +929,14 @@ static uint32_t graph_signature(void)
         h += graph_pname_sig;
     }
     if (pg->graph == GR_MOTION) h ^= motion_count(t) * 131u + motion_enabled(t);
+    if (pg->graph == GR_EVENTS) {                    /* AUTO LIST: the rows, the one selected, + ADD LOCK's place */
+        uint8_t idx[MOTION_MAX];
+        uint32_t n = ev_rows(idx);
+        for (i = 0; i < n; i++)
+            h = (h ^ ((uint32_t)motion.event[idx[i]].place << 24 | (uint32_t)motion.event[idx[i]].param << 16 |
+                      (uint16_t)motion.event[idx[i]].value)) * 16777619u;
+        h = (h ^ (n + 1u) * 40503u ^ ev_row(n) * 2654435761u ^ ((uint32_t)ui.ev_step << 8 | ui.ev_id) * 104729u) * 16777619u;
+    }
 #if FELUCCA_SLICE
     if (pg->graph == GR_SLICES && slice_page_ok()) h ^= slice_sig();
 #endif
@@ -937,6 +952,10 @@ static uint32_t graph_signature(void)
         if (pg->graph != GR_STEPS && ph / 16u != ui.bank)
             ph = 0xFFFFu;                            /* the roll shows the cursor's bank only */
         h ^= steps_hash(t) + ph * 31u + ui.cursor * 7919u + ui.lane * 104723u + ui.bank * 613u;
+        if (pg->graph != GR_STEPS) {                 /* the parameter locks' marks (the roll, the grid) */
+            uint64_t lk = motion_lock_steps(trk_index(t));
+            h = (h ^ (uint32_t)lk ^ (uint32_t)(lk >> 32) * 2654435761u) * 16777619u;
+        }
         if (pg->graph != GR_STEPS && !drum_track(t)) {   /* the roll: its view and the keys held */
             pr_follow(t);
             h = (h ^ (proll.lo + 1u)) * 16777619u;
@@ -1107,6 +1126,52 @@ static void graph_pats(void)
         char tag[4], nm[13];
         pat_label(k, tag, nm);
         list_row(LIST_Y(row), k == cur, tag, T_MID, nm, T_TEXT, 232);
+    }
+}
+/* SEQ > AUTO LIST (ui_events.c): the track's records around the one selected, a row each: the kind (LOCK in the
+ * accent, AUTO), the step, the parameter's name, the value at the right; the last row + ADD LOCK */
+static void graph_events(void)
+{
+    const track_t *t = TSEL;
+    uint8_t idx[MOTION_MAX];
+    uint32_t n = ev_rows(idx), cur = ev_row(n), k;
+    int32_t row, first = clamp((int32_t)cur - 3, 0, (int32_t)n + 1 > 7 ? (int32_t)n + 1 - 7 : 0);
+    for (row = 0; row < 7 && (uint32_t)(first + row) <= n; row++) {
+        int32_t y = LIST_Y(row);
+        int sel;
+        uint16_t bg;
+        k = (uint32_t)(first + row);
+        sel = k == cur;
+        bg = sel ? T_THEME : T_SURF;
+        if (sel)
+            cv_rrect(6, y, 228, 16, 4, T_THEME, T_SURF);
+        if (k == n) {
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(14, y + CAP_IN(S, 16), &AF_S, "+ ADD LOCK", sel ? T_INK : T_DIM, bg);
+            break;
+        }
+        {
+            const motion_event_t *e = &motion.event[idx[k]];
+            uint32_t id = MOTION_ID(e), lock = (e->param & MOTION_LOCK) != 0u;
+            char b[16], nm[12];
+            const char *unit;
+            const param_desc_t *d = track_desc(t, id);
+            b[0] = (char)('0' + ((e->place & 63u) + 1u) / 10u);
+            b[1] = (char)('0' + ((e->place & 63u) + 1u) % 10u);
+            b[2] = 0;
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(14, y + CAP_IN(S, 16), &AF_S, lock ? "LOCK" : "AUTO", sel ? T_INK : lock ? T_ACCENT : T_MID, bg);
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(54, y + CAP_IN(S, 16), &AF_S, b, sel ? T_INK : T_MID, bg);
+            param_format(d, e->value, b, &unit);
+            if (unit && unit[0] && str_len(b) + str_len(unit) < sizeof b)
+                str_cpy(b + str_len(b), unit, sizeof b - str_len(b));
+            ev_name(t, id, nm);
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_free_text(80, y + CAP_IN(S, 16), &AF_S, nm, sel ? T_INK : T_TEXT, bg, 226 - text_w(&AF_S, b) - 8 - 80);
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_r(226, y + CAP_IN(S, 16), &AF_S, b, sel ? T_INK : T_TEXT, bg);
+        }
     }
 }
 /* project slots: the name (none: USED) / EMPTY, the selected one filled */
@@ -1326,7 +1391,8 @@ static void draw_tracks(void)
         cv_blit((uint32_t)CARD_X(c), Y_GRAPH);
     }
 }
-/* oscilloscope of the output, triggered on a rising zero crossing: a RAISE centre line, the trace 2 px */
+/* oscilloscope of the output, triggered on a rising zero crossing: a RAISE centre line, the trace 2 px (in silence
+ * a flat line on it; MENU > SCREEN OFF keeps it from staying on the panel for hours) */
 static void graph_scope(uint16_t c)
 {
     static int16_t snap[SCOPE_N];
@@ -1473,6 +1539,10 @@ static void draw_graph(void)
         case GR_PATS:
             cv_oy = 0;
             graph_pats();
+            break;
+        case GR_EVENTS:
+            cv_oy = 0;
+            graph_events();
             break;
         case GR_TOOLS:
             cv_oy = 0;

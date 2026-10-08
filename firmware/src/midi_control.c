@@ -184,7 +184,8 @@ static void midi_silence_track(uint32_t track)
     track_t *t = &trk[track];
     uint32_t i;
     trk_all_off(t);
-    t->nheld = t->arp_phys = t->arp_note = t->rh_n = 0;
+    t->nheld = t->arp_phys = t->rh_n = 0;
+    arp_forget(t);
     t->seq_n = t->seq_hold = t->slide_glide = 0;
     for (i = 0; i < NVOICE; i++)
         if (t->v[i].active)
@@ -202,6 +203,50 @@ static int midi_track_held(uint32_t track)
         if ((fm1_in.notes & (1u << k)) && kb_trk[k] == track)
             return 1;
     return 0;
+}
+
+/* The standard CC map (#103): always on, these CCs only, on the track the channel plays (ROUT as notes). A CC
+ * sets its parameter as a knob would, 0..127 over the parameter's range (64: the middle of a bipolar one), and
+ * AUTOMATION records it as a knob move (motion_capture: the selected track, armed and playing). CC74 / CC71 are
+ * the engine's own brightness / resonance (MIDI_CC_ENG); an engine without one ignores them. CC121 resets none
+ * of them (RP-015: they are the sound's) */
+#define MCC_CUT 0xFEu
+#define MCC_RES 0xFFu
+static const uint8_t MIDI_CC_MAP[][2] = {
+    {5, P_GLIDE}, {7, P_LEVEL}, {10, P_PAN}, {71, MCC_RES}, {72, P_REL}, {73, P_ATK}, {74, MCC_CUT}, {75, P_DEC},
+    {91, P_REV}, {93, P_CHOR}, {94, P_DLY},
+};
+/* per engine (ENGINES[] order): CC74's E index + 1 in the high nibble, CC71's in the low one, 0 = none */
+static const uint8_t MIDI_CC_ENG[NENGINES] = {
+    0x56, 0x00, 0x30, 0x80, 0x50, 0x07, 0x67, 0x00,   /* ANALOG CUT RES, -, PHASE DCW, LOFI TONE, SAMPLE CUT, VOICE Q,
+                                                       * TRIO CUT RES, WHEEL - */
+    0x80, 0x30, 0x30, 0x34, 0x30,                     /* GRAIN TONE, PHYS BRIT, DRUM TONE, NOISE FREQ RES, FM6 MLVL */
+#if FELUCCA_SLICE
+    0x80,                                             /* SLICE TONE */
+#endif
+};
+static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint32_t value)
+{
+    const param_desc_t *d;
+    uint32_t i, id = 0xFFFFu, e;
+    int32_t v;
+    for (i = 0; i < NELEM(MIDI_CC_MAP); i++)
+        if (MIDI_CC_MAP[i][0] == cc)
+            id = MIDI_CC_MAP[i][1];
+    if (id >= MCC_CUT) {
+        if (id == 0xFFFFu)
+            return;
+        e = MIDI_CC_ENG[eng_idx(t->eng_req)] >> (id == MCC_CUT ? 4 : 0) & 15u;
+        if (!e)
+            return;
+        id = P_E0 + e - 1u;
+    }
+    d = param_desc_of(eng_idx(t->eng_req), id);
+    v = d->min + ((int32_t)value * (d->max - d->min) + 63) / 127;
+    if (d->max <= d->min || t->p[id] == v)
+        return;
+    t->p[id] = (int16_t)v;
+    (void)motion_capture(t, id, (int16_t)v);
 }
 
 static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
@@ -226,7 +271,8 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
         for (i = 0; i < NTRK; i++)
             if ((mask & (1u << i)) && !midi_track_held(i)) {
                 trk_all_off(&trk[i]);
-                trk[i].nheld = trk[i].arp_phys = trk[i].arp_note = trk[i].rh_n = 0;
+                trk[i].nheld = trk[i].arp_phys = trk[i].rh_n = 0;
+                arp_forget(&trk[i]);
             }
         break;
     case 121:                                      /* Reset All Controllers, keep bend sensitivity */
@@ -256,7 +302,9 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
             midi_expression_channel(ch);
         }
         break;
-    default: break;
+    default:
+        midi_cc_map(midi_track(ch), cc, value);
+        break;
     }
 }
 

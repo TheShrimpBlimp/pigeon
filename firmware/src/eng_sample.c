@@ -72,27 +72,35 @@ static void slc_user_scan(uint32_t k, int valid);   /* eng_slice.c: SLICE's slic
 static uint32_t smp_user_gen;                       /* + 1 per slot scan (GRAIN: its seek index follows uploads) */
 
 /* (re)read slot k from flash: valid header -> zones usable; call after boot and after an upload
- * (main loop: SLICE scans the slot's audio here) */
+ * (main loop: SLICE scans the slot's audio here). The zones are checked in a copy: an unusable slot leaves
+ * every zone of it empty (n 0: a voice still on it ends), never a half-checked one */
 static void smp_user_scan(uint32_t k)
 {
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
-    uint32_t i, base;
+    smp_zone_t zt[16];
+    uint32_t i, base, nz = 0;
     smp_user_gen++;
     usr_nz[k] = 0;
     slc_user_scan(k, 0);
-    if (h->magic != SMP_USER_MAGIC || h->version != 1 || !h->nz || h->nz > 16u ||
-        h->data_len > SMP_USER_SIZE - SMP_USER_DATA)
-        return;
-    base = (uint32_t)(uintptr_t)(smp_user_xip(k) + SMP_USER_DATA) - (uint32_t)(uintptr_t)SMP_DATA;
-    for (i = 0; i < h->nz; i++) {
-        smp_zone_t *z = &usr_zone[k][i];
-        *z = h->zone[i];
-        if (z->off > h->data_len || z->n > 2u * SMP_USER_SIZE || z->off + (z->n + 1u) / 2u > h->data_len ||
-            z->idx > 88u || !z->rate || z->rate > 4u << 16 || z->ls > z->le || z->le >= z->n || z->lo > z->hi)
-            return;                                 /* zone outside the data or malformed: slot unusable */
-        z->off += base;
+    if (h->magic == SMP_USER_MAGIC && h->version == 1 && h->nz && h->nz <= 16u &&
+        h->data_len <= SMP_USER_SIZE - SMP_USER_DATA) {
+        base = (uint32_t)(uintptr_t)(smp_user_xip(k) + SMP_USER_DATA) - (uint32_t)(uintptr_t)SMP_DATA;
+        for (nz = h->nz, i = 0; i < nz; i++) {
+            smp_zone_t *z = &zt[i];
+            *z = h->zone[i];
+            if (z->off > h->data_len || z->n > 2u * SMP_USER_SIZE || z->off + (z->n + 1u) / 2u > h->data_len ||
+                z->idx > 88u || !z->rate || z->rate > 4u << 16 || z->ls > z->le || z->le >= z->n || z->lo > z->hi) {
+                nz = 0;                             /* zone outside the data or malformed: slot unusable */
+                break;
+            }
+            z->off += base;
+        }
     }
-    usr_nz[k] = h->nz;
+    for (i = 0; i < 16u; i++)
+        usr_zone[k][i] = i < nz ? zt[i] : (smp_zone_t){0};
+    if (!nz)
+        return;
+    usr_nz[k] = (uint8_t)nz;
     slc_user_scan(k, 1);
 }
 

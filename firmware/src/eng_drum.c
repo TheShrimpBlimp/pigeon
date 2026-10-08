@@ -18,6 +18,8 @@
  * designed, +-12 semitones), TONE, DECY and SNAP (each lane's extra: the kick's drive, the snare's snappiness,
  * the clap's spread, the hats' noise, the toms' bend, the rim's drive, the bell's strike) move every lane from its designed value. ACC
  * is the accent at full velocity (velocity scales it), DRV a soft clip on every hit (x1..x4, level kept).
+ * Each lane has its LEVEL (P_LN0..P_LN7, EDIT > LANES / LANES 2, #97: square law, 100 % the kit as designed, the
+ * default, so every older sound plays as it did), on the voice amplitude after the knee (a quieter lane is cleaner).
  * A hit keeps the drum and the variant it was struck with; the knobs move it while it rings.
  *
  * Polyphony: a lane per drum and part, mono: a hit reuses its lane's voice even at another pitch, the 8 lanes ring
@@ -253,9 +255,18 @@ static void drum_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const 
     drum_lane_t *L = drum_lane_of(t, v);
     dv_param_t k;
     int32_t y[CTL], mb[CTL], acc = clamp(p[P_E5] * v->vel * 4, 0, 65536), drv = p[P_E7], g = 0, mk = 0;   /* acc Q16 */
+    int32_t lv = clamp(p[P_LN0 + ((uint32_t)v->s[0] & (DV_NLANE - 1u))], 0, 127);
     uint32_t i, r;
+    vmod_t ml;                                           /* (only its amplitude ramp is read: voice_amp) */
     if (!L)
         return;
+    if (lv < 127) {                                      /* the lane's LEVEL (square law) on the block's amplitude
+                                                          * ramp, not per sample; 100 %: the ramp as it was */
+        int32_t gl = lv * lv * 2 + (lv * lv >> 6);       /* Q15, 127: 32508 (not used), 64: 8256 */
+        ml.amp0 = (m->amp0 >> 4) * gl >> 11;
+        ml.amp1 = (m->amp1 >> 4) * gl >> 11;
+        m = &ml;
+    }
     if (n > CTL)
         n = CTL;
     r = L->role;

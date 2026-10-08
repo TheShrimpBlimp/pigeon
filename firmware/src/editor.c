@@ -98,6 +98,7 @@ static int ed_smp_erase(uint32_t k, uint32_t all)  /* header sector, or the whol
     ed_smp_inval(k);
     return rc;
 }
+static int ed_flash_stop(void);
 static int ed_smp_end(uint32_t k, const uint8_t *a, uint32_t na)
 {
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)ed_smp_buf;
@@ -108,6 +109,8 @@ static int ed_smp_end(uint32_t k, const uint8_t *a, uint32_t na)
         return 2;
     if (usr_nz[k])                                     /* published zones may still be read by live voices */
         return memcmp(h, smp_user_xip(k), sizeof *h) ? 2 : 0;
+    if (ed_flash_stop())                               /* (only a header that will be written stops the transport) */
+        return 1;
     ed_smp_inval(k);
     if (st_crc32(smp_user_xip(k) + SMP_USER_DATA, h->data_len) != h->crc)
         return 3;
@@ -343,15 +346,22 @@ static int ed_flash_stop(void)
 #include "editor_fm6.c"
 #include "editor_menu.c"
 
-static void ed_motion_reply(uint32_t k, uint32_t rc)
+/* MOTION's reply: the records of track k as (step, id, v14), a lock's id without its MOTION_LOCK bit (a 7-bit SysEx
+ * byte); kinds (1.1: the ops 5..7): then one byte per record, in the same order, 0 automation, 1 lock. The query and
+ * the ops 1..4 reply as before 1.1 (an editor of before reads a lock as an automation event) */
+static void ed_motion_reply(uint32_t k, uint32_t rc, uint32_t kinds)
 {
     track_t *t = &trk[k];
+    uint32_t i;
     ed_b(k); ed_b(rc); ed_b(motion_enabled(t)); ed_b(motion_count(t)); ed_b(MOTION_MAX);
-    for (uint32_t i = 0; i < motion.count; i++) {
+    for (i = 0; i < motion.count; i++) {
         const motion_event_t *e = &motion.event[i];
         if ((e->place >> 6) != k) continue;
-        ed_b(e->place & 63u); ed_b(e->param); ed_v(e->value);
+        ed_b(e->place & 63u); ed_b(MOTION_ID(e)); ed_v(e->value);
     }
+    for (i = 0; kinds && i < motion.count; i++)
+        if ((motion.event[i].place >> 6) == k)
+            ed_b((motion.event[i].param & MOTION_LOCK) != 0u);
 }
 static int ed_args_ok(uint32_t cmd, const uint8_t *a, uint32_t n)
 {
@@ -380,8 +390,9 @@ static int ed_args_ok(uint32_t cmd, const uint8_t *a, uint32_t n)
         return n == 2u || n == 10u || n == 13u || (n == 14u && a[13] <= 100u) ||
                (n == 15u && a[13] <= 100u && a[14] >= 1u && a[14] <= 4u);
     case ED_MOTION:
-        return (n == 1u || (n == 2u && a[1] == 2u) || (n == 3u && a[1] == 1u && a[2] <= 1u) ||
-                (n == 6u && a[1] == 3u) || (n == 4u && a[1] == 4u)) && a[0] < NTRK;
+        return (n == 1u || (n == 2u && (a[1] == 2u || a[1] == 7u)) || (n == 3u && a[1] == 1u && a[2] <= 1u) ||
+                (n == 6u && (a[1] == 3u || a[1] == 5u)) || (n == 4u && a[1] == 4u) || (n == 3u && a[1] == 6u)) &&
+               a[0] < NTRK;
     case ED_SONG:
         return n && (a[0] == 1u || n == 1u);
     default:
@@ -400,6 +411,8 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
     const param_desc_t *d;
     if (!ed_args_ok(cmd, a, na))
         return;
+    if ((cmd >= ED_SMP_BEGIN && cmd <= ED_SMP_INFO) || (cmd >= ED_BACKUP_LIST && cmd <= ED_BACKUP_PUT))
+        autosave_hold();                                /* (a transfer: no autosave meanwhile, project.c) */
     ed_begin(cmd);
     if (ed_ui_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }
@@ -408,16 +421,20 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
     switch (cmd) {
     case ED_MOTION: {
         track_t *t = &trk[a[0]]; uint32_t rc = 0;
-        if (na > 1u && chain_busy()) rc = 3;
+        if (na > 1u && a[1] == 7u) {
+            /* (the query with the kinds) */
+        } else if (na > 1u && chain_busy()) rc = 3;
         else if (na > 1u) {
             if (a[1] == 1u) motion_set_enabled(t, a[2]);
             else if (a[1] == 2u) { load_begin(t, UNDO_PAT); motion_clear(t); load_end(t); }
             else if (a[1] == 3u) rc = motion_set_event(t, a[2], a[3], (int16_t)ed_rv(a + 4));
             else if (a[1] == 4u && a[2] < NSTEP && motion_param(a[3])) motion_delete_event(t, a[2], a[3]);
+            else if (a[1] == 5u) rc = motion_set_lock(t, a[2], a[3], (int16_t)ed_rv(a + 4));
+            else if (a[1] == 6u && (a[2] < NSTEP || a[2] == 127u)) (void)motion_clear_locks(t, a[2]);
             else rc = 1;
             ui.force = 1;
         }
-        ed_motion_reply(a[0], rc);
+        ed_motion_reply(a[0], rc, na > 1u && a[1] >= 5u);
         break;
     }
     case ED_INFO:
@@ -440,6 +457,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
                                          * patches (FM6 target 3, backup id 9) */
         ed_b(0x4E); ed_b(1); ed_b(ED_MENU_N);   /* MENU settings: cmds 72, 73; the items MENU_DESC offers */
         ed_b(0x52); ed_b(1); ed_b(4);   /* RATCH: a step's ratchet (1..4 hits) after its chance */
+        ed_b(0x4C); ed_b(1); ed_b(1);   /* 1.1 parameter locks: MOTION ops 5..7, the kinds after the records */
         break;
     case ED_GET:
     case ED_SET:
@@ -587,7 +605,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         if (na < 2u || a[0] >= SMP_USER_SLOTS || !flash_ok)
             return;
         ed_b(a[0]);
-        ed_b(ed_flash_stop() ? 1u : (uint32_t)ed_smp_end(a[0], a + 1, na - 1u));
+        ed_b((uint32_t)ed_smp_end(a[0], a + 1, na - 1u));
         break;
     case ED_SMP_INFO:                                      /* -> per slot: zones (0 = empty), name, data KiB */
         ed_b(SMP_USER_SLOTS);

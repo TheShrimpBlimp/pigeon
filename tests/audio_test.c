@@ -25,6 +25,10 @@ static uint32_t host_tap_n;
 static void uac_tap(const int32_t *out, uint32_t n) { memcpy(host_tap, out, 8u * n); host_tap_n = n; }
 static void uac_render_start(void) {}
 #include "../firmware/src/audio.c"
+enum { FM1_ADC_BATT = 3, FM1_ADC_MASTER = 4 };
+static int32_t host_pot = 1023;                        /* the MASTER pot as the ADC reads it (-1: timeout) */
+static int32_t fm1_adc_read(uint32_t ch) { return ch == FM1_ADC_MASTER ? host_pot : 620; }
+#include "../firmware/src/master.c"
 
 static int bad;
 static void check(const char *what, int ok)
@@ -190,10 +194,85 @@ static void usb_level(void)
           ok_fixed && ok_fixed0 && d_fixed0 == 0.0 && fabs(20.0 * log10(d_fixed / u_fixed) + 12.04) < 0.2);
 }
 
+/* #137: keys pressed under the splash. main.c: master_boot before audio_init (the pot's level from the first block),
+ * kb_boot_hold until the splash ends (seq.c keyboard_block: the keys sound nothing; one held across stays silent until
+ * pressed again); the splash polls the pot (master_poll). boot 0: as before the fix */
+static void boot_fresh(void)
+{
+    fresh();
+    lim_env = LIM_T; dc_l = dc_r = dce_l = dce_r = 0;
+    memset(kb_note, 0, sizeof kb_note); kb_prev = 0; kb_layer = 0;
+    trk[0].p[P_VOICE] = V_POLY;
+    trk[0].p[P_DIST] = trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = 0;
+}
+static double boot_run(int32_t pot, int boot, uint32_t *splash_peak, uint32_t *first_master, uint32_t *busy)
+{
+    int32_t out[2 * 32];
+    uint32_t b, i, peak = 0;
+    double r = 0;
+    boot_fresh();
+    song.master_q12 = 2048;                            /* felucca_init */
+    master_knob = 512 * 16;
+    host_pot = pot;
+    if (boot) {
+        master_boot();
+        kb_boot_hold = 1;
+    }
+    *first_master = song.master_q12;
+    for (b = 0; b < 600u; b++) {                       /* the splash, ~0.43 s: keys hammered, one held at its end */
+        fm1_in.notes = b >= 580u ? 1u << 12 : (b / 40u) & 1u ? (1u << 7) | (1u << 11) : 1u << 4;
+        if (b % 14u == 0u && boot)
+            master_poll();
+        audio_block(out, 32);
+        for (i = 0; i < 64u; i++)
+            if ((uint32_t)abs(out[i]) > peak) peak = (uint32_t)abs(out[i]);
+    }
+    *splash_peak = peak;
+    kb_boot_hold = 0;                                  /* the UI */
+    *busy = 0;
+    for (b = 0; b < 400u; b++) {                       /* the held key (silent), let go; then a chord pressed */
+        fm1_in.notes = b < 40u ? 1u << 12 : b < 60u ? 0u : (1u << 0) | (1u << 4) | (1u << 7);
+        audio_block(out, 32);
+        if (b >= 60u) r += block_rms(out, 32);
+        if (b == 39u) *busy = voices_busy();
+    }
+    fm1_in.notes = 0;
+    return r / 340.0;
+}
+static void boot_keys(void)
+{
+    uint32_t peak, peak0, peak_old, m, m0, m_old, busy, busy0, busy_old, ref_m, b;
+    double quiet, silent, old, ref = 0;
+    int32_t out[2 * 32];
+    quiet = boot_run(300, 1, &peak, &m, &busy);
+    silent = boot_run(0, 1, &peak0, &m0, &busy0);
+    old = boot_run(300, 0, &peak_old, &m_old, &busy_old);
+    boot_fresh();                                      /* the reference: the chord, MASTER at the pot's level by hand */
+    song.master_q12 = ref_m = master_of_pot(300);
+    for (b = 0; b < 340u; b++) {
+        fm1_in.notes = (1u << 0) | (1u << 4) | (1u << 7);
+        audio_block(out, 32);
+        ref += block_rms(out, 32);
+    }
+    fm1_in.notes = 0;
+    ref /= 340.0;
+    printf("audio: boot, pot 300 (MASTER %u): splash peak %u, then rms %.0f (by hand %.0f); before the fix: "
+           "MASTER %u, splash peak %u, then rms %.0f\n", m, peak, quiet, ref, m_old, peak_old, old);
+    check("#137 boot: MASTER is the pot's level before the first block (pot 300, pot 0)",
+          m == ref_m && m0 == 0u && m_old == 2048u);
+    check("#137 boot: keys hammered under the splash sound nothing (before the fix: they did)",
+          peak == 0u && peak0 == 0u && peak_old > 0u);
+    check("#137 boot: a key held across the splash's end stays silent until pressed again",
+          busy == 0u && busy0 == 0u && busy_old > 0u);
+    check("#137 boot: after the splash the keys play at the pot's level, as set by hand (pot 0: silent)",
+          ref > 100.0 && fabs(quiet - ref) < 1e-9 && silent == 0.0);
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     usb_level();
+    boot_keys();
     overload(); dma();
     printf(bad ? "audio: %d FAILED\n" : "audio: all passed\n", bad);
     return bad != 0;

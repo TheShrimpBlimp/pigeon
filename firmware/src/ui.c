@@ -41,14 +41,43 @@ static uint32_t up_gen;                      /* bumped on every user bank change
 #define ui_prefs (favorites.factory[15][30])
 #define PREF_LATCH 1u                          /* MENU > FX LATCH ON (#40) */
 #define PREF_ANIM_OFF 2u                       /* MENU > ANIM OFF (#46): values snap (no rolling digits, no glide) */
-#define PREF_ACCEL 4u                          /* MENU > KNOB ACCEL ON (#52): fast turns of wide values x2..x4 */
+#define PREF_ACCEL 4u                          /* MENU > KNOB ACCEL ON (#52): fast turns of wide values x2..x8 */
 #define PREF_USB_FIXED 8u                      /* MENU > USB LEVEL FIXED: USB audio at the full level, MASTER after */
 #define PREF_BPM_LOCK 16u                      /* MENU > BPM LOCK ON (#58): SELECT sets the tempo only with GLO held */
 #define PREF_LARGE 32u                         /* MENU > LARGE ON (#15, Discussion #80): big knob labels and values
                                                 * (ui_draw.c large_kind); clear in every older setting = OFF */
 #define PREF_SERIAL_OFF 64u                    /* MENU > USB SERIAL OFF (#67): no serial console, the device enumerates as
                                                 * audio + MIDI only (usb.c usb_cdc_switch); clear in every older setting = ON */
+#define PREF_RESTORE_OFF 128u                  /* MENU > RESTORE LAST OFF (1.2, Discussion #130): no autosave written, none
+                                                * restored at power-on (project.c); clear in every older setting = ON */
 #define fx_latch ui_prefs
+/* MENU > AUDIO CLICK, CLICK LEVEL, COUNT-IN (1.1, Discussion #131; click.c, seq.c): two bits each in another byte no
+ * engine uses, saved with the settings: bits 0-1 CLICK (OFF REC ON), 2-3 CLICK LEVEL (stored 0 MID, 1 LOW, 2 HIGH),
+ * 4-5 COUNT-IN (OFF, 1 BAR, 2 BARS); 0 in older settings = OFF / MID / OFF, so nothing clicks or counts in that did
+ * not; 3 (unknown) reads as 0 (settings_persist.c puts it back). Bit 6 (1.2): MENU > SCALE LEDS ON (Discussion #127,
+ * ui_input.c scale_leds; 0 in older settings = OFF). Bit 7 free (append-only) */
+#define ui_rec_prefs (favorites.factory[15][28])
+#define PREF_REC 0xFF00u                       /* (menu_items.c MENU_FLAGS: a bit of ui_rec_prefs, << 8) */
+#define PREF_SCALE_LEDS (0x40u << 8)
+enum { RP_CLICK, RP_LEVEL, RP_COUNTIN };
+static uint32_t rp_get(uint32_t f)                     /* a field as the MENU steps it: 0..2 */
+{
+    uint32_t v = (ui_rec_prefs >> (2u * f)) & 3u;
+    v = v == 3u ? 0u : v;
+    return f == RP_LEVEL ? (v == 0u ? 1u : v == 1u ? 0u : 2u) : v;   /* (LEVEL: LOW MID HIGH, MID stored as 0) */
+}
+static void rp_apply(void)                             /* the settings into click.c / seq.c (every frame: ui_input) */
+{
+    click_mode = (uint8_t)rp_get(RP_CLICK);
+    click_lvl = (uint8_t)rp_get(RP_LEVEL);
+    cin_bars = (uint8_t)rp_get(RP_COUNTIN);
+}
+static void rp_put(uint32_t f, uint32_t v)
+{
+    uint32_t st = f == RP_LEVEL ? (v == 1u ? 0u : v == 0u ? 1u : 2u) : v % 3u;
+    ui_rec_prefs = (uint8_t)((ui_rec_prefs & ~(3u << (2u * f))) | st << (2u * f));
+    rp_apply();
+}
 /* MENU > STYLE (ui_menu.c): ST_FLAT ST_LINE (gfx.c) in another byte no engine uses, saved with the settings;
  * 0 in older ones = FLAT; 2, the retired PIXEL (1.0.1), reads as LINE; anything else unknown as FLAT (settings_persist.c). gfx.c draws from its copy, ux.style
  * (ui_draw.c style_apply) */
@@ -87,6 +116,11 @@ static struct {
     uint8_t cursor;              /* SEQ: step being edited (STEP page KNOB 1 moves it) */
     uint8_t entry_open;          /* SEQ: keys held since the first press of this entry */
     uint8_t lane;                /* SEQ > STEP on a DRUM track (the grid): the lane the keys and KNOB 3 / 4 edit */
+    uint8_t plk_src;             /* parameter locks (ui_input.c lock_*): the sound page whose KNOB 1..4 a step held
+                                  * locks, PAGES index + 1; 0 = HOME's four */
+    uint8_t plk_lane, plk_trk;   /* .. the grid: the lane and the track of the hits plk_rm takes away */
+    uint64_t plk_rm, plk_acc;    /* .. the grid's step keys pressed on a hit (bit = step): it goes when the key is let
+                                  * go, unless the key was held for a lock (its accent: plk_acc) */
     uint8_t hot_col, hot_t;      /* column whose knob was just turned (drawn white) */
     uint8_t menu;                /* 0 off, 1 list, 2 about + credits (HOME held) */
     uint8_t menu_sel;            /* MENU: the row (menu_items.c MI_*; its tab MI_TAB), kept while the device runs */
@@ -97,7 +131,7 @@ static struct {
     uint8_t msg_t;               /* transient message frames */
     uint8_t bpm_t;               /* frames the BPM stays highlighted after a SELECT turn */
     uint8_t act;                 /* action pages: the column whose action OCT+ does, + 1; 0 = none (act_col) */
-    uint32_t rec_t0;             /* REC press time (transport only) */
+    uint32_t rec_t0;             /* REC press time: a tap arms (btn_hold, no hold: held, REC opens its layer) */
     uint32_t seq_t0;             /* SEQ held: direct SONG entry */
     uint32_t save_t0;            /* SAVE press time (btn_hold: held = UNDO) */
     uint8_t confirm;             /* the OCT- / OCT+ dialog: CF_*, 0 = none */
@@ -105,6 +139,8 @@ static struct {
     uint8_t uslot;               /* SAVE > USER: the selected user preset slot */
     uint8_t ppick;               /* SEQ > PATTERNS: the pattern picked (pat_count list index) */
     uint8_t song_row;            /* SONG: row selected, count selects the next empty row */
+    uint8_t ev_row;              /* SEQ > AUTO LIST (ui_input.c ev_*): the row selected (the track's count: + ADD LOCK) */
+    uint8_t ev_step, ev_id;      /* .. + ADD LOCK: the step and the parameter a lock is added on */
     uint8_t uboot;               /* main.c: seconds left before UPDATE MODE (OCT- + OCT+ held), 0 = none */
     uint32_t ly_t0;              /* the layer button's press time | 1, LY_* bits (ui_layer.c layer_gesture) */
     uint8_t ly;                  /* the layer whose button is down (LAYER_*), 0 = none */
@@ -129,9 +165,128 @@ static struct {
 } ui;
 
 enum { CF_NONE, CF_CLEAR_SEQ, CF_CLEAR_TRK, CF_OVR_PROJ, CF_OVR_USER, CF_LOAD_PAT,
-       CF_DEL_ROW, CF_CLEAR_SONG, CF_INIT_SOUND, CF_CLEAR_MOTION, CF_ERASE_USER };   /* ui.confirm: TOOLS' clears, REC
-                                   * held on SEQ (#91); SAVE over a used slot; a pattern over the user's steps;
+       CF_DEL_ROW, CF_CLEAR_SONG, CF_INIT_SOUND, CF_CLEAR_MOTION, CF_ERASE_USER };   /* ui.confirm: TOOLS' clears;
+                                   * SAVE over a used slot; a pattern over the user's steps;
                                    * USER ERASE */
+
+/* MENU > DISPLAY > SCREEN OFF (1.1.5): after a while with no input on the panel the screen and its backlight go off
+ * (a picture held for hours can stay faintly on the panel); the sound, the sequencer, MIDI and USB go on, the LEDs
+ * stay as they are. NEVER, 5, 15, 30 (the default), 60 minutes, kept in a byte no engine uses, saved with the
+ * settings: stored value ^ 3, so 0 (every older setting) is 30 MIN; 5..7 unknown read as 30 MIN.
+ * Input is the panel's only: a button or key held or pressed, a knob turned (not MIDI, the editor or MASTER, an
+ * analogue pot). The press, key or turn that wakes it is swallowed: no note (seq.c kb_asleep), no button, no
+ * value, until everything is let go and the knobs rest for SCR_EAT_MS. A dialog, the count-in and the UPDATE MODE
+ * countdown keep it on (and wake it); the crash screen, UPDATE and UBOOT wake it at once (lcd_wake_now).
+ * Off: lcd_power(0) (backlight off, DISPOFF, SLPIN) and nothing is drawn. Waking, a frame at a time (never a wait in
+ * the loop): 120 ms after the SLPIN, SLPOUT (lcd_power(1)); 120 ms after that one frame redraws everything
+ * (ui.force), then DISPON and the backlight (lcd_power(2)) */
+#define ui_scr (favorites.factory[15][27])
+#define SCR_DEF 3u                                     /* 30 MIN */
+#define SCR_EAT_MS 300u
+static const uint8_t SCR_MIN[5] = {0, 5, 15, 30, 60};  /* NEVER, minutes */
+enum { SCR_ON, SCR_OFF, SCR_WAKE, SCR_SLPOUT, SCR_SHOW };
+static struct {
+    uint8_t st;                  /* SCR_*: SCR_WAKE asked, SCR_SLPOUT sent, SCR_SHOW the frame that redraws */
+    uint8_t eat;                 /* the wake gesture: panel input swallowed (ui_input) */
+    uint32_t idle;               /* fm1_ms of the last panel input (or blocker) */
+    uint32_t t;                  /* fm1_ms of the last panel command (SLPIN, SLPOUT) */
+    uint32_t eat_t;              /* fm1_ms of the last swallowed knob detent */
+} scrn;
+static uint32_t scr_get(void)                          /* the MENU's value: 0 NEVER .. 4 60 MIN */
+{
+    uint32_t v = ui_scr ^ SCR_DEF;
+    return v < NELEM(SCR_MIN) ? v : SCR_DEF;
+}
+static void scr_put(uint32_t v)                        /* (the time counts from the change: the editor's too) */
+{
+    ui_scr = (uint8_t)((v < NELEM(SCR_MIN) ? v : SCR_DEF) ^ SCR_DEF);
+    scrn.idle = fm1_ms;
+}
+static void scr_wake(void)
+{
+    if (scrn.st == SCR_OFF)
+        scrn.st = SCR_WAKE;
+    scrn.eat = 1;
+}
+static void scr_wake_now(void)                         /* main.c: the crash screen, UPDATE, UBOOT */
+{
+    if (scrn.st != SCR_ON)
+        lcd_wake_now();
+    scrn.st = SCR_ON;
+    scrn.idle = fm1_ms;
+}
+/* ui_input, every pass: 1 = the pass is swallowed (the screen dark or waking, or the wake gesture going on) */
+static int scr_input(uint32_t pressed, uint32_t notes)
+{
+    uint32_t held = fm1_in.buttons | fm1_in.notes, k;
+    int32_t moved = 0;
+    if (pressed | notes | held | panel_moved)
+        scrn.idle = fm1_ms;
+    panel_moved = 0;
+    if (scrn.st == SCR_ON && !scrn.eat)
+        return 0;
+    for (k = 0; k < NE; k++)                           /* (every knob's turns go) */
+        moved |= panel_enc(k);
+    panel_moved = 0;
+    if (moved)
+        scrn.eat_t = scrn.idle = fm1_ms;
+    if (pressed | notes | held | (uint32_t)moved)
+        scr_wake();
+    if (scrn.st != SCR_ON || held || (int32_t)(fm1_ms - scrn.eat_t) < (int32_t)SCR_EAT_MS)
+        return 1;
+    scrn.eat = 0;                                       /* all let go, the knobs at rest: input again */
+    kb_asleep = 0;
+    return 0;
+}
+/* ui_draw, every frame: 1 = draw it */
+static int scr_frame(void)
+{
+    uint32_t lim = SCR_MIN[scr_get()] * 60000u;
+    if (ui.confirm || ui.uboot || seq_counting()) {    /* (never dark under these) */
+        scrn.idle = fm1_ms;
+        if (scrn.st == SCR_OFF)
+            scr_wake();
+    }
+    switch (scrn.st) {
+    case SCR_ON:
+        if (!lim || (int32_t)(fm1_ms - scrn.idle) < (int32_t)lim)   /* (signed: robust to a wrap) */
+            return 1;
+        lcd_power(0);
+        scrn.st = SCR_OFF;
+        scrn.t = fm1_ms;
+        scrn.eat = 1;
+        kb_asleep = 1;
+        break;
+    case SCR_WAKE:
+        if (fm1_ms - scrn.t >= 120u) {
+            lcd_power(1);
+            scrn.st = SCR_SLPOUT;
+            scrn.t = fm1_ms;
+        }
+        break;
+    case SCR_SLPOUT:
+        if (fm1_ms - scrn.t >= 120u) {
+            scrn.st = SCR_SHOW;
+            ui.force = 1;
+            return 1;
+        }
+        break;
+    case SCR_SHOW:
+        return 1;
+    }
+    ui.msg_t = 0;                                      /* (dark: what would have shown is over; a clean page back) */
+    ui.msg2[0] = 0;
+    ui.hot_t = ui.bpm_t = 0;
+    return 0;
+}
+static void scr_shown(void)                            /* after the frame: the redrawn page on */
+{
+    if (scrn.st != SCR_SHOW)
+        return;
+    lcd_power(2);
+    scrn.st = SCR_ON;
+    scrn.idle = fm1_ms;
+}
 
 static const page_t *page_over;   /* a quick layer's own four knobs (ui_layer.c), while it edits or draws them */
 static const page_t *cur_page(void) { return page_over ? page_over : &PAGES[ui.page]; }
@@ -157,7 +312,7 @@ static uint32_t large_kind(void)
         return LK_TALL;
     g = cur_page()->graph;
     return g == GR_BROWSE || g == GR_SLOTS || g == GR_USER || g == GR_PATS || g == GR_SONG || g == GR_ROLL ||
-           g == GR_CHANCE || g == GR_SLICES ? LK_LABEL : LK_TALL;
+           g == GR_CHANCE || g == GR_SLICES || g == GR_EVENTS ? LK_LABEL : LK_TALL;
 }
 /* the geometry of the page shown: the cards' height, the panel's top and height */
 static uint32_t card_h(void) { return large_kind() == LK_TALL ? LG_CARD_H : CARD_H; }
@@ -178,7 +333,7 @@ static int32_t ink_w(const aafont_t *f, const char *s)
 }
 
 /* the quick layers (ui_layer.c): a button held, the keys and KNOB 1..4 are its shortcuts, its map over the page */
-enum { LAYER_NONE, LAYER_FX, LAYER_GLO, LAYER_SCL, LAYER_EDIT, LAYER_N };
+enum { LAYER_NONE, LAYER_FX, LAYER_GLO, LAYER_SCL, LAYER_EDIT, LAYER_SEQ, LAYER_REC, LAYER_N };
 static void draw_layer(void);
 static const char *layer_head(void);
 static int layer_locked(void);
@@ -186,9 +341,11 @@ static uint32_t layer_leds(uint32_t *br);
 static uint32_t layer_btn(void);
 
 /* FM operator pages belong to DIGITAL; they never appear on other instruments (without FELUCCA_FM4: never). SLICES:
- * a SLICE track's (ui_slice.c) */
+ * a SLICE track's (ui_slice.c); LANES / LANES 2 a DRUM track's (its lane levels) */
 static int page_visible(uint32_t i)
 {
+    if (PAGES[i].scope == SC_TRACK && PAGES[i].id[0] >= P_LN0 && PAGES[i].id[0] <= P_LN7)
+        return TSEL->eng_req % NENGINES == ENGI_DRUM;
 #if FELUCCA_SLICE
     if (PAGES[i].graph == GR_SLICES)
         return ENGINES[TSEL->eng_req % NENGINES] == &ENG_SLICE;
@@ -234,7 +391,7 @@ static int transport_busy(void)
 {
     int busy;
     fm1_irq_off();
-    busy = song.playing || chain_busy() || transport_req == 1u;
+    busy = song.playing || chain_busy() || transport_req == 1u || seq_counting();   /* (a count-in: as playing) */
     fm1_irq_on();
     return busy;
 }
@@ -253,9 +410,33 @@ static void chain_play_ui(void)
 }
 
 
+/* parameter locks: a page whose KNOB 1..4 can lock (a track's sound: one of its parameters can be motion; not MOD's
+ * slots), the parameter KNOB k locks (ui.plk_src's page, HOME's four), 0xFF = none */
+static int lock_page_ok(uint32_t i)
+{
+    uint32_t k;
+    if (i >= NPAGES || (PAGES[i].scope != SC_TRACK && PAGES[i].scope != SC_ENGINE) || PAGES[i].graph == GR_MOD)
+        return 0;
+    for (k = 0; k < 4u; k++)
+        if (PAGES[i].id[k] != 0xFFu && motion_param(PAGES[i].id[k]))
+            return 1;
+    return 0;
+}
+static uint32_t lock_id(uint32_t k)
+{
+    uint32_t id = ui.plk_src && lock_page_ok(ui.plk_src - 1u) ? PAGES[ui.plk_src - 1u].id[k & 3u]
+                                                               : ENGINES[TSEL->eng_req % NENGINES]->knob[k & 3u];
+    return id < P_COUNT && motion_param(id) ? id : 0xFFu;
+}
+
+static void ev_enter(void);
 static void page_entered(void)
 {
     const page_t *pg = cur_page();
+    if (!ui.home && pg->graph == GR_EVENTS)      /* AUTO LIST: + ADD LOCK on the SEQ cursor's step */
+        ev_enter();
+    if (!ui.home && lock_page_ok(ui.page))
+        ui.plk_src = (uint8_t)(ui.page + 1u);
     song.seq_mode = !ui.home && pg->fam == FAM_SEQ;
     ui.entry_open = 0;
     ui.hot_t = 0;                                /* clear the previous page's emphasis */
@@ -417,6 +598,7 @@ static void open_global(void)
 static void go_home(void)
 {
     ui.home = 1;
+    ui.plk_src = 0;                              /* (parameter locks: HOME's four) */
     ui.entry_open = 0;
     ui.hot_t = 0;
     song.seq_mode = 0;
@@ -440,8 +622,12 @@ static int seq_is_empty(const track_t *t)
  * load, or a sound edited after a pattern load, stay as they are. One copy for all tracks: the last
  * load wins. Loads in a row on one track with nothing changed in between (the PRESETS knob through the
  * list, one pattern after the other, an editor audition) keep the copy from before the first, so the
- * undo goes back past the whole browse. Not snapshotted: power-on, projects. */
-enum { UNDO_SOUND = 1, UNDO_PAT = 2 };
+ * undo goes back past the whole browse. Not snapshotted: power-on, projects.
+ * 1.1.5: a lock or automation edit by hand (a step held and a knob turned, a step's locks cleared, SEQ > AUTO LIST)
+ * takes the copy too (UNDO_MOT: SAVE held puts the track's motion back, the sound and the steps stay; motion_undo_take).
+ * A sound load keeps the track's motion on the parameters every engine has (load_end, motion.c motion_sound_loaded);
+ * a pattern load drops it all (the steps it was on are gone) */
+enum { UNDO_SOUND = 1, UNDO_PAT = 2, UNDO_MOT = 4 };
 static struct {
     uint8_t trk;                 /* track + 1, 0 = nothing to undo */
     uint8_t keep;                /* the track is as the last load left it (undo.after): a next load keeps the copy */
@@ -461,6 +647,8 @@ static uint8_t undo_depth;       /* loads nest (an engine jump loads its first p
 static uint32_t pat_sig[NTRK];   /* steps_sig of the pattern the last pattern load put into each track: such
                                   * steps, untouched, are replaced by the next pattern without asking */
 static uint8_t pat_last[NTRK];   /* that pattern's list index + 1, 0 = none */
+static uint8_t load_from;        /* a sound load (the outer one): the engine before it (load_end) */
+static uint8_t load_mo;          /* .. the track's motion paused while the sound changes: bit 0 set, bit 1 it was ON */
 
 static uint32_t fnv(uint32_t h, const void *p, uint32_t n)
 {
@@ -479,6 +667,27 @@ static uint32_t track_sig(const track_t *t)      /* the sound (an FM6 track's pa
         if ((motion.event[j].place >> 6) == k) h = fnv(h, &motion.event[j], sizeof motion.event[j]);
     return h ^ ((motion.on >> k) & 1u);
 }
+static uint32_t motion_sig(const track_t *t)     /* the track's motion only (the sound moves while it plays) */
+{
+    uint32_t h = 2166136261u, k = trk_index(t);
+    for (uint32_t j = 0; j < motion.count; j++)
+        if ((motion.event[j].place >> 6) == k) h = fnv(h, &motion.event[j], sizeof motion.event[j]);
+    return h ^ ((motion.on >> k) & 1u);
+}
+
+/* load_begin, the copy taken: a pattern load drops the track's motion (its steps go); a sound load pauses it (PLAY
+ * OFF while the sound changes under it) and load_end keeps what still means the same (motion_sound_loaded) */
+static void load_motion_hold(track_t *t, uint32_t what)
+{
+    if (what & UNDO_PAT) {
+        motion_reset(t);
+        load_mo = 0;
+        return;
+    }
+    load_from = t->eng_req;
+    load_mo = (uint8_t)(1u | (motion_enabled(t) ? 2u : 0u));
+    motion_set_enabled(t, 0);
+}
 
 static void load_begin(track_t *t, uint32_t what)
 {
@@ -486,9 +695,9 @@ static void load_begin(track_t *t, uint32_t what)
     if (undo_depth++)
         return;
     motion_restore(t);
-    if (undo.keep && undo.trk == i + 1u && track_sig(t) == undo.after) {
+    if (undo.keep && undo.trk == i + 1u && !(undo.what & UNDO_MOT) && track_sig(t) == undo.after) {
         undo.what |= (uint8_t)what;               /* browsing on: the copy from before the first load stays */
-        motion_reset(t);
+        load_motion_hold(t, what);
         return;
     }
     undo.trk = (uint8_t)(i + 1u);
@@ -503,13 +712,19 @@ static void load_begin(track_t *t, uint32_t what)
     undo.pat = pat_sig[i];
     undo.patn = pat_last[i];
     motion_snapshot_track(t, &undo.motion_backup);
-    motion_reset(t);
+    load_motion_hold(t, what);
 }
 
 static void load_end(track_t *t)
 {
     if (--undo_depth)
         return;
+    if (load_mo & 1u) {                           /* a sound load: the motion on the common parameters stays */
+        (void)motion_sound_loaded(t, load_from, t->eng_req);
+        if ((load_mo & 2u) && motion_count(t))
+            motion_set_enabled(t, 1);
+        load_mo = 0;
+    }
     motion_rebase(t);
     undo.after = track_sig(t);
     undo.keep = 1;
@@ -520,10 +735,44 @@ static void load_end(track_t *t)
  * values): part of that load, the copy from before it stays */
 static void load_extend(track_t *t)
 {
-    if (undo.keep && undo.trk == trk_index(t) + 1u && fm1_ms - undo.t_ms < 1500u) {
+    if (undo.keep && undo.trk == trk_index(t) + 1u && !(undo.what & UNDO_MOT) && fm1_ms - undo.t_ms < 1500u) {
         undo.after = track_sig(t);
         undo.t_ms = fm1_ms;
     }
+}
+
+/* 1.1.5: a lock / automation edit by hand on track t is about to happen: the undo copy of the track as it is (as
+ * ui_tools.c tl_undo_take, UNDO_MOT: the swap puts back its motion only). A knob turned on (the same tag, not 0:
+ * the same knob of the same gesture), on the same track, nothing else changed and less than 1.5 s apart, shares the
+ * copy from before its first detent; tag 0 (an add, a delete, a clear, a kind) always takes its own.
+ * motion_undo_done after each */
+static uint32_t undo_mot_tag;
+static void motion_undo_take(track_t *t, uint32_t tag)
+{
+    uint32_t i = trk_index(t);
+    if (tag && tag == undo_mot_tag && undo.keep && undo.trk == i + 1u && undo.what == UNDO_MOT &&
+        motion_sig(t) == undo.after && fm1_ms - undo.t_ms < 1500u)
+        return;
+    undo_mot_tag = tag;
+    undo.trk = (uint8_t)(i + 1u);
+    undo.what = UNDO_MOT;
+    undo.eng = t->eng_req;
+    undo.preset = t->preset;
+    undo.user = t->user;
+    memcpy(undo.p, t->p, sizeof undo.p);
+    memcpy(undo.step, t->step, sizeof undo.step);
+    memcpy(undo.fm6, fm6_patch[i], FP_SIZE);
+    undo.fm6_slot = fm6_slot[i];
+    undo.pat = pat_sig[i];
+    undo.patn = pat_last[i];
+    motion_snapshot_track(t, &undo.motion_backup);
+    undo.keep = 0;
+}
+static void motion_undo_done(track_t *t)
+{
+    undo.after = motion_sig(t);
+    undo.keep = 1;
+    undo.t_ms = fm1_ms;
 }
 
 static int param_kept(uint32_t i);
@@ -1062,6 +1311,7 @@ static void track_select(uint32_t i)
 }
 
 #include "ui_slice.c"                             /* EDIT > SLICES: SLICE's slices by hand (an action page too) */
+#include "ui_events.c"                            /* SEQ > AUTO LIST: the locks and events as a list (an action page) */
 
 /* ---------------------------------------------------- action pages --- */
 /* Pages whose purpose is an action (SEQ > PATTERNS, SAVE > USER, PROJECT, TOOLS, EDIT > SLICES): the knobs pick,
@@ -1076,6 +1326,7 @@ static uint32_t act_cols(void)                   /* the columns that are actions
     if (ui.home)
         return 0;
     if (pg->graph == GR_MOTION) return 8u;
+    if (pg->graph == GR_EVENTS) return 16u;     /* AUTO LIST: no knob is an action; OCT+ adds / toggles (ev_oct) */
     if (pg->graph == GR_TOOLS) return 15u;
     if (pg->graph == GR_SONG)
         return 1u;                               /* PLAY / STOP (also the PLAY button) */
@@ -1096,6 +1347,7 @@ static uint32_t act_cols(void)                   /* the columns that are actions
 static uint32_t act_col(void)
 {
     if (!ui.home && cur_page()->graph == GR_SONG) return 1u;
+    if (!ui.home && cur_page()->graph == GR_EVENTS) return 5u;
     return !ui.home && cur_page()->graph == GR_PATS ? 2u : ui.act;
 }
 
@@ -1104,6 +1356,7 @@ static const char *act_name(uint32_t c)          /* column c's action (the foote
     static const char *const UP_GO[3] = {"LOAD", "ERASE", "SAVE"};
     uint32_t id = cur_page()->id[c & 3u];
     if (cur_page()->graph == GR_MOTION) return "CLEAR";
+    if (cur_page()->graph == GR_EVENTS) return ev_act_name();
     if (cur_page()->graph == GR_TOOLS) {
         static const char *const actions[] = {"CLEAR", "INIT", "DELETE", "CLEAR"};
         return actions[c & 3u];
@@ -1127,6 +1380,7 @@ static int act_ready(void)
     if (!c--)
         return 0;
     if (cur_page()->graph == GR_MOTION) return !chain_busy() && motion_count(TSEL);
+    if (cur_page()->graph == GR_EVENTS) return ev_act_ready();
     if (cur_page()->graph == GR_TOOLS)                  /* one case per column: CLEAR PAT, INIT, DELETE ROW, CLEAR SONG */
         return !chain_busy() && (c == 0u ? !seq_is_empty(TSEL) || motion_count(TSEL) : c == 1u ? 1 :
                                  c == 2u ? ui.song_row < chain_config.count : chain_config.count != 0u);

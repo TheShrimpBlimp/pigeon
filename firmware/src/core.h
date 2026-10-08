@@ -64,6 +64,7 @@ enum {                          /* per-track parameters */
     P_FM3_ATK, P_FM3_DEC, P_FM3_SUS, P_FM3_REL, P_FM3_LEVEL,
     P_FM4_ATK, P_FM4_DEC, P_FM4_SUS, P_FM4_REL, P_FM4_LEVEL,
     P_CHRD, P_VOIC,                            /* chord keys (chord.c): one key plays a chord; its voicing */
+    P_LN0, P_LN1, P_LN2, P_LN3, P_LN4, P_LN5, P_LN6, P_LN7,   /* DRUM lane levels (eng_drum.c, #97): KICK .. BELL */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -243,7 +244,12 @@ static void step_set_ratchet(step_t *s, uint32_t hits)
     s->flags = (uint8_t)((s->flags & ~SF_RATCH) | ((hits < 1u ? 0u : hits > 4u ? 3u : hits - 1u) << SF_RATCH_SH));
 }
 #define MOTION_MAX 64u
-/* Four tracks x64 steps fit one byte. Values retain their signed parameter range. */
+/* Four tracks x64 steps fit one byte. Values retain their signed parameter range.
+ * param: the P_* id (< 128: P_COUNT is at most 127, project.c), bit 7 (MOTION_LOCK, 1.1) a parameter lock: the value
+ * sounds on that step only and goes back after it (motion.c motion_step); without it an automation event, the
+ * value holds until another one changes it. One record per (track, step, id), of either kind */
+#define MOTION_LOCK 0x80u
+#define MOTION_ID(e) ((uint32_t)(e)->param & 0x7Fu)
 typedef struct { uint8_t place, param; int16_t value; } motion_event_t;
 typedef struct { uint8_t count, on, rsv[2]; motion_event_t event[MOTION_MAX]; } motion_store_t;
 _Static_assert(sizeof(motion_store_t) == 260u, "motion disk layout");
@@ -274,6 +280,8 @@ typedef struct track {
     uint32_t arp_pos;            /* q8 samples into the current arp step */
     uint32_t arp_idx;
     uint8_t arp_note;            /* sounding arp note, 0 = none */
+    uint8_t arp_walk;            /* WALK: the place in the note list it stands on */
+    uint8_t arp_ch[3];           /* CHORD: the other notes sounding with arp_note, 0 = none */
     uint32_t arp_off;            /* q8 sample time of its note-off */
     /* sequencer */
     step_t step[NSTEP];

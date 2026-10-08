@@ -77,3 +77,4 @@ cpu/SLICE/01_STUTTER 1008
 cpu/mix/idle 286
 cpu/mix/idle_drums 552
 cpu/mix/3parts_full_drums 1574
+cpu/mix/idle_click 334

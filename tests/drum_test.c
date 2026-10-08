@@ -685,6 +685,51 @@ static void lane_budget(void)
         memset(trk[p].v, 0, sizeof trk[p].v);
 }
 
+/* #97: each lane's LEVEL (P_LN0..P_LN7): 100 % plays as before (bit for bit), 50 % about -12 dB (square law), 0 %
+ * silent, and a lane's level touches no other lane. The part's own output (track_render: no sends, no master) of nb
+ * blocks of one note struck alone: its energy and hash */
+static double lane_mix(uint32_t note, uint32_t lane, int16_t level, uint32_t nb, uint64_t *hash)
+{
+    int32_t o[CTL];
+    double e = 0;
+    uint32_t i, k;
+    kit_fresh();
+    trk[0].p[P_LN0 + lane] = level;
+    trk_note_on(&trk[0], note, 110);
+    *hash = 1469598103934665603ull;
+    for (i = 0; i < nb; i++) {
+        track_render(&trk[0], o, CTL);
+        for (k = 0; k < CTL; k++) {
+            e += (double)o[k] * o[k];
+            *hash = (*hash ^ (uint32_t)o[k]) * 1099511628211ull;
+        }
+    }
+    return e;
+}
+static void lane_levels(void)
+{
+    static const uint8_t NOTE[NLANE] = {36, 38, 39, 42, 46, 45, 37, 56};
+    uint32_t l, bad = 0;
+    uint64_t h0, h1, h2;
+    double worst = 0;
+    kit_fresh();
+    for (l = 0; l < NLANE; l++)
+        bad += trk[0].p[P_LN0 + l] != 127 || TP[P_LN0 + l].def != 127 || NOTE[l] != DRUM_LANE_NOTE[l];
+    for (l = 0; l < NLANE; l++) {
+        double full = lane_mix(NOTE[l], l, 127, 64, &h0), half, off;
+        (void)lane_mix(NOTE[l], (l + 1u) % NLANE, 0, 64, &h1);   /* another lane silenced: this one as it was */
+        half = lane_mix(NOTE[l], l, 64, 64, &h2);
+        bad += h1 != h0 || h2 == h0;
+        off = lane_mix(NOTE[l], l, 0, 64, &h1);
+        half = 10.0 * log10(half / full);
+        worst = fabs(half + 11.95) > worst ? fabs(half + 11.95) : worst;
+        bad += off != 0.0 || fabs(half + 11.95) > 0.1;
+    }
+    printf("drum_test: lane LEVEL: another lane's leaves a lane bit for bit, 50 %% -11.95 dB "
+           "(at most %.2f dB off), 0 %% silent: %s\n", worst, bad ? "FAIL" : "ok");
+    fails += bad != 0;
+}
+
 static void engine(void)
 {
     /* the 8 lanes: KICK SNARE CLAP HAT CL HAT OP TOM RIM BELL (the closed hat first: it would choke the open one) */
@@ -1326,6 +1371,7 @@ int main(int argc, char **argv)
     kit_keys();
     retired();
     lane_budget();
+    lane_levels();
     engine();
     if (argc > 1)
         demos(argv[1]);
