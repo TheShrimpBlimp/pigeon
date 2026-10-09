@@ -8,7 +8,7 @@
  *   PROJECTS   FUN8 round trip of x1..x4 (bit 7 of the velocity and chance bytes), an x1 project packs those bytes
  *              as before, FUN7 / FUN6 images load x1.
  *   PRESETS    a user preset's note pattern keeps it (flags 8 | 16, UP_PUT too); a drum grid record has no room: x1.
- *   UI         SEQ > CHANCE KNOB 3 (RATCH x1..x4, clamped, the cursor step; dimmed on a REST, a TIE, an empty
+ *   UI         SEQ > AUTOMATION RATCH rows, KNOB 4 (x1..x4, clamped, the row's step; dimmed on a REST, a TIE, an empty
  *              step); the piano roll and the DRUM grid draw a ratcheted step in its parts, the roll no slide line
  *              out of one.
  * The editor protocol (STEP_SET / TRACK_STEP, INFO 52 01 04) is in tests/editor_test.c. Built and run by
@@ -204,7 +204,7 @@ static int projects(void)
         memset(&v6, 0, sizeof v6);
         v6.magic = PROJ_MAGIC_V6; v6.size = sizeof v6; v6.parts = NPART; v6.phys = PROJ_PHYS;
         memcpy(v6.g, before.g, sizeof v6.g);
-        chain_defaults(&v6.chain);
+        memset(&v6.chain, 0, sizeof v6.chain);
         for (k = 0; k < NTRK; k++) {
             for (i = 0; i < 69u; i++) v6.t[k].p[i] = TP[i < 61u ? i : i - 61u + P_E0].def;
             v6.t[k].step[0] = (step10_t){{60}, 1, ST_NOTE, 0xFBu, 100, 0, 0};   /* (stray high bits) */
@@ -294,14 +294,14 @@ static int screens(void)
     uint32_t x, y;
     ui_power_on();
     t = TSEL;
-    go_page(GR_CHANCE);
-    ui.cursor = 0;
-    turn(EN_K3, 2);
+    go_auto_add(EV_RATCH, 0);                        /* (1.2: SEQ > AUTOMATION, + ADD RATCH: x2, its row) */
+    press(B_OCTUP);
+    turn(EN_K4, 1);
     ok = step_ratchet(&t->step[0]) == 3u && step_ratchet(&t->step[1]) == 1u;
-    turn(EN_K3, 100);
+    turn(EN_K4, 100);
     ok &= step_ratchet(&t->step[0]) == 4u;
-    turn(EN_K3, -100);
-    bad += check("SEQ > CHANCE KNOB 3: RATCH of the cursor step, x1..x4", ok && step_ratchet(&t->step[0]) == 1u &&
+    turn(EN_K4, -100);
+    bad += check("SEQ > AUTOMATION's RATCH row, KNOB 4: RATCH of its step, x1..x4", ok && step_ratchet(&t->step[0]) == 1u &&
                  step_chance(&t->step[0]) == 100u);
     {                                                /* RATCH dimmed where it does nothing: REST, TIE, empty */
         uint32_t dim[4], thm[4], k;
@@ -311,12 +311,12 @@ static int screens(void)
             t->step[0] = kind[k];
             step_set_ratchet(&t->step[0], 2);
             memset(host_screen, 0, sizeof host_screen); ui.force = 1; ui_draw();
-            dim[k] = card_px(2, T_DIM); thm[k] = card_px(2, T_THEME);
+            dim[k] = card_px(3, T_DIM); thm[k] = card_px(3, T_THEME);
         }
         t->step[0] = kind[3]; t->step[0].hit = 1u;   /* a NOTE step of lane hits only: it plays */
         step_set_ratchet(&t->step[0], 2);
         memset(host_screen, 0, sizeof host_screen); ui.force = 1; ui_draw();
-        ok = card_px(2, T_DIM) == dim[0] && card_px(2, T_THEME) == thm[0];
+        ok = card_px(3, T_DIM) == dim[0] && card_px(3, T_THEME) == thm[0];
         for (k = 1; k < 4u; k++)
             ok &= dim[k] > dim[0] && thm[k] < thm[0];
         bad += check("  RATCH shows dimmed on a REST, a TIE or an empty step (a note or a hit: not)", ok);

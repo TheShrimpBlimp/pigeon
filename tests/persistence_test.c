@@ -638,7 +638,7 @@ int main(void)
         }
     }
     chain_config.count = 1;
-    chain_config.row[0] = (chain_row_t){3, 1};
+    chain_config.row[0] = chain_row_of(3, 1);
     bad += check("SONG sources use the same step bounds", chain_prepare() == 0 &&
                   !memcmp(&chain.source[3].step[0][0], &trk[0].step[0], sizeof(step_t)));
     seq_stop();

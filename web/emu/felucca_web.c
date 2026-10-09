@@ -73,10 +73,12 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo; }
  * clock (a scan frame 1.1 ms), the page draws each LED's level (web_anim_levels); at its end, or on a key or a button
  * down, the last picture (the glow everywhere, or dark) and the UI's LEDs from the next frame, as the scan does */
 #include "../../firmware/hal/fm1_led_anim.h"
-static uint32_t web_anim_t0, web_anim_glow, web_anim_run;
+static uint32_t web_anim_t0, web_anim_glow, web_anim_run, web_anim_idle;   /* (idle: 1.2's idle animation, MENU >
+                                                                              * ANIM IDLE: fm1_idle_level, endless) */
 static uint32_t web_anim_frame(void) { return (web_ticks - web_anim_t0) / (1100u * FM1_TICKS_PER_US); }
 static void fm1_led_anim_start(uint32_t glow)
 {
+    web_anim_idle = 0;
     memset(fm1_led, 0, sizeof fm1_led);
     memset(fm1_led_dim, 0, sizeof fm1_led_dim);
     memset(fm1_led_breath, 0, sizeof fm1_led_breath);
@@ -87,7 +89,9 @@ static void fm1_led_anim_start(uint32_t glow)
 }
 static int fm1_led_anim_on(void)
 {
-    if (web_anim_run && (web_anim_frame() >= FM1_ANIM_FRAMES || fm1_in.notes || fm1_in.buttons)) {
+    if (web_anim_run && web_anim_idle && (fm1_in.notes || fm1_in.buttons))
+        web_anim_run = 0;                       /* (the idle animation: ended, the UI's LEDs from now) */
+    if (web_anim_run && !web_anim_idle && (web_anim_frame() >= FM1_ANIM_FRAMES || fm1_in.notes || fm1_in.buttons)) {
         uint32_t c, r;
         web_anim_run = 0;
         for (c = 0; c < FM1_NCOL; c++)
@@ -97,6 +101,13 @@ static int fm1_led_anim_on(void)
     }
     return (int)web_anim_run;
 }
+static void fm1_led_idle_start(uint32_t glow)
+{
+    fm1_led_anim_start(glow);
+    web_anim_idle = 1;
+}
+static int fm1_led_idle_on(void) { return fm1_led_anim_on() && web_anim_idle; }
+static void fm1_led_anim_stop(void) { web_anim_run = 0; }
 static uint32_t web_pressed, web_released, web_notes_pressed;
 static int32_t web_enc_steps[7];
 static uint32_t fm1_input_edges(uint32_t *released)
@@ -418,7 +429,7 @@ EXPORT uint32_t web_dim_level(void) { return web_dim_lo; }
 EXPORT uint32_t web_breath_buttons(void) { return led_buttons(fm1_led_breath); }   /* #119: dark .. ~60 % of lit */
 EXPORT uint32_t web_breath_keys(void) { return led_keys(fm1_led_breath); }
 EXPORT uint32_t web_mid_keys(void) { return led_keys(fm1_led_mid); }   /* the DRUM grid's beats: a steady mid level */
-/* the power-on sweep running: each LED's level now (hal/fm1_led_anim.h: 0..64 /64 of lit, | 0x80 the glow under
+/* the power-on sweep (or 1.2's idle animation) running: each LED's level now (hal/fm1_led_anim.h: 0..64 /64 of lit, | 0x80 the glow under
  * it), 0..13 the buttons by label, 14..40 the keys F3..G5; 0 when it is not */
 EXPORT uint8_t *web_anim_levels(void)
 {
@@ -427,7 +438,8 @@ EXPORT uint8_t *web_anim_levels(void)
     if (!fm1_led_anim_on())
         return 0;
     for (i = 0; i < FM1_ANIM_NBTN + FM1_ANIM_NKEY; i++)
-        lv[i] = (uint8_t)fm1_anim_level(f, i < FM1_ANIM_NBTN ? (i < NB ? panel.btn[i] : i) : i, web_anim_glow);
+        lv[i] = (uint8_t)(web_anim_idle ? fm1_idle_level : fm1_anim_level)(f, i < FM1_ANIM_NBTN ? (i < NB ? panel.btn[i] : i) : i,
+                                                                          web_anim_glow);
     return lv;
 }
 

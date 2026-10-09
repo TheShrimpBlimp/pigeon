@@ -37,6 +37,7 @@ static void fl_plain_window_init(void) {}
 #include "../firmware/src/storage.c"
 #include "../firmware/src/upreset.c"
 #include "../firmware/src/project.c"
+#include "old_pack.h"
 
 enum { ED_BACKUP_LIST = 65, ED_BACKUP_GET, ED_BACKUP_PUT };
 static uint8_t rep[4096];
@@ -177,8 +178,8 @@ int main(void)
 
     reset();
     trk[0].step[0] = (step_t){{60}, 1, ST_NOTE, 0, 96, 0, 0};
-    bad += check("LIST captures the runtime: 13 objects (id 8 empty, id 9 the FM6 patches), runtime 3648 B (FUN9)",
-                 list(0, &len, &crc) == 0 && rep[2] == 13u && len == sizeof(project_store_t) && len == 3648u &&
+    bad += check("LIST captures the runtime: 13 objects (id 8 empty, id 9 the FM6 patches), runtime 3840 B (FUN10)",
+                 list(0, &len, &crc) == 0 && rep[2] == 13u && len == sizeof(project_store_t) && len == 3840u &&
                  crc == st_crc32(ED_BK_RAW, len));
     bad += check("an empty project slot lists as length 0", list(2, &len, &crc) == 0 && len == 0);
     bad += check("GET of the runtime copy", get(0, 0, 64) == 0);
@@ -276,33 +277,34 @@ int main(void)
     trk[1].step[3] = (step_t){{64}, 1, ST_NOTE, 0, 96, 0, 0};
     project_capture(&proj_scratch);
     proj_pack(&st, &proj_scratch);
-    bad += check("a FUN9 project restores into slot 3 (flash and RAM)",
+    bad += check("a FUN10 project restores into slot 3 (flash and RAM)",
                  put_all(4, &st, sizeof st, st_crc32(&st, sizeof st)) == 0 && project_used(2) &&
                  !memcmp(&proj_slot[2], &st, sizeof st) && st_load(OBJ_PROJECT0 + 2, &proj_wire, sizeof proj_wire) == (int)sizeof st);
-    {   /* FUN8 of 1.0.x (3584 bytes, 91 parameters, the patches at 3056): restores as FUN9, E0 at P_E0, lanes 100 % */
-        static uint8_t v8[3584];
-        uint32_t pos = 68u, pos9 = 68u, k, j, sum;
+    {   /* FUN8 of 1.0.x (3584 bytes, 91 parameters) and FUN9 of 1.1 (3648, 99): restore as FUN10, E0 at P_E0, lanes
+         * 100 %, the four 1.2 parameters at their defaults; a FUN9 with 64 motion records keeps them all */
+        static uint8_t v8[3584], v9[3648];
+        uint32_t k, ok;
         trk[2].p[P_E0] = 2;
+        trk[2].p[P_LN3] = 90;
         project_capture(&proj_scratch);
-        proj_pack(&st, &proj_scratch);
-        memcpy(v8, st.raw, 68);
-        v8[66] = 91;
-        for (k = 0; k < NTRK; k++) {
-            for (j = 0; j < 91u; j++) v8[pos++] = st.raw[pos9 + (j < 83u ? j : j + 8u)];
-            pos9 += P_COUNT;
-            memcpy(v8 + pos, st.raw + pos9, 2u + NSTEP * 9u);
-            pos += 2u + NSTEP * 9u; pos9 += 2u + NSTEP * 9u;
-        }
-        memcpy(v8 + pos, st.raw + pos9, sizeof(chain_config_t) + sizeof(motion_store_t));
-        memcpy(v8 + 3056u, st.raw + PROJ_FM6_OFF, NTRK * FM6_PACKED);
-        ((uint32_t *)v8)[0] = 0x46554E38u;
-        ((uint32_t *)v8)[1] = 3584u;
-        sum = proj_hash(v8, 3580u);
-        memcpy(v8 + 3580u, &sum, 4);
-        bad += check("a FUN8 project (1.0.x) restores as FUN9 into slot 2, E0 at P_E0, lane levels 100 %",
+        proj_scratch.t[2].p[P_LN3] = 127;              /* (FUN8 had no lane levels) */
+        bad += check("a FUN8 project (1.0.x) restores as FUN10 into slot 2, E0 at P_E0, lane levels 100 %",
+                     old_pack(v8, &proj_scratch, OLD_FUN8, 91u) == sizeof v8 &&
                      put_all(3, v8, sizeof v8, st_crc32(v8, sizeof v8)) == 0 && ((uint32_t *)proj_slot[1].raw)[0] == PROJ_MAGIC &&
                      proj_import(&proj_scratch, &proj_slot[1], sizeof st) && proj_scratch.t[2].p[P_E0] == 2 &&
                      proj_scratch.t[2].p[P_LN3] == 127 && proj_scratch.t[1].step[3].note[0] == 64u);
+        project_capture(&proj_scratch);
+        for (k = 0; k < 64u; k++)
+            proj_scratch.motion.event[k] = (motion_event_t){(uint8_t)(1u << 6 | k), P_REV, (int8_t)k};
+        proj_scratch.motion.count = 64;
+        proj_scratch.motion.on = 2;
+        ok = old_pack(v9, &proj_scratch, OLD_FUN9, 99u) == sizeof v9 &&
+             put_all(4, v9, sizeof v9, st_crc32(v9, sizeof v9)) == 0 && ((uint32_t *)proj_slot[2].raw)[0] == PROJ_MAGIC &&
+             proj_import(&proj_scratch, &proj_slot[2], sizeof st) && proj_scratch.t[2].p[P_E0] == 2 &&
+             proj_scratch.t[2].p[P_LN3] == 90 && proj_scratch.motion.count == 64u && proj_scratch.motion.event[63].value == 63 &&
+             proj_scratch.t[0].p[P_LSYNC] == 0 && proj_scratch.t[0].p[P_LTRIG] == 0 && proj_scratch.t[0].p[P_LPOL] == 0 &&
+             proj_scratch.t[0].p[P_SQNT] == 1;
+        bad += check("a FUN9 project (1.1) restores as FUN10 into slot 3: its 64 records, the lanes, LFO 2 / QUANTIZE defaults", ok);
     }
     memset(&v6, 0, sizeof v6);                           /* FUN6: 69 parameters, steps out of range */
     v6.magic = PROJ_MAGIC_V6;
@@ -313,9 +315,9 @@ int main(void)
         v6.t[i].engine = trk[i].engine;
     v6.t[0].step[0] = (step10_t){{255, 72}, 9, 7, 0, 96, 0, 0};
     v6.t[0].p[61] = 3;                                   /* old E0 */
-    chain_defaults(&v6.chain);
+    memset(&v6.chain, 0, sizeof v6.chain);
     v6.sum = proj_hash(&v6, sizeof v6 - 4u);
-    bad += check("a FUN6 project restores as FUN9, bounded, its E0 at P_E0",
+    bad += check("a FUN6 project restores as FUN10, bounded, its E0 at P_E0",
                  put_all(5, &v6, sizeof v6, st_crc32(&v6, sizeof v6)) == 0 && ((uint32_t *)proj_slot[3].raw)[0] == PROJ_MAGIC &&
                  proj_import(&proj_scratch, &proj_slot[3], sizeof st) && proj_scratch.t[0].step[0].n == 4u &&
                  proj_scratch.t[0].step[0].note[0] == 127u && proj_scratch.t[0].p[P_E0] ==

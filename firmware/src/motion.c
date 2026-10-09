@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Sparse, bounded step automation. Main-loop writes publish under the same
- * interrupt guard as parameter batches. The ISR only scans 64 fixed records.
+ * interrupt guard as parameter batches. The ISR only scans MOTION_MAX fixed records (128 since 1.2, FUN10; 64 before).
  * p[] is the sounding value; motion_base_value() is the patch's saved value.
- * Two kinds of record share the 64 (core.h MOTION_LOCK): an automation event sets its value at its step and the value
+ * Two kinds of record share the MOTION_MAX (core.h MOTION_LOCK): an automation event sets its value at its step and the value
  * holds (to the next event, the loop's restart, a stop); a parameter lock (1.1, Discussions #75 / #53: hold a step,
  * turn a knob) sets its value at its step only when the step plays (its chance passed) and the next step puts back
  * what would sound without it: the latest automation event of the pass up to that step, else the sound's own value
@@ -37,8 +37,9 @@ static int motion_param(uint32_t id)
      * changes never become automation. FX sends and continuous mix are safe. */
     return id < P_COUNT && (id <= P_REL || (id >= P_ED_FLT && id <= P_LD_AMP) ||
         (id >= P_DIST && id <= P_REV) || id == P_GLIDE || id == P_PAN ||
-        id == P_DETUNE || (id >= P_FM1_ATK && id <= P_FM4_LEVEL) || id >= P_LN0);   /* (not the chord keys; the
-                                                                                     * DRUM lane levels, E0..E7) */
+        id == P_DETUNE || (id >= P_FM1_ATK && id <= P_FM4_LEVEL) || (id >= P_LN0 && id <= P_LN7) ||
+        id == P_SPRD || id >= P_E0);   /* (not the chord keys, nor 1.2's LFO SYNC TRIG POL and QUANTIZE: settings;
+                                        * the DRUM lane levels, SPREAD (#148: continuous, as PAN), E0..E7) */
 }
 static int motion_valid(const motion_store_t *m)
 {
@@ -160,7 +161,7 @@ static void motion_clear(track_t *t)
 }
 static void motion_reset(track_t *t) { motion_clear(t); }
 /* a record of kind 0 (automation) or MOTION_LOCK on track t's step / id: a new one, or the one there (of either kind)
- * becomes this. 0 ok, 1 invalid, 2 the 64 are used (motion_full: "AUTOMATION FULL") */
+ * becomes this. 0 ok, 1 invalid, 2 the MOTION_MAX are used (motion_full: "AUTOMATION FULL") */
 static int motion_put(track_t *t, uint32_t step, uint32_t id, int16_t value, uint32_t kind)
 {
     uint32_t k = trk_index(t), i, f;
@@ -175,7 +176,7 @@ static int motion_put(track_t *t, uint32_t step, uint32_t id, int16_t value, uin
     if (i == MOTION_MAX) { motion_full = 1; motion_unguard(f); return 2; }
     motion.event[i].place = (uint8_t)(k << 6 | step);
     motion.event[i].param = (uint8_t)(id | kind);
-    motion.event[i].value = value;
+    motion.event[i].value = (int8_t)value;
     RING_PUBLISH();
     if (i == motion.count) motion.count++;
     motion.on |= (uint8_t)(1u << k);
@@ -307,7 +308,7 @@ static int motion_replace_track(track_t *t, const motion_store_t *in)
     return 0;
 }
 
-/* ---- 1.1.5: SEQ > AUTO LIST (ui_input.c ev_*): the records of a track as a list, edited one by one ---- */
+/* ---- 1.1.5: SEQ > AUTOMATION (ui_events.c ev_*): the records of a track as a list, edited one by one ---- */
 /* the record of track t on step / id (either kind): its index, -1 none */
 static int32_t motion_find(const track_t *t, uint32_t step, uint32_t id)
 {
@@ -357,7 +358,7 @@ static int motion_move(track_t *t, uint32_t i, uint32_t step, uint32_t id, int16
         motion_restore(t);                              /* (a value alone: what sounds stays) */
     motion.event[i].place = (uint8_t)(trk_index(t) << 6 | step);
     motion.event[i].param = (uint8_t)((motion.event[i].param & MOTION_LOCK) | id);
-    motion.event[i].value = (int16_t)param_fit(d, v);
+    motion.event[i].value = (int8_t)param_fit(d, v);
     motion_unguard(f);
     return 0;
 }

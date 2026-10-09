@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* The firmware's text (src/gfx.c cv_text) against the reference text path of the UI-redesign prototype that
- * drew the UI design screens (its aa_text / aa_blit4 / ramp_make,
+/* The firmware's text (src/gfx.c cv_text) against the reference text path of the UI-redesign prototype
+ * (its aa_text / aa_blit4 / ramp_make,
  * restated below): pen in 1/16 px accumulated over the string, pair kerning by binary search, no extra tracking,
  * the 16-entry ramp with the light / dark coverage curve. Glyph placement has since moved on from the prototype's
  * (the glyph at the rounded pen) to horizontal phases (tools/aa_raster.py): of the two phase positions around
@@ -9,7 +9,7 @@
  * phase (figures, .) at the rounded pen as before; restated here too.
  * How close that lands to the font's own spacing is tests/text_spacing_test.py's question. Every string below, in S M L, THEME on SURF and TEXT on BG, in every palette: the end pen and every
  * pixel must be identical (GREY expands its gray with G = 2 R, the gray rule; the prototype's G = 2 R + R / 16
- * differed by one green LSB there, and that is the only difference to the mock renders). */
+ * differed by one green LSB there, and that is the only difference to the prototype's renders). */
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -160,7 +160,7 @@ int main(void)
                     n++;
                 }
     }
-    printf("text: %u strings x fonts x palettes against the mock renderer: %u end pens and %u pixels differ %s\n",
+    printf("text: %u strings x fonts x palettes against the reference renderer: %u end pens and %u pixels differ %s\n",
            n, bad_pen, bad_px, bad_pen || bad_px ? "FAIL" : "ok");
     return bad_pen || bad_px ? 1 : 0;
 }

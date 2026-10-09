@@ -11,7 +11,8 @@
  * 3. REV: a slice read backwards (64-sample windows from checkpoints) == the forward decode reversed.
  * 4. keys / steps -> slices (mod the count, START, ROOT, an empty slot plays the sine); ONE / GATE / LOOP.
  * 5. demos into DEMO_DIR: both presets with their patterns, BREAK re-sequenced, the user loop sliced AUTO and MAN.
- * 8. PIANO (SRC 4, 1.0.4): the SAMPLE PIANO zone of middle C itself (no copy), its table, one AUTO slice, played;
+ * 8. PIANO (SRC 4, 1.0.4): SAMPLE PIANO's zone of middle C as 1.0.4 had it (since 1.2 a copy of its own: SAMPLE's
+ *    PIANO is lo-fi), its table, one AUTO slice, played;
  *    a missing sample (SLICE / SAMPLE / GRAIN on an empty slot) plays a sine at the note's pitch: zero crossings,
  *    level, no click, no other sample, it ends after the note-off.
  * 6. MAN, the slices set by hand (the SLICES page; ported from hugelton/Felucca#27 by andreahaku): none set = AUTO,
@@ -821,12 +822,13 @@ int main(int argc, char **argv)
 #ifdef SLC_PIANO_NOTE
     check("PIANO: build-time table == decoder states", !(bad = table_check(&SLC_PIANO)), "%u of %u differ", bad,
           SLC_GRID + SLC_PIANO.nauto);
-    for (i = 0; i < NELEM(SMP_ZONES) && !(SMP_ZONES[i].root16 == SLC_PIANO_NOTE * 16 &&
-                                          SMP_ZONES[i].off == SLC_PIANO.seg[0].off); i++)
+    for (i = 0; i < NELEM(SMP_ZONES) && SMP_ZONES[i].off != SLC_PIANO.seg[0].off; i++)
         ;
-    check("PIANO (SRC 4): the SAMPLE PIANO zone itself (no copy), one AUTO slice at 0",
-          slc_get(SLC_SRC_PIANO) == &SLC_PIANO && i < NELEM(SMP_ZONES) && SLC_PIANO.nseg == 1u &&
-          SLC_PIANO.len == SMP_ZONES[i].n && SLC_PIANO.seg[0].n == SLC_PIANO.len && SLC_PIANO.rate == SMP_ZONES[i].rate &&
+    /* 1.2: SAMPLE's PIANO is lo-fi (2 zones at 11,025 Hz, no middle C): SLICE keeps 1.0.4's zone as a copy of its
+     * own (16537 samples at 22,050 Hz; tests/sample_test.c: the same bytes as the PIANO HD slot's middle C) */
+    check("PIANO (SRC 4): 1.0.4's middle C zone (a copy of its own since 1.2), one AUTO slice at 0",
+          slc_get(SLC_SRC_PIANO) == &SLC_PIANO && i == NELEM(SMP_ZONES) && SLC_PIANO.nseg == 1u &&
+          SLC_PIANO.len == 16537u && SLC_PIANO.seg[0].n == SLC_PIANO.len && SLC_PIANO.rate == 32768u &&
           SLC_PIANO.nauto == 1u && SLC_PIANO.apos[0] == 0u && SLC_PIANO.ast[0] == 0u,
           "%u samples, %u AUTO", SLC_PIANO.len, SLC_PIANO.nauto);
     {   /* SRC 4 plays the zone from its start */

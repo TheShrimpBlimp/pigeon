@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* Felucca menu (HOME held): its rows in tabs (1.0.5: DISPLAY CONTROL AUDIO SYSTEM; ALGORITHM between them, PRESETS
- * within one; no scrolling), the rows in menu_items.c (the settings, shared with the editor's MENU_DESC / MENU_SET).
- * No BACK row: HOME closes it (ui_input.c). The two-valued rows are bits of ui_prefs (MENU_FLAGS). PRESETS scrolls from
- * ABOUT through all credits (OCT- back to the tabs). ui.menu: 1 the tabs, 2 information. */
+/* Felucca menu (HOME held): its rows in tabs (1.0.5: DISPLAY CONTROL AUDIO SYSTEM; 1.2: MIDI before SYSTEM; ALGORITHM
+ * between them, PRESETS within one; no scrolling), the rows in menu_items.c (the settings, shared with the editor's
+ * MENU_DESC / MENU_SET; 1.2: TUNE and MIDI IN, the project's). No BACK row: HOME closes it (ui_input.c). The two-valued
+ * rows are bits of ui_prefs (MENU_FLAGS). PRESETS scrolls from ABOUT through all credits (OCT- back to the tabs).
+ * ui.menu: 1 the tabs, 2 ABOUT (information and credits), 3 INFO (1.2: the device's state, the old SYSTEM page's USB and
+ * CPU readings). */
 /* ------------------------------------------------------------ menu --- */
 /* (the rows, their values and names, usb_serial_apply: menu_items.c) */
 
@@ -151,9 +153,9 @@ static void menu_head(void)
 {
     cv_begin(240, H_HEAD, T_BG);
     GFX_HOOK_ALIGN(0, HEAD_MY + AF_M_CAP_Y, 0, HEAD_MY + AF_M_CAP_Y + AF_M_CAP_H, AL_V, "header icon on its title's line");
-    cv_icon_mid(8, H_HEAD / 2, 16, ui.menu == 2 ? ICON_X_INFO : ICON_X_COG, T_THEME, T_BG);   /* (as draw_head's) */
+    cv_icon_mid(8, H_HEAD / 2, 16, ui.menu >= 2 ? ICON_X_INFO : ICON_X_COG, T_THEME, T_BG);   /* (as draw_head's) */
     GFX_HOOK_ALIGN(0, 0, 0, H_HEAD, AL_V, "header text on its middle");
-    cv_text(30, HEAD_MY, &AF_M, ui.menu == 2 ? "ABOUT / CREDITS" : "MENU", T_TEXT);
+    cv_text(30, HEAD_MY, &AF_M, ui.menu == 3 ? "INFO" : ui.menu == 2 ? "ABOUT / CREDITS" : "MENU", T_TEXT);
     if (ui.menu >= 2) {                               /* the way back at the right, the REC mark before it (then */
         const char *w = song.rec ? 0 : "BACK";        /* the keycap goes without its word: no room for both) */
         int32_t x = 232 - kh_w(KC_OCTDN, w);
@@ -179,19 +181,21 @@ static void menu_head(void)
  *   rows    59..    one SURF panel (FLAT; LINE: none, a rule under the tabs), a row a label and its value, 1 px rules
  *                   between them; the selected row THEME with INK, as the browser's. A value THEME (M) at the right,
  *                   ON / OFF as a switch, COLOR its palette's five colours, CALIBRATION and ABOUT a chevron (OCT+
- *                   opens them). LARGE: 28 px rows (a tab of up to 5), the labels in M
+ *                   opens them); the labels in M too (a list's rows). LARGE: 28 px rows (a tab of up to 5)
  *   keys   224      ALGO TAB, PRESETS ROW, OCT-/+ VALUE (any of KNOB 1..4 too; CALIBRATION, ABOUT: OCT+ OPEN). HOME
  *                   CLOSE is in the header: the four would not fit in S (cv_key_row drops words, from the last)
  * Drawn in two bands (the canvas holds 124 rows) split in a gap between two rows; while the tabs slide only their
  * strip (24..58) is drawn again */
-static const uint16_t MTAB_ICON[MTAB_COUNT] = {ICON_X_EYE, ICON_X_KNOB, ICON_X_SPEAKER, ICON_X_COG};
+static const uint16_t MTAB_ICON[MTAB_COUNT] = {ICON_X_EYE, ICON_X_KNOB, ICON_X_SPEAKER, ICON_MIDI, ICON_X_COG};
 #define MT_Y 29                                        /* the tab bar */
 #define MT_H 24
-#define MT_IW 32                                       /* a cushion with its icon alone (the icon centred in it) */
-#define MT_NX 28                                       /* the name's pen in the one shown; 10 px after it */
+#define MT_IW 26                                       /* a cushion with its icon alone (the icon centred in it; 1.2, five
+                                                        * tabs: 26, up to 1.1.5 32) */
+#define MT_NX 24                                       /* the name's pen in the one shown; 10 px after it */
 #define MT_X0 6
 #define MT_X1 234
-#define MT_GAP 8                                       /* between two tabs, always (the bar centred in MT_X0..MT_X1) */
+#define MT_GAP 5                                       /* between two tabs, always (the bar centred in MT_X0..MT_X1; 1.2, five
+                                                        * tabs: 5, up to 1.1.5 8) */
 #define MT_ONE 64                                      /* mt.pos per tab */
 #define MP_Y 59                                        /* the rows' panel */
 #define MP_PAD 3
@@ -203,8 +207,13 @@ static const uint16_t MTAB_ICON[MTAB_COUNT] = {ICON_X_EYE, ICON_X_KNOB, ICON_X_S
 static int menu_large(void) { return (ui_prefs & PREF_LARGE) != 0u; }
 static uint32_t menu_tab(void) { return MI_TAB[ui.menu_sel % MI_COUNT]; }
 /* the shown tab's rows: 24 px (LARGE 28, a tab of up to 5 rows), 2 px apart (a tab of 6: 1 px, its panel then ends
- * 6 px above the key hints as the others do; the rule between two rows is that gap row) */
-static int32_t mr_h(void) { return menu_large() && mtab_rows(menu_tab()) <= 5u ? 28 : 24; }
+ * 6 px above the key hints as the others do; the rule between two rows is that gap row; 1.2, a tab of 7: 21 px rows
+ * 1 px apart, its panel then ends 4 px lower, LARGE too; 1.3, a tab of 8: 18 px rows 1 px apart, the same end) */
+static int32_t mr_h(void)
+{
+    uint32_t n = mtab_rows(menu_tab());
+    return n > 7u ? 18 : n > 6u ? 21 : menu_large() && n <= 5u ? 28 : 24;
+}
 static int32_t mr_gap(void) { return mtab_rows(menu_tab()) <= 5u ? 2 : 1; }
 static int32_t mr_y(uint32_t k) { return MP_Y + MP_PAD + (int32_t)k * (mr_h() + mr_gap()); }
 
@@ -283,8 +292,7 @@ static void menu_switch(int32_t xr, int32_t y, int32_t h, int on, int sel)
 /* the tab's row k (menu_items.c row `row`) */
 static void menu_row(uint32_t k, uint32_t row)
 {
-    int32_t y = mr_y(k), h = mr_h(), large = menu_large();
-    int32_t ny = y + (large ? CAP_IN(M, h) : CAP_IN(S, h)), vy = y + CAP_IN(M, h);
+    int32_t y = mr_y(k), h = mr_h(), vy = y + CAP_IN(M, h);   /* the label and its value: M (a list's rows) */
     int sel = row == ui.menu_sel;
     uint16_t bg = sel ? T_THEME : T_SURF, fg = sel ? T_INK : T_TEXT, val = sel ? T_INK : T_THEME;
     const char *v = row < MI_VALUES ? menu_vname(row, menu_get(row)) : "";
@@ -293,18 +301,19 @@ static void menu_row(uint32_t k, uint32_t row)
     else if (k && row - 1u != ui.menu_sel)             /* a rule from the row above (none beside the selected one) */
         cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
     GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row name centred up/down");
-    cv_text_on(MR_LX, ny, large ? &AF_M : &AF_S, MI_NAME[row], fg, bg);
+    cv_text_on(MR_LX, vy, &AF_M, MI_NAME[row], fg, bg);
     if (row >= MI_VALUES) {                            /* CALIBRATION, ABOUT: OCT+ opens them */
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row chevron centred up/down");
         cv_icon_in(MR_VR - 12, y, 0, h, 12, ICON_X_RIGHT, sel ? T_INK : T_MID, bg);
         return;
     }
-    if (row == MI_HOLD) {                              /* "0.4" and its unit */
+    if (row == MI_HOLD || row == MI_TUNE) {            /* "0.4" s, "+12" ct: the value and its unit */
         char b[8] = "0.4";
         b[2] = (char)('0' + HOLD_MS[settings_hold % 4u] / 100u);
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row value centred up/down");
         GFX_HOOK_ALIGN(0, 0, 0, vy + AF_M.asc, AL_B, "menu row unit on its value's baseline");
-        cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, "s", sel ? T_INK : T_MID, bg) - 3, vy, &AF_M, b, val, bg);
+        cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, row == MI_TUNE ? "ct" : "s", sel ? T_INK : T_MID, bg) - 3,
+                  vy, &AF_M, row == MI_TUNE ? v : b, val, bg);
         return;
     }
     if (menu_n(row) == 2u && (str_eq(v, "ON") || str_eq(v, "OFF"))) {
@@ -327,6 +336,52 @@ static void menu_row(uint32_t k, uint32_t row)
         }
     }
 }
+/* MENU > SYSTEM > INFO (1.2, ui.menu 3): what the old GLO > SYSTEM page showed, read only: the firmware, the USB link (the
+ * SYSTEM page's MIDI card: OFF no USB, WAIT no bus yet, BUS frames seen, ENUM being set up, MIDI in use) and the CPU load
+ * of the audio (its SYSTEM card; the shown value follows every INFO_CPU_MS, not every frame). The rows as the menu's (no
+ * tabs: from INFO_Y), the selected look on none; OCT- back to the tabs, HOME closes */
+#define INFO_Y 32
+#define INFO_N 3u
+#define INFO_CPU_MS 500u
+static struct { uint8_t cpu; uint32_t t; } info;
+static uint32_t info_usb(void)                         /* 0 OFF, 1 WAIT, 2 BUS, 3 ENUM, 4 MIDI */
+{
+    return !usb.up ? 0u : usb.config ? 4u : usb.setups ? 3u : usb.sof_seen ? 2u : 1u;
+}
+static uint32_t info_sig(void)
+{
+    if (fm1_ms - info.t >= INFO_CPU_MS) {
+        info.t = fm1_ms;
+        info.cpu = (uint8_t)(song.cpu_q8 * 100u / 256u);
+    }
+    return info.cpu * 7u + info_usb() * 131u + 1u;
+}
+static void info_rows(void)                            /* (in screen rows: cv_oy set by the caller) */
+{
+    static const char *const LBL[INFO_N] = {"FIRMWARE", "USB", "CPU"};
+    static const char *const USB_N[5] = {"OFF", "WAIT", "BUS", "ENUM", "MIDI"};
+    int32_t h = menu_large() ? 28 : 24;
+    uint32_t k;
+    char cpu[8];
+    fmt_int(cpu, info.cpu);
+    if (!ux.style)                                     /* FLAT: the rows' panel */
+        cv_rrect(4, INFO_Y, 232, (int32_t)INFO_N * (h + 2) - 2 + 2 * MP_PAD, 8, T_SURF, T_BG);
+    for (k = 0; k < INFO_N; k++) {
+        int32_t y = INFO_Y + MP_PAD + (int32_t)k * (h + 2), vy = y + CAP_IN(M, h);
+        if (k)
+            cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
+        GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "info row name centred up/down");
+        cv_text_on(MR_LX, vy, &AF_M, LBL[k], T_TEXT, T_SURF);
+        GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "info row value centred up/down");
+        if (k == 2u) {                                 /* CPU: the value and its unit, as HOLD's */
+            GFX_HOOK_ALIGN(0, 0, 0, vy + AF_M.asc, AL_B, "info row unit on its value's baseline");
+            cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, "%", T_MID, T_SURF) - 3, vy, &AF_M, cpu, T_THEME, T_SURF);
+        } else {
+            cv_text_r(MR_VR, vy, &AF_M, k ? USB_N[info_usb()] : FELUCCA_VERSION, T_THEME, T_SURF);
+        }
+    }
+}
+
 /* the rows' two bands meet at `split`: in the gap above a row (or below the last), each band at most 124 rows */
 static uint32_t menu_split(uint32_t n)
 {
@@ -347,7 +402,10 @@ static void draw_menu(void)
     sig = ui.menu * 7u + ui.menu_sel * 131u + settings.palette * 1009u + settings.lowcut * 7919u + settings_hold * 3511u +
           settings_leds * 6151u + ui_prefs * 4099u + ui_style * 257u + song.rec * 65537u + song.sel * 13u +
           ui_rec_prefs * 92821u + ui_scr * 131071u +          /* (#157: SCREEN OFF's value redraws its row) */
-          (ui.menu == 2 ? ui.menu_scroll * 48611u : 0u);
+          ui_prefs2 * 524287u + ui_idle * 1048573u +      /* (1.2: ANIM IDLE's value redraws its row) */
+          ui_home_view * 7340033u +    /* (1.3: HOME) */
+          (uint32_t)(song.g[G_TUNE] + 64) * 8191u + (uint32_t)song.g[G_ROUTE] * 27449u +   /* (1.2: the project's rows) */
+          (ui.menu == 2 ? ui.menu_scroll * 48611u : 0u) + (ui.menu == 3 ? info_sig() * 2654435761u : 0u);
     if (!ui.force && sig == ui.menu_sig) {
         if (ui.menu == 1 && mt.pos != pos0) {          /* only the tabs slid: their strip */
             cv_begin(240, MP_Y - H_HEAD, T_BG);
@@ -360,7 +418,19 @@ static void draw_menu(void)
     }
     ui.menu_sig = sig;
     menu_head();
-    if (ui.menu >= 2) {
+    if (ui.menu == 3) {                                /* INFO: its rows in the first band, the second clear */
+        for (pass = 0; pass < 2u; pass++) {
+            uint32_t top_y = pass ? 132u : (uint32_t)H_HEAD;
+            cv_begin(240, pass ? 240u - 132u : 132u - H_HEAD, T_BG);
+            cv_oy = -(int32_t)top_y;
+            if (!pass)
+                info_rows();
+            cv_oy = 0;
+            cv_blit(0, top_y);
+        }
+        return;
+    }
+    if (ui.menu == 2) {
         int32_t scroll = ui.menu_scroll, max = menu_scroll_max();
         int32_t thumb = MENU_DOC_H * MENU_DOC_H / (max + MENU_DOC_H);
         if (thumb < 12) thumb = 12;
@@ -417,7 +487,8 @@ static void menu_close(void)
 
 /* menu: ALGORITHM steps between the tabs, PRESETS between the rows of one (both wrap; a tab comes back at the row
  * last picked in it), any of KNOB 1..4 or OCT+ / OCT- change a value (menu_items.c menu_step), OCT+ opens CALIBRATION /
- * ABOUT (OCT- nothing there); OCT- in ABOUT goes back to the tabs. HOME closes it, from ABOUT too (ui_input.c) */
+ * INFO / ABOUT (OCT- nothing there); OCT- in INFO and ABOUT goes back to the tabs. HOME closes it, from them too
+ * (ui_input.c) */
 static void menu_move(int32_t s)                       /* PRESETS: the next / previous row of the tab */
 {
     uint32_t t = menu_tab(), f = mtab_first(t), n = mtab_rows(t), k = (ui.menu_sel - f + (s > 0 ? 1u : n - 1u)) % n;
@@ -436,10 +507,11 @@ static void menu_input(uint32_t oct)                  /* oct: ui_input.c oct_tap
 {
     int32_t s;
     uint32_t k, up = (oct >> 1) & 1u, dn = oct & 1u;
-    if (ui.menu >= 2) {                                /* ABOUT: PRESETS scrolls (bounded), OCT- back to the tabs */
+    if (ui.menu >= 2) {                                /* ABOUT: PRESETS scrolls (bounded); INFO, ABOUT: OCT- back to
+                                                        * the tabs */
         if (dn)
             ui.menu = 1, ui.force = 1;
-        else if ((s = panel_enc(EN_PRESET)) != 0)
+        else if (ui.menu == 2 && (s = panel_enc(EN_PRESET)) != 0)
             ui.menu_scroll = (uint16_t)clamp((int32_t)ui.menu_scroll + clamp(s, -128, 128) * 18, 0, menu_scroll_max());
         enc_drop();
         return;
@@ -460,6 +532,10 @@ static void menu_input(uint32_t oct)                  /* oct: ui_input.c oct_tap
         if (ui.menu_sel == MI_PANEL) {
             panel_setup();
             scrn.idle = fm1_ms;                         /* (SCREEN OFF: its own loop had the input) */
+            ui.force = 1;
+        } else if (ui.menu_sel == MI_INFO) {
+            ui.menu = 3;
+            info.t = fm1_ms - INFO_CPU_MS;              /* (the CPU load read at once) */
             ui.force = 1;
         } else {                                       /* MI_ABOUT */
             ui.menu = 2;

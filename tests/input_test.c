@@ -451,6 +451,130 @@ static void anim_test(void)
     memset(fm1_led_breath, 0, sizeof fm1_led_breath);
 }
 
+/* 1.2 (Discussion #135): the idle animation (hal/fm1_led_anim.h fm1_idle_level, hal/fm1_input.h fm1_led_idle_start)
+ * through fm1_input_tick, the LEDs read after each scan frame:
+ *   - endless: over a cycle and a half it keeps running (the frame wraps at FM1_IDLE_FRAMES), fm1_led_idle_on() 1;
+ *   - every LED, every frame, as its level asks (lit frames by the same first order sigma-delta, the glow flag);
+ *   - the picture: one soft light on the keys (at most ~35 % of lit), drifting left to right over the first half of
+ *     a cycle and back over the second, reaching both ends; the keys around it falling away; the buttons together
+ *     between 1/64 and 1/8 of lit; the glow under every LED with DIM, none without;
+ *   - a key down ends it before the next frame is drawn (the LEDs as left), so does fm1_led_anim_stop; the power-on
+ *     sweep started after it is the sweep (not idle) */
+static void idle_anim_test(void)
+{
+    uint32_t g;
+    for (g = 0; g < 2u; g++) {                         /* 0 DIM (the glow), 1 OFF */
+        enum { NF = FM1_IDLE_FRAMES + FM1_IDLE_FRAMES / 2u };
+        uint32_t acc[FM1_NKEY], cb[FM1_NKEY], fr = 0, i, r, c, bad = 0, badglow = 0, run_ok = 1, maxlv = 0;
+        uint32_t lmin = 999, lmax = 0, bmin = 99, bmax = 0, mono = 0, prevtop = 0, reach_l = 0, reach_r = 0, badfall = 0;
+        char what[128];
+        reset();
+        fm1_led_dim_level(0);
+        FM1_PR(FM1_PA, FM1_IN) = FM1_PR(FM1_PB, FM1_IN) = 0xFFFFFFFFu;
+        host_step = 1u;
+        host_bus = 1u;
+        for (i = 0; i < FM1_NKEY; i++)                 /* each LED's column and row (as fm1_led_anim_start) */
+            for (r = 1; r < 5u; r++)
+                for (c = 0; c < FM1_NCOL; c++)
+                    if (FM1_KEYMAP[r][c] == (int8_t)i)
+                        cb[i] = c << 3 | r;
+        while (fm1__tick_col != 3u)
+            fm1_input_tick();
+        fm1_led_idle_start(g == 0u);
+        for (i = 0; i < FM1_NKEY; i++)
+            acc[i] = FM1_ANIM_FULL / 2u;
+        while (fr < NF) {
+            uint32_t f = fm1__an_f - 1u, lv[FM1_ANIM_NKEY], top = 0, k;
+            do
+                fm1_input_tick();
+            while (fm1__tick_col != 0u);
+            run_ok &= fm1_led_idle_on() && fm1_led_anim_on();
+            for (i = 0; i < FM1_NKEY; i++) {           /* the model: this frame's levels, the same sigma-delta */
+                uint32_t q = fm1_idle_level(f, i, g == 0u), lit, m = 1u << (cb[i] & 7u);
+                acc[i] += q & 0x7Fu;
+                lit = acc[i] >= FM1_ANIM_FULL;
+                if (lit)
+                    acc[i] -= FM1_ANIM_FULL;
+                bad += ((fm1_led[cb[i] >> 3] & m) != 0u) != lit;
+                bad += ((fm1_led_dim[cb[i] >> 3] & m) != 0u) != ((q & FM1_ANIM_GLOW) != 0u);
+                badglow += g == 0u && !(q & FM1_ANIM_GLOW);
+                if (i < FM1_ANIM_NBTN) {
+                    bmin = (q & 0x7Fu) < bmin ? q & 0x7Fu : bmin;
+                    bmax = (q & 0x7Fu) > bmax ? q & 0x7Fu : bmax;
+                }
+            }
+            for (k = 0; k < FM1_ANIM_NKEY; k++) {      /* the picture on the keys, by place */
+                lv[k] = fm1_idle_level(f, FM1_ANIM_NBTN + k, 1) & 0x7Fu;
+                if (lv[k] > lv[top])
+                    top = k;
+            }
+            for (k = top; k > 0; k--)
+                badfall += lv[k - 1u] > lv[k];
+            for (k = top; k + 1u < FM1_ANIM_NKEY; k++)
+                badfall += lv[k + 1u] > lv[k];
+            maxlv = lv[top] > maxlv ? lv[top] : maxlv;
+            lmin = lv[top] < lmin ? lv[top] : lmin;
+            lmax = lv[top] > lmax ? lv[top] : lmax;
+            if (fr && (f & (FM1_IDLE_FRAMES - 1u)))   /* left to right in the first half, back in the second */
+                mono += (f & (FM1_IDLE_FRAMES / 2u)) ? top > prevtop : top < prevtop;
+            reach_l |= top == 0u;
+            reach_r |= top == FM1_ANIM_NKEY - 1u;
+            prevtop = top;
+            fr++;
+        }
+        snprintf(what, sizeof what, "idle animation %s: endless (%u frames, %u s), every LED every frame as its level asks",
+                 g ? "OFF" : "DIM", (unsigned)fr, (unsigned)(fr * FM1_NCOL * TICK_US / 1000000u));
+        check(what, run_ok && !bad);
+        snprintf(what, sizeof what, "  one soft light (%u..%u /64 at it), drifting F3 -> G5 and back each %u s, falling away",
+                 (unsigned)lmin, (unsigned)lmax, (unsigned)(FM1_IDLE_FRAMES * FM1_NCOL * TICK_US / 1000000u));
+        check(what, !mono && reach_l && reach_r && !badfall && maxlv <= 24u && lmin >= 8u);
+        snprintf(what, sizeof what, "  the buttons breathe: the glow (1/64) .. %u /64 (lit frames %u..%u); %s", (unsigned)bmax, (unsigned)bmin, (unsigned)bmax,
+                 g ? "no glow" : "the glow under every LED");
+        check(what, bmin == 0u && bmax == 8u && !badglow);
+        {   /* a key down: done before the next frame (the LEDs as left); the sweep after it is the sweep */
+            uint8_t l0[FM1_NCOL], d0[FM1_NCOL];
+            memcpy(l0, fm1_led, sizeof l0);
+            memcpy(d0, fm1_led_dim, sizeof d0);
+            fm1_in.notes = 1u << 3;
+            do
+                fm1_input_tick();
+            while (fm1__tick_col != 0u);
+            run_ok = !fm1_led_anim_on() && !fm1_led_idle_on() && !memcmp(l0, fm1_led, sizeof l0) && !memcmp(d0, fm1_led_dim, sizeof d0);
+            fm1_in.notes = 0;
+            fm1_led_idle_start(1);
+            fm1_input_tick();
+            fm1_led_anim_stop();
+            run_ok &= !fm1_led_anim_on();
+            fm1_led_anim_start(1);
+            run_ok &= fm1_led_anim_on() && !fm1_led_idle_on();
+            fm1_led_anim_stop();
+            check("  a key down ends it before its next frame (the LEDs as left); fm1_led_anim_stop too; the sweep is no idle", run_ok);
+        }
+    }
+    if (1) {                                           /* the cycle, a row every 512 frames (DIM) */
+        static const char SH[] = " .:-=+*#%@";
+        uint32_t f;
+        printf("idle animation (DIM): frame  s  keys F3..G5  buttons\n");
+        for (f = 0; f <= FM1_IDLE_FRAMES; f += 512u) {
+            char row[FM1_ANIM_NKEY + 1u], b;
+            uint32_t k, q;
+            for (k = 0; k < FM1_ANIM_NKEY; k++) {
+                q = fm1_idle_level(f, 14u + k, 1);
+                row[k] = (q & 0x7Fu) ? SH[2u + ((q & 0x7Fu) - 1u) * 8u / 64u] : q ? SH[1] : SH[0];
+            }
+            row[FM1_ANIM_NKEY] = 0;
+            q = fm1_idle_level(f, 0, 1);
+            b = (q & 0x7Fu) ? SH[2u + ((q & 0x7Fu) - 1u) * 8u / 64u] : q ? SH[1] : SH[0];
+            printf("  %5u %4.1f  |%s|  %c %2u/64\n", (unsigned)f, f * FM1_NCOL * TICK_US / 1e6, row, b, (unsigned)(q & 0x7Fu));
+        }
+    }
+    host_step = 2400u;
+    host_bus = 0;
+    memset(fm1_led, 0, sizeof fm1_led);
+    memset(fm1_led_dim, 0, sizeof fm1_led_dim);
+    memset(fm1_led_breath, 0, sizeof fm1_led_breath);
+}
+
 int main(void)
 {
     uint32_t id, k, lat_max = 0, lat_sum = 0, lat_n = 0, worst_rel = 0, bad = 0;
@@ -981,6 +1105,7 @@ int main(void)
             memset(fm1_led_mid, 0, sizeof fm1_led_mid);
         }
         anim_test();
+        idle_anim_test();
         memset(fm1_led_breath, 0, sizeof fm1_led_breath);
         host_bus = 0;
         host_step = 2400u;

@@ -18,7 +18,7 @@ static int motion_recording(void)
     project_t q; project_store_t packed;
     project_capture(&q);
     bad += check("project snapshot saves base + independent events while sounding", q.t[0].p[P_REV] == 23 && q.motion.event[0].value == 110 &&
-        proj_pack(&packed, &q) && sizeof packed == 3648u);
+        proj_pack(&packed, &q) && sizeof packed == 3840u);
     seq_stop();
     bad += check("stop before another step restores the original parameter", t->p[P_REV] == 23);
     seq_start(); seq_tick(t, CTL);
@@ -42,7 +42,8 @@ static int motion_recording(void)
 static int motion_capacity(void)
 {
     int bad = 0; ui_power_on();
-    for (uint32_t i = 0; i < MOTION_MAX; i++) bad += motion_set_event(&trk[0], i, P_REV, (int16_t)i);
+    for (uint32_t i = 0; i < MOTION_MAX; i++)          /* (128 since 1.2: two ids on each of the 64 steps) */
+        bad += motion_set_event(&trk[0], i % NSTEP, i < NSTEP ? P_REV : P_DLY, (int16_t)(i % NSTEP));
     motion_store_t saved = motion;
     bad += check("full event pool refuses append without overwriting earlier events", motion_set_event(&trk[1], 0, P_REV, 90) == 2 &&
         !memcmp(&motion, &saved, sizeof saved));
@@ -60,12 +61,12 @@ static int probability_playback(void)
     int bad = 0; ui_power_on(); track_t *t = &trk[0];
     step_t s = {{60, 64, 0, 0}, 2, ST_NOTE, 0, 90, 1u << DV_KICK, 0, 0};
     bad += check("zero-initialized probability remains legacy 100 percent", step_chance(&s) == 100u);
-    step_set_chance(&s, 0); seq_step(t, &s, div_samples(2), 0);
+    step_set_chance(&s, 0); seq_step(t, &s, 0, div_samples(2), 0);
     bad += check("zero percent suppresses the whole chord and drum hits", step_chance(&s) == 0u && !t->seq_n);
-    step_set_chance(&s, 100); seq_step(t, &s, div_samples(2), 0);
+    step_set_chance(&s, 100); seq_step(t, &s, 0, div_samples(2), 0);
     bad += check("100 percent plays all chord notes and drum hits", t->seq_n == 3u);
     seq_release(t); step_set_chance(&s, 50); uint32_t heard = 0;
-    for (uint32_t i = 0; i < 1000u; i++) { seq_step(t, &s, div_samples(2), 0); heard += t->seq_n != 0; seq_release(t); }
+    for (uint32_t i = 0; i < 1000u; i++) { seq_step(t, &s, 0, div_samples(2), 0); heard += t->seq_n != 0; seq_release(t); }
     bad += check("chance is evaluated each repeat with one decision per step", heard > 350u && heard < 650u);
     return bad;
 }
@@ -77,8 +78,8 @@ static int compact_project(void)
     motion_set_event(t, 3, P_REV, 110);
     project_t before, after; project_store_t packed, corrupt;
     project_capture(&before);
-    bad += check("FUN9 fits the retained and flash extent", sizeof(proj_slot) == 4u * 3648u && proj_pack(&packed, &before));
-    bad += check("FUN9 round trip preserves signed values/FM params/probability/motion", proj_import(&after, &packed, sizeof packed) &&
+    bad += check("FUN10 fits the retained and flash extent", sizeof(proj_slot) == 4u * 3840u && proj_pack(&packed, &before));
+    bad += check("FUN10 round trip preserves signed values/FM params/probability/motion", proj_import(&after, &packed, sizeof packed) &&
         !memcmp(&before, &after, sizeof before));
     corrupt = packed; corrupt.raw[112] ^= 1u;
     bad += check("FUN7 torn or corrupted payload is refused", !proj_import(&after, &corrupt, sizeof corrupt));
@@ -96,7 +97,12 @@ static int compact_project(void)
         old.t[k].engine = before.t[k].engine; old.t[k].preset = before.t[k].preset;
         for (uint32_t j = 0; j < NSTEP; j++) memcpy(&old.t[k].step[j], &before.t[k].step[j], sizeof(step10_t));
     }
-    old.chain = before.chain; old.sum = proj_hash(&old, sizeof old - 4u);
+    old.chain.count = before.chain.count;              /* (the rows of FUN6: one slot each) */
+    for (uint32_t r = 0; r < CHAIN_ROWS; r++) {
+        old.chain.row[r].slot = before.chain.row[r].slot[0];
+        old.chain.row[r].repeat = before.chain.row[r].repeat;
+    }
+    old.sum = proj_hash(&old, sizeof old - 4u);
     bad += check("real FUN6 disk image migrates with FM defaults/100% chance/no motion", proj_import(&after, &old, sizeof old) &&
         after.t[0].p[P_E0] == before.t[0].p[P_E0] && after.t[0].p[P_ED_FLT] == -50 &&
         after.t[0].p[P_FM1_LEVEL] == 127 && !after.motion.count && step_chance(&after.t[0].step[3]) == 100u);
@@ -161,7 +167,7 @@ static int fun7_89(void)
         proj_import(&before, &old, sizeof old) && !memcmp(&before, &after, sizeof before));
     pack_fun7_89(&old, &before, &m);                                /* SONG: a slot of the old firmware */
     memcpy(&proj_slot[2], &old, sizeof old);
-    chain_config.count = 1; chain_config.row[0] = (chain_row_t){2, 1};
+    chain_config.count = 1; chain_config.row[0] = chain_row_of(2, 1);
     ok = chain_prepare() == 0;
     bad += check("  SONG: an 89-parameter slot's motion plays at today's ids (E0 at P_E0)", ok &&
         chain.source[2].motion.count == 3u && chain.source[2].motion.event[1].param == P_E0);
@@ -189,7 +195,7 @@ static int loads_and_song(void)
                               t->eng_req == e0);
     undo_swap(); bad += check("sound redo restores the loaded motion state", motion_count(t) == 1u && t->eng_req == e1);
     undo_swap(); project_save(0);
-    t->p[P_REV] = 43; t->step[0].note[0] = 72; chain_config.count = 1; chain_config.row[0] = (chain_row_t){0, 1};
+    t->p[P_REV] = 43; t->step[0].note[0] = 72; chain_config.count = 1; chain_config.row[0] = chain_row_of(0, 1);
     bad += check("song preparation imports saved motion alongside steps", chain_prepare() == 0 && chain.source[0].motion.count == 2u);
     seq_start(); seq_tick(t, CTL);
     bad += check("song plays saved automation with current instruments", chain.running && t->p[P_REV] == 100 && t->step[0].note[0] == 72);
@@ -259,8 +265,17 @@ static int arp_new_modes(void)
     arp_fresh(t, AM_UP, 1, CEG, 3);   ok = arp_plays(t, (const uint8_t[]){60, 64, 67, 60}, 4);
     arp_fresh(t, AM_DN, 1, CEG, 3);   ok &= arp_plays(t, (const uint8_t[]){67, 64, 60, 67}, 4);
     arp_fresh(t, AM_UPDN, 1, CEG, 3); ok &= arp_plays(t, (const uint8_t[]){60, 64, 67, 64, 60}, 5);
-    arp_fresh(t, AM_ORD, 1, CEG, 3);  ok &= arp_plays(t, (const uint8_t[]){60, 64, 67, 60}, 4);
-    bad += check("ARP UP, DN, UPDN, ORD as before", ok);
+    bad += check("ARP UP, DN, UPDN as before", ok);
+    /* 1.2: ORD plays the notes in the order pressed (it played as UP before), across OCT, ARP 2's ORD NOTE or PLAY */
+    arp_fresh(t, AM_ORD, 1, GCE, 3);  ok = arp_plays(t, (const uint8_t[]){67, 60, 64, 67}, 4);
+    arp_fresh(t, AM_ORD, 2, GCE, 3);  ok &= arp_plays(t, (const uint8_t[]){67, 60, 64, 79, 72, 76, 67}, 7);
+    arp_fresh(t, AM_ORD, 1, CEG, 3);  ok &= arp_plays(t, (const uint8_t[]){60, 64, 67, 60}, 3);
+    t->p[P_AORDER] = 1;
+    arp_fresh(t, AM_ORD, 1, GCE, 3);  ok &= arp_plays(t, (const uint8_t[]){67, 60, 64}, 3);
+    t->p[P_AORDER] = 0;
+    arp_fresh(t, AM_ORD, 1, GCE, 3);  arp_remove(t, 60); arp_add(t, 62);   /* C let go, D pressed: G E D */
+    ok &= arp_plays(t, (const uint8_t[]){67, 64, 62, 67}, 4);
+    bad += check("ARP ORD (1.2): G C E pressed play G C E (not C E G), across OCT 2, either ORD switch; a new note last", ok);
     arp_fresh(t, AM_DNUP, 1, CEG, 3);  ok = arp_plays(t, (const uint8_t[]){67, 64, 60, 64, 67, 64}, 6);
     arp_fresh(t, AM_DNUP, 1, CEGB, 4); ok &= arp_plays(t, (const uint8_t[]){71, 67, 64, 60, 64, 67, 71}, 7);
     arp_fresh(t, AM_DNUP, 2, CEG, 3);  ok &= arp_plays(t, (const uint8_t[]){79, 76, 72, 67, 64, 60, 64, 67, 72, 76, 79}, 11);
@@ -572,7 +587,7 @@ static int lock_project(void)
             bad += check("    an id that store could not name (np): refused", !proj_motion_ids(&m, np[n]));
         }
     }
-    chain_config.count = 1; chain_config.row[0] = (chain_row_t){2, 1};
+    chain_config.count = 1; chain_config.row[0] = chain_row_of(2, 1);
     motion_clear(t); t->p[P_REV] = 20;
     bad += check("SONG: a slot's locks come with its motion", chain_prepare() == 0 && chain.source[2].motion.count == 3u);
     seq_start(); seq_tick(t, CTL);
@@ -641,7 +656,7 @@ static int lock_ui(void)
     bad += check("from FX: the knobs lock DIST CHO DLY REV", lock_id(0) == P_DIST && lock_id(3) == P_REV);
     lk_down(k4); turn(EN_K4, 5); lk_up(k4);
     bad += check("  step 5 gets a REV lock", motion_lock_get(t, 4, P_REV, &v) && v == t->p[P_REV] + 5);
-    go_page(GR_MOTION);
+    go_auto_top();
     frame();
     bad += check("AUTOMATION: EVENT 0, LOCK 3", motion_count(t) - motion_lock_count(t) == 0u && motion_lock_count(t) == 3u);
     /* the roll: the step being entered is the one held */
@@ -724,14 +739,15 @@ static int lock_undo(void)
         motion_lock_count(t) == 1u);
     return bad;
 }
-/* 1.1.5: SEQ > AUTO LIST (ui_events.c) */
+/* 1.1.5: SEQ > AUTO LIST (ui_events.c); 1.2: the AUTOMATION page, its rows: PLAY, QUANTIZE, the records (and CHANCE / RATCH / NUDGE), + ADD */
+static uint32_t rows_n(void) { uint16_t rw[EV_ROWS]; return ev_list(rw); }   /* PLAY, QUANTIZE and + ADD included */
+static uint32_t row_at(uint32_t r) { uint16_t rw[EV_ROWS]; return r < ev_list(rw) ? rw[r] : 0xFFFFu; }
 static int auto_list(void)
 {
     int bad = 0, ok;
     int16_t v;
     track_t *t;
     uint32_t id0, id1, i;
-    uint8_t idx[MOTION_MAX];
     ui_power_on();
     song.sel = 0;
     t = &trk[0];
@@ -742,12 +758,14 @@ static int auto_list(void)
     go_page(GR_EVENTS);
     frame();
     id0 = ui.ev_id;
-    bad += check("AUTO LIST: empty, + ADD LOCK selected on the SEQ cursor's step, the first knob of the sound page",
-        cur_page()->graph == GR_EVENTS && ev_rows(idx) == 0u && ui.ev_step == 4u && id0 == lock_id(0) &&
-        str_eq(act_name(4), "ADD") && act_ready());
+    ok = auto_cur() == EVC(EVK_TOP, 0) && str_eq(act_name(4), "CLEAR") && !act_ready();
+    turn(EN_K1, 2);                                      /* (past QUANTIZE, 1.2) */
+    bad += check("AUTOMATION: empty, PLAY then + ADD LOCK (on the SEQ cursor's step, the first knob of the sound page)",
+        ok && cur_page()->graph == GR_EVENTS && rows_n() == 3u && auto_cur() == EVC(EVK_ADD, 0) && ui.ev_step == 4u &&
+        id0 == lock_id(0) && str_eq(act_name(4), "ADD") && act_ready());
     press(B_OCTUP);
     bad += check("  OCT+: a lock on step 5 at the sound's own value, its row selected",
-        motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) && ev_row(ev_rows(idx)) == 0u &&
+        motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) && ui.ev_row == 2u && auto_cur() >> 8 == EVK_REC &&
         str_eq(ui.msg, "LOCK ADDED") && motion_enabled(t));
     turn(EN_K4, 3);
     bad += check("  KNOB 4: its value", motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) + 3);
@@ -767,15 +785,15 @@ static int auto_list(void)
     bad += check("  and back (AUTO -> LOCK -> AUTO)", ok && !motion_lock_count(t));
     turn(EN_K1, 1);
     turn(EN_K2, -2);
-    bad += check("  KNOB 1: + ADD LOCK; KNOB 2 there: its step", ev_row(ev_rows(idx)) == 1u && ui.ev_step == 2u);
+    bad += check("  KNOB 1: + ADD LOCK; KNOB 2 there: its step", auto_cur() == EVC(EVK_ADD, 0) && ui.ev_step == 2u);
     press(B_OCTUP);
     bad += check("  OCT+: a second lock on step 3, first in the list (by step)", motion_count(t) == 2u &&
-        motion_lock_get(t, 2, ui.ev_id, &v) && ev_rows(idx) == 2u && ev_row(2u) == 0u &&
-        (motion.event[idx[0]].place & 63u) == 2u);
+        motion_lock_get(t, 2, ui.ev_id, &v) && rows_n() == 5u && ui.ev_row == 2u &&
+        (motion.event[row_at(2) & 0xFFu].place & 63u) == 2u);
     turn(EN_K1, 5);
     press(B_OCTUP);
     bad += check("  OCT+ on + ADD LOCK where one is: ALREADY LISTED, that row selected", motion_count(t) == 2u &&
-        str_eq(ui.msg, "ALREADY LISTED") && ev_row(2u) == 0u);
+        str_eq(ui.msg, "ALREADY LISTED") && ui.ev_row == 2u);
     press(B_EDIT);
     bad += check("  EDIT: the row's record goes", motion_count(t) == 1u && !motion_lock_get(t, 2, ui.ev_id, &v) &&
         str_eq(ui.msg, "DELETED"));
@@ -785,6 +803,7 @@ static int auto_list(void)
     bad += check("  held again: gone again", motion_count(t) == 1u);
     frames(2000);
     turn(EN_K1, -5);
+    turn(EN_K1, 2);                                      /* (the first record: the row after PLAY and QUANTIZE) */
     v = motion.event[0].value;
     turn(EN_K4, 2); turn(EN_K4, 2); turn(EN_K4, 2);
     ok = motion.event[0].value == v + 6;
@@ -794,11 +813,11 @@ static int auto_list(void)
     turn(EN_K4, 1);
     bad += check("  a song playing: STOP TO EDIT", motion.event[0].value == v && str_eq(ui.msg, "STOP TO EDIT"));
     chain.running = 0;
-    for (i = 0; motion.count < MOTION_MAX; i++)          /* the 64 used (track 2) */
+    for (i = 0; motion.count < MOTION_MAX; i++)          /* the 128 used (track 2) */
         motion_set_event(&trk[1], i % NSTEP, i < NSTEP ? P_REV : P_DLY, 10);
     turn(EN_K1, 5);
     press(B_OCTUP);
-    bad += check("  the 64 used: OCT+ adds nothing, AUTOMATION FULL", motion_count(t) == 1u &&
+    bad += check("  the 128 used: OCT+ adds nothing, AUTOMATION FULL", motion_count(t) == 1u &&
         str_eq(ui.msg, "AUTOMATION FULL") && !act_ready());
     motion_clear(&trk[1]);
     for (i = 0; i < P_COUNT; i++)                        /* names: an id each, none of DIGITAL's, lanes on DRUM only */
