@@ -779,8 +779,10 @@ static void mom_back(const track_t *t)            /* a sound load into t (0: a p
 static void load_begin(track_t *t, uint32_t what)
 {
     uint32_t i = trk_index(t);
-    if (what & UNDO_SOUND)
+    if (what & UNDO_SOUND) {
         mom_back(t);                              /* (MOMENTARY: the sound as it was, then the load) */
+        drum_mute[i] = 0;                         /* (1.4.1: the lanes' mutes go with the sound) */
+    }
     if (undo_depth++)
         return;
     motion_restore(t);

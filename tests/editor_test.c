@@ -172,21 +172,22 @@ static int preferences(void)
     uint32_t n = request(ED_INFO, a, 0);
     bad += check("INFO explicitly tags display capabilities after SONG without changing command 33",
         ED_SONG == 33 && ED_UI_STATE == 34 && ED_FAV_SET == 38 &&
-        host_wire[n - 41] == CHAIN_ROWS && host_wire[n - 40] == 0x55 &&
-        host_wire[n - 39] == 1 && host_wire[n - 38] == 9 &&
-        host_wire[n - 37] == 0x4d && host_wire[n - 36] == 1 &&
-        host_wire[n - 35] == 64u && host_wire[n - 34] == 1 &&   /* (64 kept: 41 01 says 128) */
-        host_wire[n - 33] == 0x42 && host_wire[n - 32] == 1 && host_wire[n - 31] == 3 &&
-        host_wire[n - 30] == 0x46 && host_wire[n - 29] == 1 && host_wire[n - 28] == FM6_NFACTORY &&
-        host_wire[n - 27] == 0 &&                        /* (no bank since 1.0.3) */
-        host_wire[n - 26] == 0x53 && host_wire[n - 25] == 1 && host_wire[n - 24] == 3 &&
-        host_wire[n - 23] == 0x50 && host_wire[n - 22] == 1 && host_wire[n - 21] == 3 &&   /* FM6 v2: no bank, preset patches */
-        host_wire[n - 20] == 0x4E && host_wire[n - 19] == 1 && host_wire[n - 18] == 24 &&   /* MENU settings: 24 items (1.3) */
-        host_wire[n - 17] == 0x52 && host_wire[n - 16] == 1 && host_wire[n - 15] == 4 &&   /* RATCH */
-        host_wire[n - 14] == 0x4C && host_wire[n - 13] == 1 && host_wire[n - 12] == 1 &&   /* 1.1 parameter locks */
-        host_wire[n - 11] == 0x41 && host_wire[n - 10] == 1 && host_wire[n - 9] == 0 && host_wire[n - 8] == 1 &&   /* 1.2: 128 */
-        host_wire[n - 7] == 0x54 && host_wire[n - 6] == 1 && host_wire[n - 5] == NUDGE_DIV &&   /* 1.2: NUDGE */
-        host_wire[n - 4] == 0x57 && host_wire[n - 3] == 1 && host_wire[n - 2] == NTRK);   /* 1.2: SONG lanes */
+        host_wire[n - 44] == CHAIN_ROWS && host_wire[n - 43] == 0x55 &&
+        host_wire[n - 42] == 1 && host_wire[n - 41] == 9 &&
+        host_wire[n - 40] == 0x4d && host_wire[n - 39] == 1 &&
+        host_wire[n - 38] == 64u && host_wire[n - 37] == 1 &&   /* (64 kept: 41 01 says 128) */
+        host_wire[n - 36] == 0x42 && host_wire[n - 35] == 1 && host_wire[n - 34] == 3 &&
+        host_wire[n - 33] == 0x46 && host_wire[n - 32] == 1 && host_wire[n - 31] == FM6_NFACTORY &&
+        host_wire[n - 30] == 0 &&                        /* (no bank since 1.0.3) */
+        host_wire[n - 29] == 0x53 && host_wire[n - 28] == 1 && host_wire[n - 27] == 3 &&
+        host_wire[n - 26] == 0x50 && host_wire[n - 25] == 1 && host_wire[n - 24] == 3 &&   /* FM6 v2: no bank, preset patches */
+        host_wire[n - 23] == 0x4E && host_wire[n - 22] == 1 && host_wire[n - 21] == 24 &&   /* MENU settings: 24 items (1.3) */
+        host_wire[n - 20] == 0x52 && host_wire[n - 19] == 1 && host_wire[n - 18] == 4 &&   /* RATCH */
+        host_wire[n - 17] == 0x4C && host_wire[n - 16] == 1 && host_wire[n - 15] == 1 &&   /* 1.1 parameter locks */
+        host_wire[n - 14] == 0x41 && host_wire[n - 13] == 1 && host_wire[n - 12] == 0 && host_wire[n - 11] == 1 &&   /* 1.2: 128 */
+        host_wire[n - 10] == 0x54 && host_wire[n - 9] == 1 && host_wire[n - 8] == NUDGE_DIV &&   /* 1.2: NUDGE */
+        host_wire[n - 7] == 0x57 && host_wire[n - 6] == 1 && host_wire[n - 5] == NTRK &&   /* 1.2: SONG lanes */
+        host_wire[n - 4] == 0x56 && host_wire[n - 3] == 1 && host_wire[n - 2] == 32);   /* 1.4.1: FM6 voice bank */
     request(ED_UI_SET, a, 2);
     bad += check("UI_SET updates the actual palette and reports RAM-only saving",
         host_wire[5] == 3 && settings.palette == 7 && T_BG == UI_PALETTES[7].bg);

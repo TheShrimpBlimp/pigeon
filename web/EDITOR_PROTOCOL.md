@@ -57,6 +57,9 @@ before 1.2 (max 64, at most a track's first 64 records), op 8 lists them all. A 
 ratchet. A song's rows became sections with a slot per track (`SONG` ops 4..7; ops 0..3 as before). Projects are FUN10
 (3840 bytes). See "1.2: LFO 2, NUDGE, 128 records (FUN10)" and "1.2: song sections" below.
 
+**1.4.1 (FM6's voice bank; INFO `56 01 32`):** FM6's SLOT (P_E0 + 7) runs to 40: 9..40 = B1..B32, the voices of a
+32-voice bank the editor writes whole (cmds 74..77). Nothing else changed. See "FM6 voice bank (74-77)" below.
+
 ## Framing
 
 A request is `F0 7D 46 4C <cmd> <args...> F7`:
@@ -164,7 +167,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 4` (song sections: a slot per track, SONG ops 4..7) (below); older firmware ends earlier |
+| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 4` (song sections: a slot per track, SONG ops 4..7) and (1.4.1) `56 01 32` (FM6's voice bank: cmds 74..77, SLOT 9..40) (below); older firmware ends earlier |
 | 2 GET | scope, id | scope, id, v14 |
 | 3 SET | scope, id, v14 | scope, id, v14 (the value after clamping). Setting global `G_ENGSEL` (id from DESC label "ENG") changes the engine: its defaults, then its first preset (as on the device) |
 | 4 DUMP | — | engine, preset, then P_COUNT × v14 (the selected track), then G_COUNT × v14 (globals) |
@@ -763,8 +766,11 @@ without the tag has the bank and SLOT 0..34 (F1..F8, B1..B27): an editor should 
 SLOT (P_E0 + 7), since 1.0.3: 0..7 load that factory patch into the track; 8 (OWN) is the track's own patch (what
 a project, a user preset, a converted DIGITAL sound or an FM6_PUT to the track put there). Every such load sets SLOT
 to F n when the patch is that factory patch unchanged, else OWN, and nothing reloads over it. Setting SLOT from OWN
-to F n keeps the own patch aside; setting it back to OWN brings it back. A stored value 9..34 (a B slot of 1.0.2) is
-clamped to 8.
+to F n keeps the own patch aside; setting it back to OWN brings it back. 1.4.1: 9..40 (B1..B32) load a voice of
+the voice bank (below) the same way; a `SET` to a bank slot without a voice is refused (SLOT goes back to the value
+it had: a `GET` or the `CHANGED` push shows it), and the device's knob passes over such slots. SLOT is never stored as
+a bank slot: a stored 9..40 (in a project, a user preset or a motion record; 1.0.2 wrote 8..34 for its B1..B27) loads
+as 8, OWN, with the patch that came with it (DESC: SLOT max 40; firmware before 1.4.1: 8).
 
 Since 1.2 the device edits the patch too (EDIT > OPERATOR, OP ENV, OPERATOR 2: an operator's coarse / fine
 frequency, output level, mode, detune, velocity sensitivity, R1..R4 and L1..L4). Each such edit writes that byte of
@@ -808,6 +814,33 @@ The web editor (6-OP FM tab) imports the generic SysEx files of the format: a si
 read too. Pick a voice, edit it, send it to a track (target 0); to keep it, SAVE it as a user preset (or save the
 project) on the device. It exports single voices. Its librarian reads and writes a user preset's patch (target 3)
 with the record when the firmware has FM6 v2 bit 1, and keeps it in library files as `fm6` (128 numbers).
+
+## FM6 voice bank (74-77; 1.4.1)
+
+32 voices in flash, written whole from the editor (a 32-voice SysEx file: its 128-byte packed records, the format
+`FM6_PUT` takes), picked on the device with SLOT B1..B32 (9..40). Loading one copies it into the track's patch as F1..F8
+do: the patch is the track's from then on, saved with projects and user presets (`FM6_GET` target 0 reads it), so a
+project made with a bank voice sounds the same after the bank was replaced. INFO advertises `56 01 32` (32 voices)
+after `57 01 4`; firmware without the tag answers none of 74..77 and has SLOT 0..8.
+
+| cmd | Request args | Reply args |
+| --- | --- | --- |
+| 74 FM6B_BEGIN | — | rc. Starts a transfer (stops the transport; erases a sector: allow 1 s) |
+| 75 FM6B_WRITE | index 0..31, the 128 bytes | index, rc. Each index at most once per transfer; voices not written are empty in the new bank |
+| 76 FM6B_END | name (10 ASCII bytes, space-padded), CRC-32 (zlib's) of the written records, 128 bytes each in index order (5 × 7 bits, LSB first: bits 0..6, 7..13, .., 28..31) | rc, voices (how many the bank the device holds now has). rc 0: the new bank replaced the old one (allow 1 s) |
+| 77 FM6B_LIST | — | 32, bank (1 there is one, 0 none), its name string, then per voice: used (0/1), name string ("" if empty) |
+
+rc: 0 ok, 1 arguments (an index past 31 or written twice, a record that is not 128 bytes, an END that is not 15
+bytes), 2 the CRC did not match (nothing changed: the old bank stays; start again with `FM6B_BEGIN`), 3 playback did
+not stop, 4 flash (no flash, an erase or a write failed), 5 no transfer (no `FM6B_BEGIN`, an END already answered, or
+the device's autosave took the transfer's flash between two requests, after 10 s without one: start again).
+
+- An END with no WRITE (the CRC of nothing: 0) writes an empty bank: every B slot is empty.
+- The old bank stays until END answers rc 0; a power cut at any point leaves the old bank or the new one, never a mix.
+- A track on a bank slot when a new bank arrives keeps the voice it played, as its own patch: SLOT becomes OWN.
+- The editor's import (6-OP FM tab): a 32-voice file's voices, each packed as for a single voice (every value into
+  its range); an empty slot of a shorter file is not written. Flash: the bank is at 0xE7000; a transfer is staged in
+  the autosave's older sector first (0xE5000 / 0xE6000), which the next autosave writes over anyway.
 
 ## Tagged device preferences v1
 

@@ -198,20 +198,31 @@ static int32_t enum_orig(const param_desc_t *d, int32_t v)
 
 /* a stored value as the parameter takes it (projects, user presets, motion): inside d's range, and a retired
  * DRUM KIT (1..3) as the kit it plays, so KIT never holds one again. (SAMPLE / GRAIN's aliases keep their
- * number: they are what the sound was saved with, and play the original anyway) */
+ * number: they are what the sound was saved with, and play the original anyway.) FM6's SLOT is never stored as a
+ * bank slot: 9..40 (1.4.1's B1..B32; 1.0.2's B1..B27 were 8..34) is 8, OWN, and the patch comes with what is loaded */
 static int32_t param_fit(const param_desc_t *d, int32_t v)
 {
     v = clamp(v, d->min, d->max);
+    if (d->names == N_FM6_PATCH)
+        return v > (int32_t)FM6_OWN ? (int32_t)FM6_OWN : v;
     return d->names == N_DRUM_KIT ? enum_orig(d, v) : v;
 }
 
-/* a knob moved an F_ENUM from `from` to v: past any alias in that direction (back to `from` at the end) */
+/* v is a value a knob passes over: an alias, or one of FM6's bank slots without a voice */
+static int enum_skip(const param_desc_t *d, int32_t v)
+{
+    return enum_orig(d, v) != v || (d->names == N_FM6_PATCH && !fm6_slot_ok(v));
+}
+/* a knob moved an F_ENUM from `from` to v: past any value it skips in that direction; with none left to the end, the
+ * last one it does not skip on the way from `from` (else `from`) */
 static int32_t enum_step(const param_desc_t *d, int32_t from, int32_t v)
 {
-    int32_t dir = v > from ? 1 : -1;
-    while (v != from && enum_orig(d, v) != v)
-        v = v + dir > d->max || v + dir < d->min ? from : v + dir;
-    return v;
+    int32_t dir = v > from ? 1 : -1, w = v;
+    while (w != from && enum_skip(d, w))
+        w = w + dir > d->max || w + dir < d->min ? from : w + dir;
+    while (w == from && v != from && enum_skip(d, v))
+        v -= dir;
+    return w == from ? v : w;
 }
 
 /* #48: the note divisions in the order of their length, longest first (triplets between their neighbours), on the

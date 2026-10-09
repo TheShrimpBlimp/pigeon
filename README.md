@@ -5,11 +5,11 @@
 
 ![Felucca 1.0](docs/felucca-1.0.png)
 
-**TL;DR:** Felucca 1.4 — Big New Features, field testing. Connect your FM-1 to a computer by USB,
+**TL;DR:** Felucca 1.4.1 — 1.4 plus DRUM lane mutes on the EDIT layer and an FM6 voice bank, field testing. Connect your FM-1 to a computer by USB,
 open the [web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge, and press Install;
 no extra hardware is needed. Installing is at your own risk: M-VAVE's updater or the installer's
 **Return to official V15** takes you back. Coming from 1.1.5.x? Read [⚠ Coming from 1.1.5](#-coming-from-115) first:
-projects saved by 1.4 do not open on 1.1.5.x. Want to look around first?
+projects saved by 1.4 or 1.4.1 do not open on 1.1.5.x. Want to look around first?
 [Try it in your browser](https://hugelton.github.io/Felucca/webapp/try/), no FM-1 needed.
 
 Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you find in
@@ -98,13 +98,31 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you fi
   the keys send on the track's channel; pitch bend, sustain, panic; clock from internal, USB or TRS. MIDI CCs set
   track parameters: 5 GLIDE, 7 LEVEL, 10 PAN, 71 resonance, 72 / 73 / 75 release / attack / decay, 74 brightness,
   91 / 93 / 94 the reverb, chorus and delay sends
-- **Web:** editor for every parameter (with a 6-operator FM patch editor), step grid, mixer,
-  preset library, sample upload and recording with trim, the MENU settings; full backup and restore;
+- **Web:** editor for every parameter (with a 6-operator FM patch editor that also sends a whole 32-voice bank),
+  step grid, mixer, preset library, sample upload and recording with trim, the MENU settings; full backup and restore
+  (everything but the FM6 voice bank: keep its .syx file);
   return to the official firmware; Felucca itself running in the browser
+
+## New in 1.4.1
+
+- **Engine quick actions on the EDIT layer's black keys.** Hold EDIT: the black keys do what the selected track's
+  engine offers, and the map shows it. On a DRUM track, black keys 1–8 (F#3 … A#4) mute its lanes KICK, SNARE, CLAP,
+  HATCL, HATOP, TOM, RIM and BELL, one press to mute, the next to unmute. The LEDs show which lanes sound, the drum
+  grid dims a muted lane. A muted lane keeps playing unheard, so unmuting brings it back in time. The mutes are for
+  live play: never saved, not recorded, not undone; a sound or project load clears them, OCT− in the layer puts them
+  back as they were when it opened. Other engines have no quick actions yet.
+- **FM6 voice bank** (Discussion #168). The web editor's 6-OP FM tab sends a whole 32-voice SysEx bank (the standard
+  4096-byte file) to the FM-1 in one go, with its name. On an FM6 track SLOT (EDIT 2, KNOB 4) now goes F1–F8, OWN,
+  then **B1–B32**, the bank's voices; the algorithm chart shows the voice's name. Picking a voice copies it into the
+  track, as F1–F8 do, so a project or user preset saved with it keeps that sound after you send another bank (it
+  loads with SLOT OWN). With no bank sent, SLOT stops at OWN as before. The bank has its own flash sector and is only
+  replaced once a new one arrived whole; projects, presets, samples and settings are not touched. **The full backup
+  does not include the bank: keep the .syx file.**
+- 1.4.1 opens and saves everything 1.4 does, in the same formats.
 
 ## ⚠ Coming from 1.1.5
 
-1.4 is the first release since 1.1.5.1 and holds a lot. Everything you saved loads and sounds as before, except
+1.4 is the first release since 1.1.5.1 and holds a lot (all of this holds for 1.4.1 too). Everything you saved loads and sounds as before, except
 where marked here:
 
 - **Projects are saved in a new format (FUN10).** 1.4 opens every older project, but **1.1.5.x and older cannot
@@ -149,7 +167,7 @@ The pages by button:
 | GLO | SONG | the GLO layer (mutes, solos, levels, TAP tempo) |
 | SAVE | USER, PHRASES (the pattern loader), PROJECT, TOOLS, PRESETS | UNDO |
 | LFO | LFO, LFO 2, LFO DEST, MOD | MOMENTARY (with a knob) |
-| EDIT | EDIT 1, EDIT 2, VOICE, VOICE 2, VOICE 3 (FM6 adds OPERATOR, OP ENV, OPERATOR 2; DRUM LANES; SLICE SLICES) | the EDIT layer (the engines) |
+| EDIT | EDIT 1, EDIT 2, VOICE, VOICE 2, VOICE 3 (FM6 adds OPERATOR, OP ENV, OPERATOR 2; DRUM LANES; SLICE SLICES) | the EDIT layer (the engines; on DRUM the black keys mute lanes) |
 | FX, SCL, ENV, ARP | their pages, as before | FX and SCL: their layers |
 | REC | arms the track | the REC layer (CLEAR, CLICK, COUNT-IN, CLICK LEVEL) |
 
@@ -228,7 +246,7 @@ In the order the device lists them:
 - **FM6**: classic 6-operator FM (Dexed-based): 32 algorithms, a full patch per track, edited in the
   web editor (which imports .syx files) or on the device: EDIT > OPERATOR (ratio or fixed frequency, fine, level),
   OP ENV (each stage's rate and level, drawn as the envelope) and OPERATOR 2 (mode, detune, velocity), one
-  operator at a time on the algorithm chart; macros on top; SLOT picks a factory patch (F1–F8) or the track's own (OWN)
+  operator at a time on the algorithm chart; macros on top; SLOT picks a factory patch (F1–F8), the track's own (OWN) or a voice of the bank the web editor sent (B1–B32)
 - **PHASE**: phase distortion (ported from CrispyZebra)
 - **LOFI**: chiptune; pulse, triangle, saw, noise and a 4-bit wave RAM, stepped envelope, sweep, arpeggio
 - **SAMPLE**: multisampled instruments (PIANO, a light lo-fi piano; FLUTE; SAX) and 3 user sample slots. PIANO HD,
@@ -253,7 +271,8 @@ The DIGITAL engine of 0.9 has been replaced by FM6: projects and presets with DI
 as FM6 sounds converted from them. The SAMPLE engine's PERC kit was removed in 1.0.2: sounds and
 projects that used it load as the DRUM engine's kit, on the same key map. FM6's patch bank (the B
 slots) was removed in 1.0.3: user presets keep their own FM6 patch, and presets that used a B slot get
-that patch on the first start of 1.0.3. SLICE gained a second built-in sound in 1.0.4, PIANO (the SAMPLE
+that patch on the first start of 1.0.3. 1.4.1 brings B slots back as a voice bank sent from the web editor
+(B1–B32): a voice picked from it becomes the track's own patch, so nothing saved depends on the bank. SLICE gained a second built-in sound in 1.0.4, PIANO (the SAMPLE
 engine's middle C as it was then), next to BREAK. Since 1.0.4 a missing sample (an empty user slot, or a set missing
 from the build) plays a plain sine at the note's pitch on SAMPLE, GRAIN and SLICE, and the screen says
 NO SAMPLE once. DRUM's KIT variants HAND, CYM and H+CYM were retired in 1.0.5: sounds and projects that

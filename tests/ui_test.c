@@ -9102,6 +9102,225 @@ static int test_no_flash(void)
     return bad;
 }
 
+/* 1.4.1 ENGINE QUICK ACTIONS (ui_layer.c EQA): the EDIT layer's black keys are the selected track's engine's. DRUM:
+ * black keys 1..8 MUTE its lanes (eng_drum.c drum_mute). qa_beat: T4's own output (track_render) of a beat whose hits
+ * strike the lanes of `lanes` (trk_note_on: the keys', MIDI's and the sequencer's way in), 16 steps of 8 blocks; its
+ * hash and the energy under ~150 Hz (a one-pole low-pass: the kick's) */
+static uint64_t qa_beat(uint32_t lanes, double *low)
+{
+    static const uint8_t NOTE[NLANE] = {36, 38, 39, 42, 46, 45, 37, 56};
+    track_t *t = &trk[3];
+    int32_t o[CTL];
+    uint32_t s, b, i, l, p;
+    uint64_t h = 1469598103934665603ull;
+    double lp = 0;
+    for (p = 0; p < NPART; p++)
+        memset(trk[p].v, 0, sizeof trk[p].v);
+    memset(drum_kit, 0, sizeof drum_kit);
+    *low = 0;
+    for (s = 0; s < 16u; s++) {
+        uint32_t hit = (s % 4u == 0u ? 1u : 0u) | (s % 8u == 4u ? 2u : 0u) | (s == 14u ? 4u : 0u) |
+                       (s % 2u == 0u ? 8u : 0u) | (s == 6u ? 16u : 0u) | (s == 11u ? 32u : 0u) | (s == 3u ? 64u : 0u) |
+                       (s == 9u ? 128u : 0u);
+        for (l = 0; l < NLANE; l++)
+            if (((hit & lanes) >> l) & 1u)
+                trk_note_on(t, NOTE[l], s == 0u ? 120u : 100u);
+        for (b = 0; b < 8u; b++) {
+            track_render(t, o, CTL);
+            for (i = 0; i < CTL; i++) {
+                h = (h ^ (uint32_t)o[i]) * 1099511628211ull;
+                lp += ((double)o[i] - lp) * 0.02;       /* (~150 Hz at 48 kHz) */
+                *low += lp * lp;
+            }
+        }
+        for (l = 0; l < NLANE; l++)
+            if (((hit & lanes) >> l) & 1u)
+                trk_note_off(t, NOTE[l]);
+    }
+    return h;
+}
+static int test_edit_quick_actions(void)
+{
+    int bad = 0, ok;
+    uint32_t i, a, b2, n;
+    uint64_t h_all, h_nokick, h_mute, h_again;
+    double e_all, e_nokick, e_mute, e_again;
+    int32_t o[2u * CTL];
+
+    /* the map per engine: DRUM 8 actions (the lanes), every other engine none */
+    ui_power_on();
+    ok = 1;
+    for (i = 0; i < NENGINES; i++) {
+        trk[0].eng_req = (uint8_t)i;
+        n = eqa_count(&trk[0]);
+        ok &= i == ENGI_DRUM ? n == NLANE : n == 0u;
+        ok &= !eqa_of(&trk[0], i == ENGI_DRUM ? NLANE : 0u);
+    }
+    ui_power_on();
+    bad += check("1.4.1 EDIT quick actions: DRUM 8 (black keys 1..8), every other engine none", ok);
+
+    /* DRUM (T4): EDIT held, a black key toggles its lane's mute (SET, latched); LEDs lit = sounding, dark = muted */
+    ui_power_on();
+    track_select(3); go_home(); frame();
+    ok = drum_track(TSEL) && !drum_mute[3];
+    btn_down(B_EDIT); frames(500);
+    a = leds_at(0); b2 = leds_at(250);
+    for (i = 0; i < 11u; i++)                         /* 1..8 lit, steady; 9..11 dark */
+        ok &= (((a & b2) >> black(i)) & 1u) == (i < NLANE) && !(((a ^ b2) >> black(i)) & 1u);
+    key_down(black(0)); frame(); key_up(black(0)); frame();
+    key_down(black(5)); frame(); key_up(black(5)); frame();
+    ok &= drum_mute[3] == (1u | 32u) && msg_is("TOM MUTED") && !gates() && ui.layer == LAYER_EDIT;
+    a = leds_at(0); b2 = leds_at(250);
+    ok &= !(((a | b2) >> black(0)) & 1u) && !(((a | b2) >> black(5)) & 1u) && ((a & b2) >> black(1)) & 1u;
+    key_down(black(5)); frame(); key_up(black(5)); frame();
+    ok &= drum_mute[3] == 1u && msg_is("TOM ON");
+    btn_up(B_EDIT); frame();
+    ok &= drum_mute[3] == 1u && ui.home && !ui.layer;
+    bad += check("  DRUM: EDIT + black key 1 / 6: KICK / TOM muted (latched; LEDs dark), again: on (lit); 9..11 dark", ok);
+    ok = undo.trk != 4u && motion_count(TSEL) == 0u && !lys.loaded;
+    bad += check("  the mutes take no undo copy, record nothing (no sound load)", ok);
+
+    /* the white keys as before (an engine pick from DRUM: the sound load clears the mutes) */
+    btn_down(B_EDIT); frames(500);
+    key_down(white(0)); frame(); key_up(white(0)); frame();
+    ok = TSEL->eng_req == eng_vis(0) && !drum_mute[3] && eqa_count(TSEL) == 0u;
+    a = leds_at(0); b2 = leds_at(250);
+    for (i = 0; i < 11u; i++)                         /* (ANALOG: no actions, the black keys dark and inert) */
+        ok &= !(((a | b2) >> black(i)) & 1u);
+    {
+        track_t before = *TSEL;
+        uint8_t m[NPART];
+        memcpy(m, drum_mute, sizeof m);
+        ui.msg_t = 0;
+        for (i = 0; i < 11u; i++) {
+            key_down(black(i)); frame(); key_up(black(i)); frame();
+        }
+        ok &= !memcmp(m, drum_mute, sizeof m) && !ui.msg_t && !gates() && before.eng_req == TSEL->eng_req &&
+              !memcmp(before.p, TSEL->p, sizeof before.p) && ui.layer == LAYER_EDIT;
+    }
+    oct_back();                                       /* OCT-: DRUM back, the mutes as the layer opened (KICK) */
+    btn_up(B_EDIT); frame();
+    ok &= TSEL->eng_req == ENGI_DRUM && drum_mute[3] == 1u;
+    bad += check("  a white key loads its engine (the mutes go with the sound); ANALOG's black keys dark, inert; OCT- back", ok);
+
+    /* OCT-: the mutes as the layer opened */
+    btn_down(B_EDIT); frames(500);
+    key_down(black(0)); frame(); key_up(black(0)); frame();   /* KICK on */
+    key_down(black(2)); frame(); key_up(black(2)); frame();   /* CLAP muted */
+    key_down(black(7)); frame(); key_up(black(7)); frame();   /* BELL muted */
+    ok = drum_mute[3] == (4u | 128u);
+    oct_back();
+    ok &= drum_mute[3] == 1u && msg_is("MUTES PUT BACK") && ui.layer == LAYER_EDIT;
+    btn_up(B_EDIT); frame();
+    bad += check("  OCT- in the layer: the lanes' mutes as it opened (KICK muted, CLAP BELL not)", ok && drum_mute[3] == 1u);
+
+    /* locked (a double tap), and while playing */
+    go_title("ENV"); frame();
+    press(B_EDIT); frames(64); press(B_EDIT); frames(500);
+    ok = ui.lock == LAYER_EDIT;
+    key_down(black(1)); frame(); key_up(black(1)); frame();
+    ok &= drum_mute[3] == 3u && str_eq(cur_page()->title, "ENV") && !gates();
+    oct_back();
+    ok &= drum_mute[3] == 1u && ui.lock == LAYER_EDIT;
+    press(B_EDIT); frames(16);
+    ok &= !ui.lock && !ui.layer && drum_mute[3] == 1u;
+    bad += check("  EDIT locked: a black key toggles its lane, OCT- puts it back; closed: kept", ok);
+    song.playing = 1;
+    btn_down(B_EDIT); frames(500);
+    key_down(black(3)); frame(); key_up(black(3)); frame();
+    ok = drum_mute[3] == (1u | 8u) && song.playing && msg_is("HATCL MUTED");
+    btn_up(B_EDIT); frame();
+    song.playing = 0;
+    bad += check("  while playing: HATCL muted at once", ok && drum_mute[3] == 9u);
+
+    /* the kit's own names: KIT 66 plays a conga on TOM */
+    TSEL->p[P_E0] = 6;                                /* (DK_66) */
+    ok = str_eq(eqa_of(TSEL, 5)->name(TSEL, 5), "CG") && str_eq(eqa_of(TSEL, 0)->name(TSEL, 0), "BD");
+    btn_down(B_EDIT); frames(500);
+    key_down(black(5)); frame(); key_up(black(5)); frame();
+    ok &= msg_is("CONGA MUTED") && drum_mute[3] == (9u | 32u);
+    btn_up(B_EDIT); frame();
+    TSEL->p[P_E0] = 0;
+    bad += check("  a model kit: the cells and messages its lanes' names (CG, CONGA MUTED)", ok);
+
+    /* the grid shows them (its signature changes: redrawn) */
+    go_page(GR_ROLL); frame();
+    {
+        uint32_t s0 = graph_signature();
+        drum_mute[3] ^= 2u;
+        ok = graph_signature() != s0;
+        drum_mute[3] ^= 2u;
+        ok &= graph_signature() == s0;
+    }
+    bad += check("  the DRUM grid redraws when a lane is muted / unmuted", ok);
+
+    /* not saved: a sound load into the track and a project load clear them */
+    go_home(); frame();
+    turn(EN_PRESET, 1); frame();
+    ok = !drum_mute[3];
+    {
+        int r = project_save(0);
+        drum_mute[3] = 5u;
+        project_load(0);
+        ok &= r == 0 && !drum_mute[3];
+    }
+    bad += check("  not saved: a sound load into the track and a project load clear them", ok);
+
+    /* the sound: KICK muted = the beat without its kicks, bit for bit; unmuted: bit for bit as never muted */
+    ui_power_on();
+    track_select(3); go_home(); frame();
+    song.master_q12 = 4096;
+    for (i = 0; i < 256u && (trk[3].xf_on || trk[3].eng_req != trk[3].engine); i++)
+        mix_block(o, CTL);
+    h_all = qa_beat(0xFFu, &e_all);
+    h_nokick = qa_beat(0xFEu, &e_nokick);
+    drum_mute[3] = 1u;
+    h_mute = qa_beat(0xFFu, &e_mute);
+    drum_mute[3] = 0u;
+    h_again = qa_beat(0xFFu, &e_again);
+    ok = h_mute == h_nokick && h_all != h_mute && h_again == h_all && e_mute == e_nokick && e_all > e_mute;
+    {   /* the kick struck alone: its energy, none muted */
+        double ek, ekm;
+        (void)qa_beat(1u, &ek);
+        drum_mute[3] = 1u;
+        (void)qa_beat(1u, &ekm);
+        drum_mute[3] = 0u;
+        ok &= ek > 0.0 && ekm == 0.0;
+        printf("    low band energy: the beat %.4g, KICK muted %.4g (%.1f dB); the kicks alone %.4g, muted %.4g\n", e_all,
+               e_mute, 10.0 * log10(e_mute / e_all), ek, ekm);
+    }
+    bad += check("  KICK muted: the beat as with no kick struck, the kicks alone silent; unmuted: as before (bit for bit)", ok);
+    drum_mute[3] = 0xFFu;
+    (void)qa_beat(0xFFu, &e_mute);
+    drum_mute[3] = 0u;
+    bad += check("  every lane muted: silent", e_mute == 0.0);
+    {   /* muted mid-ring and unmuted: the lane rang on unheard (its voice, its state), as never muted after */
+        static const uint8_t NOTE2[2] = {36, 46};
+        uint64_t hm = 0, hu = 0;
+        uint32_t r, j, k;
+        for (r = 0; r < 2u; r++) {
+            uint64_t h = 1469598103934665603ull;
+            for (k = 0; k < NPART; k++)
+                memset(trk[k].v, 0, sizeof trk[k].v);
+            memset(drum_kit, 0, sizeof drum_kit);
+            for (j = 0; j < 2u; j++)
+                trk_note_on(&trk[3], NOTE2[j], 100);
+            for (j = 0; j < 64u; j++) {
+                drum_mute[3] = (uint8_t)(r && j >= 8u && j < 24u ? 16u : 0u);   /* (HATOP muted 8 .. 23) */
+                track_render(&trk[3], o, CTL);
+                if (j >= 24u)
+                    for (k = 0; k < CTL; k++)
+                        h = (h ^ (uint32_t)o[k]) * 1099511628211ull;
+            }
+            *(r ? &hm : &hu) = h;
+        }
+        drum_mute[3] = 0;
+        bad += check("  HATOP muted mid-ring, unmuted: it sounds on bit for bit as if never muted (a channel mute)", hm == hu);
+    }
+    ui_power_on();
+    return bad;
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -9146,6 +9365,7 @@ int main(void)
     bad += test_layer_lock();
     bad += test_rec_layer();
     bad += test_seq_tools();
+    bad += test_edit_quick_actions();
     bad += test_menu_prefs();
     bad += test_style();
     bad += test_head_centres();

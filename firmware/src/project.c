@@ -36,8 +36,8 @@
  *
  * Format 8 ("FUN8", written since 1.0) = FUN7 with each track's FM6 patch (eng_fm6.c, the 128-byte packed
  * record, 4 x 128 bytes just before the name): a project is self-contained. On load an FM6 track's SLOT shows F n
- * when its patch is that factory one, else OWN (eng_fm6.c fm6_adopt; a stored 8..34, the B slots of the patch bank
- * before 1.0.3, is OWN too: the project has the patch).
+ * when its patch is that factory one, else OWN (eng_fm6.c fm6_adopt; a stored 9..40, the B slots of the patch bank
+ * before 1.0.3 or of 1.4.1's voice bank, is OWN too: the project has the patch).
  * It is 3584 bytes (FUN7: 3388); FUN7 is read (its tracks get the init patch). The retained cache (proj_slot,
  * .noinit) grew with it: after an update its slot 1 still starts with a FUN7 record, which is read; the other
  * slots fail their hash and come back from flash (persist_boot).
@@ -965,6 +965,7 @@ static int project_restore_runtime(const project_t *input)
     uint32_t i, k;
     if (!proj_ok(input) || !proj_engines_ok(input)) return 1;
     mom_back(0);                                  /* (ui_input.c MOMENTARY: the values as they were, then the load) */
+    memset(drum_mute, 0, sizeof drum_mute);       /* (1.4.1: the DRUM lanes' mutes, performance state) */
     if (p != input) memcpy(p, input, sizeof *p);
     proj_drums_to_part(p);                              /* a RAM slot of firmware before 1.0 */
     proj_phys(p);                                       /* .. before PHYS lost DUST and DRUM */
