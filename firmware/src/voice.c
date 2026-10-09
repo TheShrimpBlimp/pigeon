@@ -481,6 +481,7 @@ static void engine_block(track_t *t)
             v->env = v->env_out = 0;
         }
         t->engine = eng_idx(t->eng_req);
+        eng_mem_claim(t);                               /* its state region, before the waiting notes */
         t->xf_on = 0;
         t->nmono = 0;
         t->mono_note = 0;
@@ -491,8 +492,52 @@ static void engine_block(track_t *t)
                 trk_note_on(t, t->xp_note[i], t->xp_vel[i]);
         }
     }
+    eng_mem_claim(t);                                   /* (an engine set directly: power-on, a test) */
     for (i = 0; i < 8u; i++)                            /* the engine's own values, for a later fade */
         t->pe_old[i] = t->p[P_E0 + i];
+}
+
+/* ENV SYNC (1.5, #175; P_ESYNC, params.c ESYNC_NAMES): ATK DEC REL as note values of the tempo (BPM, or the external
+ * clock's measured tempo: fx.c beat_samples, as LFO 2 SYNC). The part's three steps, made once a block before its
+ * voices (track_render; the parts render one at a time), as gen_tables.py makes ENV_LIN / ENV_EXP for a time in ms:
+ * the attack's linear step 2^24 CTL / T (rounded), the decay's and release's 1 - e^-x (x = 4.6 CTL / T: ~99 % of the way
+ * after T), here as x - x^2/2 + x^3/6 - x^4/24 (x <= 0.33 at the shortest, 1/64T at 240 BPM: under 0.04 % off). The
+ * coefficient is Q16 as ENV_EXP's: past ~2 s it is a few units, the time within half of one (4BAR at 90 BPM: 2.5 %).
+ * Value 0 (and a time below a block) takes the tables' 0, as with SYNC OFF. OFF: the tables' values, as before (looked
+ * up once a block here instead of once a voice in env_tick: the same numbers) */
+static uint32_t beat_samples(void);                /* (fx.c) */
+_Static_assert(CTL == 32, "esync_one: 4.6 CTL in Q16 is 9646899");
+static uint32_t esync_k[3];      /* ATK's step, DEC's and REL's coefficient (Q16): the part's, this block (env_tick) */
+static uint32_t esync_one(uint32_t quarter, int32_t v, uint32_t i)
+{
+    uint32_t u = ESYNC_UNITS[esync_idx(v)], T = quarter * u / 96u, x, x2, x3, x4;   /* T: samples */
+    if (T < CTL)
+        return i ? ENV_EXP[0] : ENV_LIN[0];
+    if (!i)
+        return ((1u << 24) * CTL + T / 2u) / T;
+    x = (9646899u + T / 2u) / T;                        /* 4.6 CTL (CTL 32), Q16, rounded */
+    if (x > 49152u)                                     /* (below ~200 samples: 0.75, the series 0.3 % low) */
+        x = 49152u;
+    x2 = x * x >> 16;
+    x3 = x2 * x >> 16;
+    x4 = x3 * x >> 16;
+    x = x - x2 / 2u + x3 / 6u - x4 / 24u;
+    return x < 1u ? 1u : x > 65535u ? 65535u : x;
+}
+static __attribute__((noinline)) void esync_coef(const track_t *t)   /* (not inlined: its divides stay out of the
+                                                                    * audio ISR's loop over the voices) */
+{
+    const int16_t *p = t->p;
+    if (p[P_ESYNC]) {
+        uint32_t q = beat_samples();
+        esync_k[0] = esync_one(q, p[P_ATK], 0);
+        esync_k[1] = esync_one(q, p[P_DEC], 1);
+        esync_k[2] = esync_one(q, p[P_REL], 2);
+    } else {                                            /* OFF: the tables, as always */
+        esync_k[0] = ENV_LIN[p[P_ATK] & 127];
+        esync_k[1] = ENV_EXP[p[P_DEC] & 127];
+        esync_k[2] = ENV_EXP[p[P_REL] & 127];
+    }
 }
 
 /* one control tick (CTL samples) of the amplitude envelope; returns Q15 */
@@ -502,17 +547,17 @@ static int32_t env_tick(track_t *t, voice_t *v)
     int32_t sus = (int32_t)p[P_SUS] << 17;              /* Q24 */
     switch (v->stage) {
     case 1:
-        v->env += (int32_t)ENV_LIN[p[P_ATK] & 127];
+        v->env += (int32_t)esync_k[0];                  /* ATK's step (esync_coef: the table's, or ENV SYNC's) */
         if (v->env >= (1 << 24)) {
             v->env = 1 << 24;
             v->stage = 2;
         }
         break;
     case 2:
-        v->env += mulq16(sus - v->env, ENV_EXP[p[P_DEC] & 127]);
+        v->env += mulq16(sus - v->env, esync_k[1]);
         break;
     case 3:
-        v->env -= mulq16(v->env, ENV_EXP[p[P_REL] & 127]);
+        v->env -= mulq16(v->env, esync_k[2]);
         if (v->env < (1 << 12)) {
             v->env = 0;
             v->stage = 0;
@@ -587,6 +632,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
             t->p[P_E0 + i] = t->pe_old[i];
         }
     track_lfo_tick(t);
+    esync_coef(t);                                      /* this block's envelope steps for env_tick (ENV SYNC) */
     if (e->block)                                       /* the engine's per-part work (WHEEL: bars, rotor) */
         e->block(t);
     for (i = 0; i < NVOICE; i++) {

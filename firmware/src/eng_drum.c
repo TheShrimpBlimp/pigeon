@@ -32,7 +32,7 @@
  * sends, DIST, the SLICER, LFO DEST AMP, velocity, the matrix's AMP and its E1..E8 (the knobs, per
  * block) do. A released key does not end a hit.
  *
- * State: 8 lanes per part in the pool section (drum_kit: the parameters, coefficients, voice and metal
+ * State: 8 lanes per part in the part's engine memory (engines.c eng_mem; drum_kit_of: the parameters, coefficients, voice and metal
  * source of each lane). */
 #include "drum_voice.c"
 
@@ -59,7 +59,7 @@ typedef struct {
     uint8_t pad;
 } drum_lane_t;
 
-static drum_lane_t drum_kit[NPART][DV_NLANE] __attribute__((section(".pool")));
+ENG_MEM_FITS("DRUM", sizeof(drum_lane_t) * DV_NLANE);
 /* 1.4.1: each part's lanes muted (bit l: lane l), the EDIT layer's black keys 1..8 (ui_layer.c EQA_DRUM): a channel
  * mute. The lane plays on as always (hits, keys, MIDI: its voice, the CPU, the choke) and drum_render drops its output,
  * so unmuted it sounds as if it never was. Performance state: not saved, not recorded, no undo; a sound load into the
@@ -180,7 +180,7 @@ static void step_to_grid(step_t *s)
 
 static drum_lane_t *drum_kit_of(const track_t *t)
 {
-    return t >= &trk[0] && t < &trk[NPART] ? drum_kit[t - trk] : 0;
+    return t >= &trk[0] && t < &trk[NPART] ? (drum_lane_t *)ENG_MEM(t - trk) : 0;
 }
 
 /* the lane voice v plays, 0 when it plays none (any more) */
@@ -339,4 +339,5 @@ static const engine_t ENG_DRUM = {
     .poly = DV_NLANE,
     .oneshot = 1,
     .keys = drum_keys,
+    .mem = sizeof(drum_lane_t) * DV_NLANE,
 };

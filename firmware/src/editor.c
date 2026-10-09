@@ -20,7 +20,7 @@ enum { ED_INFO = 1, ED_GET, ED_SET, ED_DUMP, ED_DESC, ED_STEP_GET, ED_STEP_SET, 
        ED_UI_STATE, ED_UI_SET, ED_UI_PALETTES, ED_FAV_GET, ED_FAV_SET,
        ED_MOTION = 64, ED_BACKUP_LIST, ED_BACKUP_GET, ED_BACKUP_PUT };                              /* v6: song chain */
 
-static uint8_t ed_out[664];                      /* (MOTION op 8: 128 records and their kinds, 653 bytes) */
+static uint8_t ed_out[664] __attribute__((section(".pool")));   /* (MOTION op 8: 128 records and their kinds, 653 bytes) */
 static uint32_t ed_n;
 
 static void ed_begin(uint32_t cmd)
@@ -75,7 +75,7 @@ static uint32_t ed_unpack7(const uint8_t *a, uint32_t na, uint8_t *out, uint32_t
     }
     return na ? 0u : n;
 }
-static uint8_t ed_smp_buf[512] __attribute__((aligned(4)));
+static uint8_t ed_smp_buf[512] __attribute__((aligned(4), section(".pool")));
 static uint32_t ed_smp_slot(uint32_t k) { return SMP_USER_BASE + k * SMP_USER_SIZE; }
 static void ed_smp_inval(uint32_t k)
 {
@@ -348,6 +348,7 @@ static int ed_flash_stop(void)
 #include "editor_backup.c"
 #include "editor_fm6.c"
 #include "editor_menu.c"
+#include "editor_learn.c"                    /* 1.5: MIDI LEARN's map (cmds 78, 79) */
 
 /* MOTION's reply: the records of track k as (step, id, v14), a lock's id without its MOTION_LOCK bit (a 7-bit SysEx
  * byte); kinds (1.1: the ops 5..7): then one byte per record, in the same order, 0 automation, 1 lock. The query and
@@ -382,7 +383,7 @@ static int ed_args_ok(uint32_t cmd, const uint8_t *a, uint32_t n)
 {
     switch (cmd) {
     case ED_INFO: case ED_DUMP: case ED_SMP_INFO: case ED_PING:
-    case ED_UI_STATE: case ED_UI_PALETTES:
+    case ED_UI_STATE: case ED_UI_PALETTES: case ED_LEARN_GET:
         return !n;
     case ED_GET: case ED_DESC: case ED_PRESET: case ED_PROJECT: case ED_UP_LIST:
     case ED_TRACK_PARAM:
@@ -435,6 +436,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
     if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_fm6_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_menu_handle(cmd, a, na)) { ed_send(); return; }
+    if (ed_learn_handle(cmd, a, na)) { ed_send(); return; }
     switch (cmd) {
     case ED_MOTION: {
         track_t *t = &trk[a[0]]; uint32_t rc = 0;
@@ -479,6 +481,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         ed_b(0x54); ed_b(1); ed_b(NUDGE_DIV);   /* 1.2: a step's nudge (1/16 step) after its ratchet; LFO 2, QNTZ */
         ed_b(0x57); ed_b(1); ed_b(NTRK);   /* 1.2: song sections with a slot per track (SONG ops 4..7) */
         ed_b(0x56); ed_b(1); ed_b(FM6_NBANK);   /* 1.4.1: FM6's voice bank (cmds 74..77; SLOT 9..40 = B1..B32) */
+        ed_b(0x43); ed_b(1); ed_b(ML_N);   /* 1.5: MIDI LEARN's map (cmds 78, 79; editor_learn.c) */
         break;
     case ED_GET:
     case ED_SET:

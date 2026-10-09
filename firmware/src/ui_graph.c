@@ -374,6 +374,38 @@ static void graph_fx(const track_t *t, uint16_t c)
         cv_rrect(x - 4, 85 - h, 12, 6, 3, c, T_SURF);
     }
 }
+/* INSERT pages (1.5, fx.c track_insert): the drives and CRUSH as their curve, input (-1.5 .. +1.5 of a voice's full
+ * scale) across, output up, dry and wet blended by MIX (fx.c ins_shape: the same shape; the dry diagonal RAISE); the
+ * swept ones as two cycles of their sweep, as deep as DEPTH (FLANG the squared triangle, CHOR a sine, PHASR a
+ * triangle). OFF: the dry diagonal, dim */
+static void graph_insert(const track_t *t, uint16_t c)
+{
+    int32_t x, cy = graph_ht / 2, a = 38 * graph_ht / 100, py = cy, ty = clamp(t->p[P_ITYPE], 0, IT_N - 1);
+    int32_t m = ins_mixq(t->p[P_IMIX]), g = 4096 + t->p[P_IA] * t->p[P_IA] * 3, lvl = LEVEL_Q12[t->p[P_IC] & 127];
+    uint32_t sh = ins_bits_sh(t->p[P_IA]);
+    cv_rect(PANEL_X0, cy, PANEL_W, 1, T_RAISE);
+    cv_line(PANEL_X0 + PANEL_W / 2, cy - a, PANEL_X0 + PANEL_W / 2, cy + a, T_RAISE);
+    if (ty == IT_OFF || ty >= IT_PHASER || !m)
+        cv_line(PANEL_X0 + PANEL_W / 6, cy + a, PANEL_X0 + PANEL_W * 5 / 6, cy - a, ty ? T_RAISE : T_DIM);
+    if (ty == IT_OFF)
+        return;
+    for (x = 0; x < PANEL_W; x++) {
+        int32_t y, w;
+        if (ty >= IT_PHASER) {                       /* the sweep, two cycles */
+            uint32_t ph = (uint32_t)x * (0xFFFFFFFFu / (PANEL_W / 2u)), tr = pf_tri(ph);
+            w = ty == IT_CHORUS ? osc_sine(ph) * 2 : ty == IT_FLANGER ? (int32_t)((tr * tr) >> 16) * 2 - 65536 : (int32_t)tr * 2 - 65536;
+            y = cy - (w >> 1) * a / 32768 * t->p[P_IB] / 127;
+        } else {                                     /* the curve: v in, dry v, wet shaped */
+            int32_t v = (x - PANEL_W / 2) * 49152 / (PANEL_W / 2), o;
+            o = ty == IT_CRUSH ? ins_shape(IT_CRUSH, v, sh) : (ins_shape((uint32_t)ty, ((v >> 3) * g) >> 9, 0) * lvl) >> 12;
+            w = v + mulq16(o - v, (uint32_t)m << 1);
+            y = cy - clamp(w, -49152, 49152) * a / 49152;
+        }
+        if (x)
+            cv_line_t(PANEL_X0 + x - 1, py, PANEL_X0 + x, y, c, 2);
+        py = y;
+    }
+}
 /* SLICER page: the pattern's 16 steps, a 'x' step a full bar; a '.' step: GATE a bar as high as it stays
  * open (DEPTH), STUT hatched (it repeats the last 'x'); the step playing underlined. Grey when OFF. */
 static void graph_slicer(const track_t *t, uint16_t c)
@@ -1344,8 +1376,8 @@ static int32_t ev_value(int32_t y, const char *v, const char *unit, uint16_t fg,
 }
 /* SEQ > AUTOMATION (ui_events.c): the track's rows around the one selected: PLAY first (ON / OFF and the counts),
  * QUANTIZE (ON / OFF and the steps nudged), then a row each: the kind (LOCK in the accent, AUTO; STEP: a step's CHANCE,
- * RATCH or NUDGE, a NUDGE that does not play DIM), the step, the name, the value at the right; the last row + ADD (LOCK,
- * CHANCE, RATCH or NUDGE: what OCT+ adds) */
+ * RATCH, NUDGE or VEL, a NUDGE or VEL that does not play DIM), the step, the name, the value at the right; the last row
+ * + ADD (LOCK, CHANCE, RATCH, NUDGE or VEL: what OCT+ adds) */
 static void graph_events(void)
 {
     const track_t *t = TSEL;
@@ -1366,7 +1398,8 @@ static void graph_events(void)
             ev_fix();
             GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
             cv_text_on(14, y + LIST_TY, &AF_M, ui.ev_id == EV_CHANCE ? "+ ADD CHANCE" : ui.ev_id == EV_RATCH ?
-                       "+ ADD RATCH" : ui.ev_id == EV_NUDGE ? "+ ADD NUDGE" : "+ ADD LOCK", sel ? T_INK : T_DIM, bg);
+                       "+ ADD RATCH" : ui.ev_id == EV_NUDGE ? "+ ADD NUDGE" : ui.ev_id == EV_VEL ?
+                       (ui.ev_vel ? "+ HIDE VEL" : "+ SHOW VEL") : "+ ADD LOCK", sel ? T_INK : T_DIM, bg);
             break;
         }
         if (c >> 8 == EVK_TOP) {                     /* PLAY ON / OFF, the counts: "EVENT 3  LOCK 2" */
@@ -1399,7 +1432,8 @@ static void graph_events(void)
         if (c >> 8 != EVK_REC) {                     /* a step's CHANCE / RATCH / NUDGE: "STEP 05 CHANCE  50%" */
             uint32_t s = c & 0xFFu, kd = c >> 8;
             int32_t v = ev_sval(&t->step[s], kd);
-            uint16_t vc = kd == EVK_NUDGE && !ev_nudge_plays(t, &t->step[s]) ? T_DIM : T_TEXT;   /* (QUANTIZE ON ..) */
+            uint16_t vc = (kd == EVK_NUDGE && !ev_nudge_plays(t, &t->step[s])) ||   /* (QUANTIZE ON ..) */
+                          (kd == EVK_VEL && !ev_vel_plays(&t->step[s])) ? T_DIM : T_TEXT;
             char b[8];
             b[0] = (char)('0' + (s + 1u) / 10u);
             b[1] = (char)('0' + (s + 1u) % 10u);
@@ -1409,9 +1443,9 @@ static void graph_events(void)
             GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
             cv_text_on(EV_SX, y + LIST_TY, &AF_M, b, sel ? T_INK : T_MID, bg);
             GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
-            cv_text_on(EV_NX, y + LIST_TY, &AF_M, kd == EVK_CHANCE ? "CHANCE" : kd == EVK_RATCH ? "RATCH" : "NUDGE",
-                       sel ? T_INK : vc, bg);
-            if (kd == EVK_CHANCE) {
+            cv_text_on(EV_NX, y + LIST_TY, &AF_M, kd == EVK_CHANCE ? "CHANCE" : kd == EVK_RATCH ? "RATCH" :
+                       kd == EVK_VEL ? "VEL" : "NUDGE", sel ? T_INK : vc, bg);
+            if (kd == EVK_CHANCE || kd == EVK_VEL) {
                 fmt_int(b, v);
             } else if (kd == EVK_RATCH) {
                 b[0] = 'x';
@@ -1420,7 +1454,7 @@ static void graph_events(void)
             } else {                                 /* "+3" "/16" */
                 ev_nudge_fmt(b, v);
             }
-            ev_value(y, b, kd == EVK_CHANCE ? "%" : kd == EVK_RATCH ? "" : "/16", sel ? T_INK : vc, bg);
+            ev_value(y, b, kd == EVK_CHANCE ? "%" : kd == EVK_NUDGE ? "/16" : "", sel ? T_INK : vc, bg);
             continue;
         }
         {
@@ -1803,7 +1837,7 @@ static void draw_home_tracks(void)
  * a flat line on it; MENU > SCREEN OFF keeps it from staying on the panel for hours) */
 static void graph_scope(uint16_t c)
 {
-    static int16_t snap[SCOPE_N];
+    static int16_t snap[SCOPE_N] __attribute__((section(".pool")));
     uint32_t w = scope_w, i, trig = 0;
     int32_t cy = (int32_t)cv_h / 2, py = cy, x, peak = 1500, a = cv_h == H_GRAPH ? 46 : cy - 6;   /* (LARGE: the strip) */
     for (i = 0; i < SCOPE_N; i++) {
@@ -2178,6 +2212,9 @@ static void draw_graph(void)
             break;
         case GR_SLCR:
             graph_slicer(t, c);
+            break;
+        case GR_INS:
+            graph_insert(t, c);
             break;
         case GR_MOD:
             cv_oy = 0;

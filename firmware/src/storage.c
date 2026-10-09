@@ -74,7 +74,7 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
     return 0x97000u + (obj - OBJ_PROJECT0) * 2u * ST_SECTOR + copy * ST_SECTOR;
 }
 
-static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4)));
+static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
 
 static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record valid: 0 */
 {

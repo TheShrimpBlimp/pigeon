@@ -11,9 +11,8 @@ The ADPCM state at the loop start is stored so loops restart exactly.
 Libraries:
   cc0        assets/samples-cc0/ (tools/fetch_cc0.py, Versilian Studios, CC0):
              PIANO, FLUTE, SAX (set 1, once TRANH, and set 4, once PERC, are aliases of PIANO).
-             PIANO is reduced material since 1.2 (PIANO_LO: two of its recordings at 11,025 Hz,
-             8-bit resolution, 1.6 s); the 5-zone PIANO of 1.0 .. 1.1.5 is a user-slot file now
-             (--user-slot below: PIANO HD, installed into USR1..3 from the web editor)
+             PIANO is the 5-zone piano of 1.0 .. 1.1.5 (1.2 .. 1.4.1 built a reduced 2-zone
+             one at 11,025 Hz; 1.5 went back to the full one, the same bytes as 1.1.5)
 SAMPLE's factory presets end before set 4 (SMP_PERC_SLOT); every sample set and SET / USR
 index stays in its original place.
 A retired set keeps its index as an alias: the original's name and zones (no data), and a
@@ -33,14 +32,15 @@ the hits as AUTO slices) is written with it: SLC_BREAK_INIT.
 
 SLICE's SRC PIANO (added in 1.0.4 after BREAK and USR1-3) is the PIANO set's middle C zone itself:
 no data of its own, only its slice table (one AUTO slice, the note's attack): SLC_PIANO_INIT.
-PIANO_LO has no middle C zone (its roots are 48 and 72), so since 1.2 SLICE keeps the 1.0.4 zone as data of
-its own, stored after BREAK: SLICE's PIANO sounds as before.
+(1.2 .. 1.4.1 kept a copy of that zone after BREAK, as their PIANO had none; 1.5 shares it again.)
 Without the CC0 library (no PIANO set) it has no material (SLICE plays a sine there).
 
   gen_samples.py OUT.h                                       the header (tools/build.py)
   gen_samples.py --user-slot PIANO "PIANO HD" build/piano_hd/PIANO_HD
-                  a CC0 set as built from its own files (PIANO: the 5 zones of 1.0 .. 1.1.5) as a user slot:
-                  PREFIX.hdr / .bin (the editor's SMP_END header / SMP_WRITE data), PREFIX.slot (as in flash)
+                  a CC0 set as built from its own files (PIANO: the 5 zones of 1.0 .. 1.1.5, 1.5) as a user slot:
+                  PREFIX.hdr / .bin (the editor's SMP_END header / SMP_WRITE data), PREFIX.slot (as in flash).
+                  Kept for reference and tests only (1.2's PIANO HD file, which old users may hold in USR1..3:
+                  it plays as the built-in PIANO does); nothing in the build or the app depends on it.
 
 The header is cached (build/gen_samples.cache) under a hash of every
 input file, this script, sampleio.py and the Python version, so unchanged
@@ -74,13 +74,6 @@ CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("FLUTE", "sus"), ("SAX", 
 PERC_SLOT = 4                                # core.h SMP_SET_PERC: SAMPLE's factory presets end before it
 MEASURED_TUNING = ()                         # sets whose recordings are not at A440 (was TRANH, ~+35 ct)
 
-# Reduced material from the CC0 library (lo_entries): (CC0 folder, [(file name start, lowest key)], rate, kept s,
-# fade s, bits). PIANO_LO (1.2): two of PIANO's recordings, the files named C2 and C4 (the CC0 names count C3 = 60:
-# they sound MIDI 48 and 72), each playing up to an octave below its root and above (split at MIDI 60), at
-# 11,025 Hz, 1.6 s from the onset with the last 0.6 s faded out, rounded to 8-bit resolution before the ADPCM
-PIANO_LO = ("PIANO", [("01_GPiano_sus_C2", 0), ("03_GPiano_sus_C4", 60)], 11025, 1.6, 0.6, 8)
-# CC0_SETS sets built from such material instead of all of their folder's files (index, name, presets unchanged)
-CC0_LO = {"PIANO": PIANO_LO}
 
 KIT_BASE = 53                     # F3, the lowest FM-1 key
 
@@ -106,8 +99,7 @@ SLC_GRID, SLC_AUTO = 128, 32                # eng_slice.c slc_src_t
 ENV = {"wave":(5, 80, 100, 50), "kit": (0, 127, 127, 60), "multi": (0, 85, 0, 75),
        "oneshot": (0, 127, 127, 70), "sus": (12, 80, 120, 60)}
 
-# PIANO's notes cut to 0.75 s (saves flash), faded out over the last SET_FADE s (the 5-zone PIANO of 1.0 .. 1.1.5:
-# SLICE's PIANO, the PIANO HD user slot)
+# PIANO's notes cut to 0.75 s (saves flash), faded out over the last SET_FADE s
 SET_KEEP = {"PIANO": 0.75}
 SET_FADE = {"PIANO": 0.15}
 
@@ -189,28 +181,6 @@ def cc0_entries(setname, kind):
             loop = None
         pk = peak(x)
         out.append((p.name, [int(v * 30000 / pk) for v in x], loop, root))
-    return out
-
-
-def lo_entries(folder, picks, rate, keep, fade, bits):
-    """reduced material (PIANO_LO) -> [(int16 samples at rate, root, lowest key)]: from the onset, resampled, cut to
-    keep s, normalised, a linear fade over the last fade s, rounded to bits of resolution, scaled to +-32000"""
-    files = sorted((CC0 / folder).glob("*.wav"))
-    conv = octave_conv(files)
-    out = []
-    for start, lo in picks:
-        p = next(f for f in files if f.name.startswith(start))
-        nn = name_note(p.name)
-        sr, x = wav(p)
-        x = resample(x[onset(x):], sr, rate)[:int(keep * rate)]
-        pk = peak(x)
-        x = [v / pk for v in x]
-        nf = int(fade * rate)
-        for i in range(nf):
-            x[len(x) - nf + i] *= 1 - i / (nf - 1)
-        q = 1 << (bits - 1)
-        out.append(([int(max(-32768, min(32767, round(v * q) / q * 32000))) for v in x],
-                    (nn[0] + conv) * 12 + nn[1], lo))
     return out
 
 
@@ -309,11 +279,6 @@ class Builder:
         at k * len / SLC_GRID, one AUTO slice at 0 (a single note has one attack)"""
         z = next((z for name, z0, nz in self.sets if name == "PIANO"
                   for z in self.zones[z0:z0 + nz] if z["root16"] == SLC_PIANO_NOTE * 16), None)
-        if not z and any(name == "PIANO" for name, _, _ in self.sets):    # PIANO_LO: the 1.0.4 zone, a copy of its own
-            s = next((s for _, s, _, root in cc0_entries("PIANO", "oneshot") if root == SLC_PIANO_NOTE), None)
-            if s:
-                off, _ = self.add(s, len(s))
-                z = dict(off=off, n=len(s))
         if not z:
             return
         off, n = z["off"], z["n"]
@@ -360,19 +325,6 @@ class Builder:
                                 root16=int(round(root * 16)), pred=st[0], idx=st[1],
                                 key=KIT_BASE + k if kind == "kit" else None))
         self.add_set(name, kind, entries)
-
-    def lo_set(self, name, kind, material):
-        """a set of reduced material (lo_entries: one-shot zones, the key ranges from its picks)"""
-        entries = []
-        ents = lo_entries(*material)
-        for k, (s, root, lo) in enumerate(ents):
-            off, st = self.add(s, len(s))
-            entries.append(dict(off=off, n=len(s), ls=len(s), le=len(s), looped=False, sr=material[2],
-                                root16=root * 16, pred=st[0], idx=st[1], key=None,
-                                lo=lo, hi=ents[k + 1][2] - 1 if k + 1 < len(ents) else 127))
-        self.sets.append((name, len(self.zones), len(entries)))
-        self.zones += entries
-        self.kinds[name] = kind
 
     def header(self):
         zones, sets, blob = self.zones, self.sets, self.blob
@@ -501,13 +453,11 @@ def main(out):
         for name, kind in CC0_SETS:
             if kind == "alias":
                 b.alias_set(name)
-            elif name in CC0_LO:
-                b.lo_set(name, kind, CC0_LO[name])
             else:
                 b.cc0_set(name, kind)
     if slice_on():                                  # SLICE's BREAK: only when that engine is built
         b.slice_break()                             # last: the sets' offsets stay as they were
-        b.slice_piano()                             # (the PIANO set's zone, or with PIANO_LO a copy after BREAK)
+        b.slice_piano()                             # (no data of its own: the PIANO set's)
     text = b.header()
     Path(out).write_text(text)
     CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -516,7 +466,7 @@ def main(out):
 
 
 def user_slot_file(setname, slotname, prefix):
-    """a one-shot CC0 set as built from all of its own files (PIANO: the 5 zones of 1.0 .. 1.1.5, not PIANO_LO) as a
+    """a one-shot CC0 set as built from all of its own files (PIANO: the 5 zones of 1.0 .. 1.1.5, 1.5) as a
     user sample slot: PREFIX.hdr (the 480-byte header SMP_END takes), PREFIX.bin (the ADPCM SMP_WRITE takes; as
     tools/fm1_sample_upload.py build writes them) and PREFIX.slot (the slot as stored in flash: header at 0, data at
     512). Each zone's ADPCM bytes, length, rate, root and key range are checked against that set as Builder.cc0_set

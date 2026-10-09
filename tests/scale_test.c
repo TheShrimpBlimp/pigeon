@@ -260,11 +260,174 @@ static void seq_quant_test(void)
     puts("scales: QNT SEQ snaps the sequence as it plays (steps unchanged), no stuck notes over scale changes, kits never");
 }
 
+/* #191: the arp's notes from the keys follow TRN, ROOT, SCALE and QNT as they change (latched with HOLD or held),
+ * the octave they were pressed in; MIDI IN's notes play as they came; with nothing changed, exactly as before */
+static uint32_t arp_seen[8];
+static uint32_t arp_run(track_t *t, uint32_t steps)  /* the notes of `steps` arp steps into arp_seen; the count sounding */
+{
+    uint32_t period = div_samples((uint32_t)t->p[P_ARATE]), i;
+    for (i = 0; i < steps && i < 8u; i++) {
+        arp_tick(t, period);
+        arp_seen[i] = t->arp_note;
+    }
+    return steps;
+}
+static int arp_is(track_t *t, uint32_t a, uint32_t b)   /* UP over two notes: a b a b */
+{
+    arp_run(t, 4);
+    return arp_seen[0] == a && arp_seen[1] == b && arp_seen[2] == a && arp_seen[3] == b;
+}
+static void arp_reset(track_t *t)
+{
+    memset(trk, 0, sizeof trk);
+    memset(&song, 0, sizeof song);
+    host_tracks_init();
+    kb_prev = 0;
+    fm1_in.notes = 0;
+    host_preset(t, 0, 0);                          /* ANALOG, POLY */
+    t->engine = t->eng_req = 0;
+    t->p[P_VOICE] = V_POLY;
+    t->p[P_AMODE] = 1;                             /* UP */
+    t->p[P_AOCT] = 1;
+    t->p[P_SCALE] = 2;                             /* C minor */
+    t->p[P_ROOT] = 0;
+    t->p[P_TRANS] = 0;
+}
+
+static void arp_follow_test(void)
+{
+    track_t *t = &trk[0];
+    uint32_t i;
+
+    /* the report: QNT SNAP, HOLD, a chord latched, then TRN */
+    arp_reset(t);
+    t->p[P_QUANT] = QN_SNAP;
+    t->p[P_AHOLD] = 1;
+    events_block(CTL);                             /* (the ISR sees HOLD on) */
+    fm1_in.notes = (1u << 7) | (1u << 11);         /* C4, E4 -> Eb4 in C minor */
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(t->nheld == 2 && t->held[0] == 60 && t->held[1] == 63);
+    assert(arp_is(t, 60, 63));
+    t->p[P_TRANS] = 2;                             /* D4, F#4 -> F4: transposed, then onto the scale */
+    assert(arp_is(t, 62, 65));
+    t->p[P_TRANS] = 1;                             /* C#4 -> C4, F4 */
+    assert(arp_is(t, 60, 65));
+    t->p[P_TRANS] = 0;
+    t->p[P_SCALE] = 1;                             /* SCALE: C major, E4 itself now */
+    assert(arp_is(t, 60, 64));
+    t->p[P_ROOT] = 2;                              /* ROOT: D major, C4 -> B3, E4 */
+    assert(arp_is(t, 59, 64));
+    t->p[P_ROOT] = 0;
+    t->p[P_SCALE] = 2;                             /* back as it was: exactly the notes latched */
+    assert(arp_is(t, 60, 63));
+    song.octave = 1;                               /* the octave buttons: the next keys, not the latched ones */
+    assert(arp_is(t, 60, 63));
+    song.octave = 0;
+    assert(t->nheld == 2 && t->held[0] == 60 && t->held[1] == 63);   /* (what the keys started: their releases) */
+    t->p[P_AHOLD] = 0;                             /* HOLD off: the latched chord goes, nothing left sounding */
+    events_block(CTL);
+    arp_run(t, 2);
+    assert(t->nheld == 0 && t->arp_note == 0 && gated(t) == 0);
+
+    /* QNT OFF, no HOLD: the keys held follow TRN too; their release ends them, whatever TRN is now */
+    arp_reset(t);
+    t->p[P_QUANT] = QN_OFF;
+    fm1_in.notes = (1u << 7) | (1u << 11);         /* C4, E4 */
+    keyboard_block();
+    assert(arp_is(t, 60, 64));
+    t->p[P_TRANS] = -3;
+    assert(arp_is(t, 57, 61));
+    fm1_in.notes = 1u << 7;                        /* E4 up (it plays C#4 now) */
+    keyboard_block();
+    assert(t->nheld == 1);
+    arp_run(t, 2);
+    assert(arp_seen[0] == 57 && arp_seen[1] == 57);
+    fm1_in.notes = 0;
+    keyboard_block();
+    arp_run(t, 2);
+    assert(t->nheld == 0 && t->arp_note == 0 && gated(t) == 0);
+
+    /* MIDI IN into the arp: its notes are not the keyboard's, TRN never moved them (nor does it now) */
+    arp_reset(t);
+    t->p[P_QUANT] = QN_SNAP;
+    t->p[P_AHOLD] = 1;
+    input_on(t, 61, 100);
+    input_on(t, 66, 100);
+    input_off(t, 61);
+    input_off(t, 66);
+    assert(arp_is(t, 61, 66));
+    t->p[P_TRANS] = 5;
+    t->p[P_SCALE] = 1;
+    assert(arp_is(t, 61, 66));
+
+    /* CHRD: a key's chord moves with it (its notes as far above the key's note) */
+    arp_reset(t);
+    t->p[P_QUANT] = QN_OFF;
+    t->p[P_AHOLD] = 1;
+    t->p[P_CHRD] = CH_POW;                         /* C G C' */
+    fm1_in.notes = 1u << 7;
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(t->nheld == 3);
+    arp_run(t, 3);
+    assert(arp_seen[0] == 60 && arp_seen[1] == 67 && arp_seen[2] == 72);
+    t->p[P_TRANS] = 2;
+    arp_run(t, 3);
+    assert(arp_seen[0] == 62 && arp_seen[1] == 69 && arp_seen[2] == 74);
+    t->p[P_CHRD] = 0;
+
+    /* QNT WHITE after the keys: a black key latched is silent now (left out); all of them: the arp rests */
+    arp_reset(t);
+    t->p[P_QUANT] = QN_OFF;
+    t->p[P_AHOLD] = 1;
+    fm1_in.notes = (1u << 7) | (1u << 8);          /* C4, C#4 */
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(arp_is(t, 60, 61));
+    t->p[P_QUANT] = QN_WHITE;                      /* C4 is the root, C#4 silent */
+    arp_run(t, 4);
+    for (i = 0; i < 4u; i++)
+        assert(arp_seen[i] == 60);
+    t->p[P_QUANT] = QN_OFF;
+    fm1_in.notes = 1u << 8;                        /* a new chord: C#4 alone */
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    t->p[P_QUANT] = QN_WHITE;
+    arp_run(t, 4);
+    assert(t->nheld == 1 && t->arp_note == 0 && gated(t) == 0);
+    t->p[P_QUANT] = QN_OFF;
+    arp_run(t, 1);
+    assert(arp_seen[0] == 61);
+
+    /* the DRUM engine's own key map: as it came (TRN is not its) */
+    arp_reset(t);
+    host_preset(t, ENGI_DRUM, 0);
+    t->engine = t->eng_req = ENGI_DRUM;
+    t->p[P_AMODE] = 1;
+    t->p[P_AOCT] = 1;
+    t->p[P_AHOLD] = 1;
+    fm1_in.notes = (1u << 7) | (1u << 9);
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(held_key[0][0] == 0 && held_key[0][1] == 0);
+    assert(arp_is(t, kb_map(t, 7), kb_map(t, 9)));
+    t->p[P_TRANS] = 7;
+    assert(arp_is(t, t->held[0], t->held[1]));
+    puts("scales: the arp's latched / held keys follow TRN, ROOT, SCALE and QNT (#191); octave, MIDI IN, kits as before");
+}
+
 int main(void)
 {
     host_tracks_init();
     mapping_test();
     key_events_test();
     seq_quant_test();
+    arp_follow_test();
     return 0;
 }

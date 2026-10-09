@@ -60,6 +60,13 @@ ratchet. A song's rows became sections with a slot per track (`SONG` ops 4..7; o
 **1.4.1 (FM6's voice bank; INFO `56 01 32`):** FM6's SLOT (P_E0 + 7) runs to 40: 9..40 = B1..B32, the voices of a
 32-voice bank the editor writes whole (cmds 74..77). Nothing else changed. See "FM6 voice bank (74-77)" below.
 
+**1.5 (111 parameters, FUN10 as it was):** seven track parameters went in before the engine parameters, which moved
+from 96..103 to 103..110: P_COUNT 111, P_E0 103. The INSERT, `INSRT` `INS A` `INS B` `INS C` `MIX` (96..100, a per-track
+insert effect with a dry / wet mix, Discussions #78 #177), then `TYPE` (101, ANALOG's filter LP / BP / HP, #104) and
+`ESYNC` (102, ENV SYNC: ATK DEC REL as note values of the tempo, #175). No command changed; an editor that takes
+P_COUNT and P_E0 from `INFO` keeps working. Projects stay FUN10 (3840 bytes, 111 at byte 66; 16 bytes to spare). See
+"1.5: the INSERT" and "1.5: filter TYPE, ENV SYNC" below.
+
 ## Framing
 
 A request is `F0 7D 46 4C <cmd> <args...> F7`:
@@ -85,7 +92,8 @@ watches (v2, `WATCH`), the device also sends push frames (cmds 23, 24, 26) at an
 | track | 0..3: tracks 1..4 (synth parts) |
 | engine byte | 0..NENGINES−1 (firmware before 1.0: NENGINES = its drum track, no engine). The numbers are fixed, new engines are appended: 0 ANALOG, 1 reserved (DIGITAL before 1.0: see below), 2 PHASE, 3 LOFI, 4 SAMPLE, 5 VOICE, 6 TRIO, 7 WHEEL, 8 GRAIN, 9 PHYS, 10 DRUM, 11 NOISE, 12 FM6, 13 SLICE (NENGINES 14; a build with `FELUCCA_SLICE=0` has 13). The device and the editor list them in another order (ANALOG FM6 PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS NOISE SLICE DRUM: `ENGINE_ORDER`); the numbers stay |
 
-The engine parameters are `P_E0..P_E7`: P_COUNT−8 .. P_COUNT−1 (96..103 since 1.2; 91..98 in 1.1), and `INFO` gives `P_E0`.
+The engine parameters are `P_E0..P_E7`: P_COUNT−8 .. P_COUNT−1 (103..110 since 1.5; 96..103 in 1.2 .. 1.4; 91..98 in
+1.1), and `INFO` gives `P_E0`.
 Their meaning, range and names depend on the current engine, so re-read `DESC` for them
 after an engine change.
 
@@ -167,7 +175,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 4` (song sections: a slot per track, SONG ops 4..7) and (1.4.1) `56 01 32` (FM6's voice bank: cmds 74..77, SLOT 9..40) (below); older firmware ends earlier |
+| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23, 1.3: 24, 1.5: 25) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 4` (song sections: a slot per track, SONG ops 4..7) and (1.4.1) `56 01 32` (FM6's voice bank: cmds 74..77, SLOT 9..40) and (1.5) `43 01 16` (MIDI LEARN's map: cmds 78, 79) (below); older firmware ends earlier |
 | 2 GET | scope, id | scope, id, v14 |
 | 3 SET | scope, id, v14 | scope, id, v14 (the value after clamping). Setting global `G_ENGSEL` (id from DESC label "ENG") changes the engine: its defaults, then its first preset (as on the device) |
 | 4 DUMP | — | engine, preset, then P_COUNT × v14 (the selected track), then G_COUNT × v14 (globals) |
@@ -668,7 +676,30 @@ in 1/16 of a step) after the locks tag (`4C 01 1`). Firmware without them: 64 re
 - **Motion:** 128 records shared by the four tracks, both kinds. Ops 1..7 reply as before 1.2 (`max` 64, at most the
   track's first 64 records in store order: an editor of before keeps working while a track holds no more); op 8
   (track, 8) answers every record with count and max as two 7-bit bytes and the kinds. A set when the 128 are used: rc 2.
-- **Projects** are FUN10 (above); user presets store 104 parameters (UP_GET / UP_PUT: P_COUNT values, as INFO says).
+- **Projects** are FUN10 (above); user presets store 104 parameters (1.5: 111; UP_GET / UP_PUT: P_COUNT values, as INFO says).
+
+## 1.5: the INSERT
+
+Five track parameters before the engine parameters, ahead of 1.5's TYPE and ESYNC (below; with them P_COUNT 111, P_E0
+103; take both from `INFO` as always):
+
+| id | label | values |
+| --- | --- | --- |
+| 96 | INSRT | enum (append-only): 0 OFF, 1 SOFT, 2 HARD, 3 FOLD, 4 FUZZ, 5 CRUSH, 6 PHASR, 7 FLANG, 8 CHOR; default OFF |
+| 97 | INS A | 0..127, default 64: SOFT .. FUZZ DRIVE (PCT), CRUSH BITS (1 + v / 8: 1..16), PHASR / FLANG / CHOR RATE (LFOHZ) |
+| 98 | INS B | 0..127, default 96: SOFT .. FUZZ TONE (CUTOFF), CRUSH RATE (v / 8 picks 689 919 1.1k 1.4k 1.8k 2.2k 2.8k 3.7k 4.4k 5.5k 7.4k 8.8k 11k 15k 22k 44k Hz), the swept ones DEPTH (PCT) |
+| 99 | INS C | 0..127, default 96: SOFT .. FUZZ LEVEL (DB, as LVL: 112 = 0 dB), CRUSH LPF (CUTOFF), the swept ones FDBK (PCT) |
+| 100 | MIX | 0..127 (PCT), default 127: dry / wet; 0 = the dry track, bit for bit |
+
+`DESC` gives the generic labels and formats above (`INS A` .. `INS C`, PCT): the meaning of 97..99 depends on 96, as
+the engine parameters' on the engine; an editor that shows them by TYPE uses the table (the device does:
+`params.c ins_desc`). All five are the sound's (a factory preset sets OFF and the defaults, a user preset stores them,
+an audition sends them) and can be recorded as motion and locks (`MOTION` 3 / 5: rc 0). With TYPE OFF (or MIX 0) a
+track plays exactly as before 1.5. Older stores load by count: a FUN10 of 104 (1.2 .. 1.4) or 103 parameters, FUN9 and
+older, user presets of 104 and fewer: the INSERT OFF, their engine values and motion moved up to 103..110. Firmware
+before 1.5 shows a FUN10 of 111 parameters as EMPTY and refuses it in a backup `PUT` (its P_COUNT is larger than its
+own); a user preset record of 111 already in its flash it maps by count (the INSERT dropped, the engine values
+found). `UP_PUT` takes the device's own P_COUNT values, as always.
 
 ## 1.2: song sections
 
@@ -698,6 +729,37 @@ Projects (FUN10) store the sections: 4 + 16 × 5 = 84 bytes (count, 3 reserved, 
 repeats) right after the tracks' steps, before the motion: 68 + 4 × (104 + 2 + 576) + 84 + 388 = 3268, 44 bytes to spare
 before the FM6 patches at 3312. FUN9 and older store rows {slot, repeat} (36 bytes); they load as sections with the four
 tracks on the row's slot: the same song.
+
+## 1.5: filter TYPE, ENV SYNC
+
+No new command or INFO tag: P_COUNT 111 and P_E0 103 (from `INFO`, with the INSERT) say it, and `DESC` describes the two as always.
+
+| id | label | values |
+| --- | --- | --- |
+| 101 | `TYPE` | enum LP BP HP, default LP. ANALOG's filter (Discussion #104): the state-variable filter's low-pass (as before, bit for bit), band-pass or high-pass output, CUT / RES / KTR and every cutoff routing as they are. Other engines ignore it. On the device: EDIT > FILTER (TYPE CUT RES KTR), an ANALOG track's page after EDIT 2 |
+| 102 | `ESYNC` | enum OFF ON, default OFF. ENV SYNC (Discussion #175): ON, the amp envelope's ATK DEC REL (ids 1, 2, 4) are note values of the tempo (BPM, or the external clock's measured tempo) instead of 1 ms .. 10 s. On the device: ENV DEST's KNOB 4 |
+
+Both are the sound's (a factory preset or TOOLS INIT sets LP / OFF; user presets and library files store them). Neither can
+be recorded as motion (`MOTION` 3 / 5 answer rc 1) and no MIDI CC sets them.
+
+With `ESYNC` ON the stored values of ATK DEC REL stay 0..127; `DESC` still describes them as times (TIME), but they mean a
+note value: value v is name `ESYNC_NAMES[v × 25 / 128]` (integer division) of the 25, shortest first:
+
+`0` `1/64T` `1/64` `1/32T` `1/64D` `1/32` `1/16T` `1/32D` `1/16` `1/8T` `1/16D` `1/8` `1/4T` `1/8D` `1/4` `1/2T` `1/4D`
+`1/2` `1/1T` `1/2D` `1/1` `1/1D` `2BAR` `3BAR` `4BAR`
+
+(T a triplet, D dotted; in 1/384 of a 4/4 bar: 0 4 6 8 9 12 16 18 24 32 36 48 64 72 96 128 144 192 256 288 384 576 768 1152
+1536; the time is that × a quarter / 96.) `0` is the shortest time, as ATK / DEC / REL 0 with SYNC OFF. The device shows
+these names and its knob steps one name a detent, landing on the first value of each: `(k × 128 + 24) / 25` for name k
+(params.c `param_turn`). An editor should show and step them the same way while the track's `ESYNC` is ON (and keep the
+raw value when it goes OFF: the same number is a time again). The attack reaches the top after that time, the decay
+(to SUS) and the release fall 40 dB in it.
+
+Projects: FUN10 unchanged; one written by 1.5 holds 111 at byte 66 (16 bytes to spare before the FM6 patches, room for 4
+more). A FUN10 of 104 (1.2 .. 1.4) loads by count (the INSERT OFF, TYPE LP, ESYNC OFF; engine values and their motion
+moved up by seven). Firmware 1.2 .. 1.4 refuses a FUN10 of 111 (more parameters than it has: its slot shows EMPTY, a
+backup PUT of one answers rc 1); user presets of 111 load there by count (the seven left out). Library files of 104 map
+by label: the INSERT, TYPE and ESYNC unset.
 
 ## v7: full backup (65-67)
 
@@ -842,6 +904,35 @@ the device's autosave took the transfer's flash between two requests, after 10 s
   its range); an empty slot of a shorter file is not written. Flash: the bank is at 0xE7000; a transfer is staged in
   the autosave's older sector first (0xE5000 / 0xE6000), which the next autosave writes over anyway.
 
+## MIDI LEARN (78-79; 1.5)
+
+The device can set a controller's CC to any knob's parameter of a track (Discussion #170): GLO + D4 turns MIDI LEARN
+on, a knob turned picks its parameter on the selected track (GLO's KNOB 1..4: T1..T4 LEVEL), the next CC that comes is
+set to it. Up to 16 CCs, each to one parameter of one track (0..3), whatever channel it comes on (a channel MIDI IN /
+ROUT ignores stays ignored) and whichever track that channel plays; a CC 0..127 over the parameter's range, as a knob
+(and as AUTOMATION records a knob). A learned CC no longer reaches the standard CC map (CC74 learned is no longer
+T1's CUT on channel 1). One CC sets one parameter and a parameter has one CC: learning either again replaces the old
+entry. Never learned: CC0, 1, 6, 11, 32, 38, 64, 96..101, 120..127 (their meaning: bank select, MODW, RPN data, EXPR,
+the pedal, data increment / NRPN / RPN, channel mode). The map is part of the settings (kept across power-off, not in
+projects or user presets; a full backup carries it with the settings object); empty in every older setting. An engine
+parameter is learned by its place (P_E0 + k): on a track that changes engine the CC sets that engine's k-th value.
+INFO advertises `43 01 16` (16 entries) after `56 01 32`; firmware without the tag answers neither command. The
+device's MENU > MIDI > LEARN CLEAR (OCT+: every entry cleared) is an action, not a setting: `MENU_DESC` does not offer
+it (the MENU settings' count stays); `LEARN_SET` op 2 does the same.
+
+| cmd | Request args | Reply args |
+| --- | --- | --- |
+| 78 LEARN_GET | — | 16, then 16 × (used 0/1, CC, track, parameter id); an empty entry `0 0 0 0` |
+| 79 LEARN_SET | op 0 learn: 0, CC, track, parameter id; op 1 clear a CC: 1, CC; op 2 clear all: 2 | rc, then LEARN_GET's reply |
+
+The parameter id is this firmware's (`P_*`, P_E0 from `INFO`). rc: 0 applied and saved, 1 arguments (an unknown op, a
+CC that is never learned or past 127, a track past 3, an id past P_COUNT − 1), 3 applied in RAM only (no flash, a
+failed write), 4 applied, saved when the transport stops, 5 full (16 others: clear one first). Op 1 on a CC not
+learned, op 2 on an empty map: rc 0, nothing changes. The device does not tell the editor when it learns: read the map
+again (LEARN_GET) when it matters (e.g. with the settings, or after the user says so). Example: `F0 7D 46 4C 4F 00 4A
+03 62 F7` (op 0: CC74, T4, id 98: P_E0 + 2, DRUM's TONE, where P_E0 is 96 as in 1.2 .. 1.4.1) answers `F0 7D 46 4C 4F 00 10 01 4A 03 62 ...
+F7` (rc 0, 16 entries, the first CC74 on T4 id 98).
+
 ## Tagged device preferences v1
 
 INFO appends `0x55, 1, uiCaps` after the existing `NTRK, CHAIN_ROWS` bytes.
@@ -921,9 +1012,9 @@ is told: no list of settings is fixed in the editor. INFO advertises `4E 01 coun
   ABOUT).
   For a kind it does not know, an editor cannot find the tab (it does not know that kind's bytes).
 
-This firmware (count 24; tabs 0 DISPLAY, 1 CONTROL, 2 AUDIO, 3 MIDI, 4 SYSTEM (1.2; before: 3 SYSTEM); 1.0.5 had the
+This firmware (count 25; tabs 0 DISPLAY, 1 CONTROL, 2 AUDIO, 3 MIDI, 4 SYSTEM (1.2; before: 3 SYSTEM); 1.0.5 had the
 first 12, 1.1 the first 15, 1.2 before SCALE LEDS the first 16, before SCREEN OFF the first 17, 1.1.5 the first 18, 1.2
-before MIDI IN the first 21, 1.2 the first 23):
+before MIDI IN the first 21, 1.2 the first 23, 1.3 / 1.4 the first 24):
 
 | index | id | name | kind | values (min 0) | default | tab |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -950,7 +1041,8 @@ before MIDI IN the first 21, 1.2 the first 23):
 | 20 | 20 | CHORD ENTRY | 0 | 0 HOLD, 1 ADD (1.2) | HOLD | 1 CONTROL |
 | 21 | 21 | MIDI IN | 0 | 0 CH1-4, 1 SEL, 2 CH5-8, 3 CH9-12, 4 CH13-16 (1.2: the project's `G_ROUTE`, global 14) | CH1-4 | 3 MIDI |
 | 22 | 22 | TUNE | 1 | -50..50, unit "ct" (1.2: the project's `G_TUNE`, global 3, cents) | 0 | 2 AUDIO |
-| 23 | 23 | HOME | 0 | 0 SCOPE, 1 TRACKS (1.3) | SCOPE | 0 DISPLAY |
+| 23 | 23 | HOME | 0 | 0 SCOPE, 1 TRACKS (1.3), 2 LEVELS (1.5; before: max 1) | SCOPE | 0 DISPLAY |
+| 24 | 24 | HELP | 0 | 0 OFF, 1 ON (1.5) | OFF | 4 SYSTEM |
 
 The device's AUDIO tab shows SPEAKER EQ, USB LEVEL, CLICK, CLICK LEVEL, COUNT-IN and (1.2) TUNE (index 9, 10, 12, 13,
 14, 22).
@@ -1000,7 +1092,7 @@ is index 4, id 4, kind 0, value 2 (`02 40`), min 0 (`00 40`), max 3 (`03 40`), "
 `F0 7D 46 4C 49 00 32 40 F7` (COLOR 50) answers `F0 7D 46 4C 49 00 00 09 40 F7` (clamped to 9, MONO).
 `F0 7D 46 4C 49 0E 01 40 F7` sets COUNT-IN to 1 BAR and answers `F0 7D 46 4C 49 00 0E 01 40 F7` (1.1).
 `F0 7D 46 4C 49 16 74 3F F7` (TUNE -12) answers `F0 7D 46 4C 49 00 16 74 3F F7` (rc 0, 1.2).
-`F0 7D 46 4C 48 18 F7` answers `F0 7D 46 4C 48 18 7F F7` (no index 24; 1.2: none past 22, `17`; before MIDI IN: none past 20, `15`; before SCOPE: none past 17, `12`; before SCREEN OFF: none past 16, `11`; 1.2 before SCALE LEDS: none past 15, `10`; 1.1 firmware: none past 14, `0F`; 1.0.5: none past 11, `0C`).
+`F0 7D 46 4C 48 19 F7` answers `F0 7D 46 4C 48 19 7F F7` (no index 25; 1.3 / 1.4: none past 23, `18`; 1.2: none past 22, `17`; before MIDI IN: none past 20, `15`; before SCOPE: none past 17, `12`; before SCREEN OFF: none past 16, `11`; 1.2 before SCALE LEDS: none past 15, `10`; 1.1 firmware: none past 14, `0F`; 1.0.5: none past 11, `0C`).
 
 HOME (id 23, 1.3, Discussions #112 / #134; DISPLAY now shows COLOR, STYLE, LARGE, ANIM, LEDS, SCREEN OFF, SCOPE and
 HOME, index 0..4, 17, 18, 23): what the device's HOME page shows under its four cards. SCOPE (the default, as before)
@@ -1008,7 +1100,13 @@ the oscilloscope; TRACKS the four tracks as rows: each track's cushion, engine i
 pattern's page that plays (LEN > 16: the play head's page, stopped the selected track's cursor page; a pip per page),
 a MUTE badge, the output meter; the selected track's row highlighted. Only the look changes: HOME's knobs, ALGORITHM
 and the HOME button do what they do on SCOPE. Kept in the settings record (its own byte; a value an older firmware does
-not know reads as SCOPE there). Applied at once.
+not know reads as SCOPE there). Applied at once. 1.5 (#134): LEVELS (2), the rows of TRACKS with KNOB 1..4 the LEVEL
+of T1..T4 (the GLO layer's knobs) in place of the selected track's engine's four; firmware before 1.5 reads it as SCOPE.
+
+HELP (id 24, 1.5, Discussion #156; SYSTEM now shows USB SERIAL, RESTORE LAST and HELP, index 11, 15, 24, then
+CALIBRATION, INFO and ABOUT): ON shows a short hint (key caps and a few words) in the footer for about 2 s when a page
+opens, and a second footer row under a quick layer's map. OFF (the default) shows none. A bit of the settings record
+(MENU's 1.2 flags byte, bit 3; older firmware keeps it and ignores it). Applied at once.
 
 **USB SERIAL (id 11).** The menu applies it when it closes; a MENU_SET applies it about 200 ms after its reply
 (`usb_serial_apply`), so the reply leaves first (if the device shows the MENU at that moment: when it closes).

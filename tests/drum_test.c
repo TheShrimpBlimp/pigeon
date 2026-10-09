@@ -541,8 +541,8 @@ static void choke(void)
         int32_t o[2 * CTL];
         mix_block(o, CTL);
     }
-    ok = drum_kit[0][DV_HATO].role == DVT_HATO && drum_kit[0][DV_HATO].v.choke && drum_kit[0][DV_HATO].v.q[0] < DV_QUIET &&
-         drum_kit[0][DV_HATC].v.live;
+    ok = drum_kit_of(&trk[0])[DV_HATO].role == DVT_HATO && drum_kit_of(&trk[0])[DV_HATO].v.choke && drum_kit_of(&trk[0])[DV_HATO].v.q[0] < DV_QUIET &&
+         drum_kit_of(&trk[0])[DV_HATC].v.live;
     printf("drum_test: choke in the DRUM engine (note 42 after 46): the open hat's lane choked and silent: %s\n",
            ok ? "ok" : "FAIL");
     fails += !ok;
@@ -624,7 +624,7 @@ static void kit_fresh(void)
 {
     host_tracks_init();
     memset(trk[0].v, 0, sizeof trk[0].v);
-    memset(drum_kit, 0, sizeof drum_kit);
+    memset(eng_mem, 0, sizeof eng_mem);
     host_preset(&trk[0], ENGI_DRUM, 0);
 }
 
@@ -643,7 +643,7 @@ static void lane_budget(void)
     static const uint8_t TOM[4] = {41, 43, 45, 47};
     uint32_t i, p, owner, kills, bad = 0;
     host_tracks_init();
-    memset(drum_kit, 0, sizeof drum_kit);
+    memset(eng_mem, 0, sizeof eng_mem);
     for (p = 0; p < NPART; p++)
         memset(trk[p].v, 0, sizeof trk[p].v);
     host_preset(&trk[0], ENGI_DRUM, 0);
@@ -655,12 +655,12 @@ static void lane_budget(void)
     for (i = 0; i < NELEM(KIT); i++)
         trk_note_on(&trk[0], KIT[i], 110);
     blocks_peak(2);
-    owner = drum_kit[0][DV_TOM].owner;
+    owner = drum_kit_of(&trk[0])[DV_TOM].owner;
     kills = voice_kills;
     bad += voices_busy() != NVOICE || !owner;
     for (i = 0; i < 16u; i++) {
         trk_note_on(&trk[0], TOM[i % NELEM(TOM)], 110);
-        bad += drum_kit[0][DV_TOM].owner != owner || voices_busy() != NVOICE || voice_kills != kills;
+        bad += drum_kit_of(&trk[0])[DV_TOM].owner != owner || voices_busy() != NVOICE || voice_kills != kills;
         blocks_peak(1);
         bad += voices_on(&trk[1]) != 2u || voices_on(&trk[0]) != NELEM(KIT);
     }
@@ -675,7 +675,7 @@ static void lane_budget(void)
     bad = trk[0].v[owner - 1u].stage != 4u;
     /* Retrigger before the stolen voice's fade block must acquire room again. */
     trk_note_on(&trk[0], TOM[0], 110);
-    bad += voices_busy() != NVOICE || drum_kit[0][DV_TOM].owner != owner;
+    bad += voices_busy() != NVOICE || drum_kit_of(&trk[0])[DV_TOM].owner != owner;
     blocks_peak(2);
     bad += voices_busy() != NVOICE || !trk[2].v[0].active || trk[2].v[0].note != 72;
     printf("drum_test: a synth starts over the kit, a stolen drum retriggers before its fade: budget kept: %s\n",
@@ -745,7 +745,7 @@ static void engine(void)
     pk = blocks_peak(2);
     nv = voices_on(&trk[0]);
     for (k = 0; k < DV_NLANE; k++) {
-        const drum_lane_t *L = &drum_kit[0][k];
+        const drum_lane_t *L = &drum_kit_of(&trk[0])[k];
         live += L->v.live;
         own += L->owner && trk[0].v[L->owner - 1u].active && (uint32_t)trk[0].v[L->owner - 1u].s[0] == k;
     }
@@ -762,8 +762,8 @@ static void engine(void)
     blocks_peak(4);
     trk_note_on(&trk[0], 43, 110);
     blocks_peak(2);
-    k = voices_on(&trk[0]) == 1u && drum_kit[0][DV_TOM].owner &&
-        trk[0].v[drum_kit[0][DV_TOM].owner - 1u].note == 43 && drum_kit[0][DV_TOM].st == DRUM_GM[43 - 35][1];
+    k = voices_on(&trk[0]) == 1u && drum_kit_of(&trk[0])[DV_TOM].owner &&
+        trk[0].v[drum_kit_of(&trk[0])[DV_TOM].owner - 1u].note == 43 && drum_kit_of(&trk[0])[DV_TOM].st == DRUM_GM[43 - 35][1];
     printf("drum_test: engine: a lane is mono, notes 41 then 43 (both TOM): one voice, the second hit: %s\n",
            k ? "ok" : "FAIL");
     bad += !k;
@@ -776,7 +776,7 @@ static void engine(void)
     blocks_peak(1);
     trk_note_off(&trk[0], 49);
     pk = blocks_peak(FS / 2u / CTL);
-    k = voices_on(&trk[0]) == 1u && drum_kit[0][DV_BELL].v.live && blocks_peak(4) > 50;
+    k = voices_on(&trk[0]) == 1u && drum_kit_of(&trk[0])[DV_BELL].v.live && blocks_peak(4) > 50;
     for (i = 0; i < 20u * FS / CTL && voices_on(&trk[0]); i++)
         blocks_peak(1);
     printf("drum_test: engine: a crash 0.5 s after its key-off still rings (ADSR SUS 0 REL 0), its voice free after "
@@ -820,7 +820,7 @@ static void engine(void)
     trk_note_on(&trk[0], 36, 110);
     trk_note_on(&trk[0], 38, 110);
     blocks_peak(2);
-    k = voices_on(&trk[0]) == 2u && drum_kit[0][DV_KICK].v.live && drum_kit[0][DV_SNARE].v.live;
+    k = voices_on(&trk[0]) == 2u && drum_kit_of(&trk[0])[DV_KICK].v.live && drum_kit_of(&trk[0])[DV_SNARE].v.live;
     printf("drum_test: engine: VOICE MONO and GLIDE set: kick and snare still sound together: %s\n", k ? "ok" : "FAIL");
     bad += !k;
     fails += bad != 0;
@@ -1046,7 +1046,7 @@ static void kit_keys(void)
         pk = blocks_peak(2);
         nv = voices_on(&trk[0]);
         for (i = 0; i < DV_NLANE; i++)
-            live += drum_kit[0][i].v.live;
+            live += drum_kit_of(&trk[0])[i].v.live;
         if (quiet || nv != 8u || live != 8u || pk < 1000) {
             printf("drum_test: KIT %s engine FAIL: %u lanes silent alone, %u voices, %u lanes live, peak %d\n", KITN[k], quiet,
                    nv, live, pk);

@@ -134,6 +134,7 @@ static void host_preset(track_t *t, uint32_t e, uint32_t pi)
 {
     host_preset_req(t, e, pi);
     t->engine = t->eng_req;                       /* (DIGITAL without FELUCCA_FM4: FM6) */
+    eng_mem_claim(t);                             /* (voice.c engine_block would at the next block) */
 }
 
 /* A saved SAMPLE PERC sound, as 1.0.2 and earlier stored it (SET 4, the GM kit; retired since: every load
@@ -843,6 +844,7 @@ int main(int argc, char **argv)
     for (i = 0; i < G_COUNT; i++) song.g[i] = GP[i].def;
     for (i = 0; i < P_E0; i++) inst.p[i] = TP[i].def;
     inst.eng_req = inst.engine = (uint8_t)eng;
+    eng_mem_claim(&inst);
     for (i = 0; i < 8; i++) inst.p[P_E0 + i] = ENGINES[eng]->edit[i].def;
     if (ENGINES[eng]->npresets) {
         const preset_t *p = &ENGINES[eng]->presets[preset % ENGINES[eng]->npresets];

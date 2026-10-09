@@ -13,6 +13,8 @@
 #                   (tests/target_budget.txt, +10 %; exact, static).
 #   voices          the budget of 8, steal fades, MONO / LEGATO / UNISON keep their note, the VOICE cap,
 #                   no hanging notes on any MIDI / key routing.
+# ENGINE MEMORY (tests/union_test.c, 1.5): engine switches on a part (every pair and A -> B -> A of the engines that
+#                   share the part's state region, with others), hashed against 1.4's (tests/union_golden.txt).
 # UI renders (tests/ui_render.c): every screen in every palette from the real drawing code: the layout lint (no text
 #                   off the screen, cut, hidden, overlapping or spilling out of its cell / card; only free text
 #                   ellipsised), GREY gray, MONO neutral, the draw cost, the text audit (build/ui_new/text_audit.tsv);
@@ -55,6 +57,10 @@
 # RATCH (tests/ratchet_test.c): a step's ratchet (x1..x4): its parts in the sequencer (equal, gated, chords and drum
 #                   hits whole, one chance roll, swing, no slide or tie out, STOP), FUN8 round trip and older projects x1,
 #                   user preset patterns, SEQ > AUTOMATION's RATCH rows and the roll / grid drawing.
+# STEP 1.5 (tests/step15_test.c, #178 #173): SEQ > STEP's KNOB 3 LEN on a note (clean TIEs written after it and taken
+#                   back, stopping at the next note and at LEN, chords, undo, TIME elsewhere, the DRUM grid untouched,
+#                   the longer note played), a step's VEL as it plays (96 by default, ACC 127, drum hits) and
+#                   SEQ > AUTOMATION's VEL rows (SHOW / HIDE, KNOB 4, EDIT, undo).
 # MOD (tests/mod_test.c): the modulation matrix: slots that do nothing are bit-identical, every source on each
 #                   kind of destination, clamping, MIDI CC1 / CC11 / aftertouch routing, the cost of 4 active
 #                   slots (at most +5 %), demos in build/mod_demo/.
@@ -63,6 +69,14 @@
 #                   the band-limited restart), SPREAD (SPRD 0 / MONO / LEGATO bit for bit, a note hard left / right, the
 #                   mono sum, UNISON, the SLICER's gate and the mute key on both sides, mono sends), the cost; demos in
 #                   build/sound14_demo/.
+# INSERT (tests/insert_test.c, 1.5; #78 #177): the per-track INSERT (src/fx.c track_insert): TYPE OFF and MIX 0 bit for
+#                   bit (POLY, SPREAD), each TYPE at its corners on 3 and 8 voices (no DC, bounded, MIX 50 % halfway
+#                   to the wet), the MIX glide and TYPE changes, MIX / TYPE as automation and locks, FUN10 and user
+#                   presets of 109 and 104, the pages' labels, the cost per type; demos in build/insert_demo/.
+# SOUND 1.5 (tests/sound15_test.c; #104 #175): ANALOG's filter TYPE (LP bit for bit, every other engine ignores it, BP / HP
+#                   responses around the cutoff, RES, bounded at the corners), ENV SYNC (OFF bit for bit, the note values
+#                   on the knob, attack / decay / release times at 60 / 120 / 173 BPM and on the external clock), the cost;
+#                   demos in build/sound15_demo/ (analog_bp, analog_hp, env_sync).
 # PERFORM (tests/perform_test.c): the FX hold layer (src/perform.c): 1/16 starts, stereo buffer effects, the
 #                   too-long REPEAT, the SLICER interplay, silent layer keys, idle bit-identical, cost; build/perform_demo/;
 #                   OCT UP / DN (the harmonizer): pitch, stereo, clicks, the shimmer bounded, cost; FLANGER / PHASER (1.2): no DC,
@@ -78,9 +92,10 @@
 # SLICE (tests/slice_test.c): slice tables, AUTO onsets of a user-slot loop, reverse, keys, modes, the MAN slices
 #                   (SLICES page) and their store in the slot (src/slice_store.c); the presets and the loop;
 #                   demos in build/slice_demo/.
-# SAMPLE (tests/sample_test.c, 1.2): PIANO's lo-fi material (2 zones at 11,025 Hz, split at 60): pitch over the keyboard
-#                   (YIN), 1.6 s at a root, the aliases, GRAIN SRC 0; SLICE's PIANO keeps 1.0.4's middle C; the PIANO of
-#                   1.0 .. 1.1.5 as a user slot (gen_samples.py --user-slot: build/piano_hd/PIANO_HD): valid, in tune.
+# SAMPLE (tests/sample_test.c, 1.5): PIANO is the 5-zone piano of 1.0 .. 1.1.5 again: zones, splits, pitch over the
+#                   keyboard (YIN), 0.75 s at a root, the aliases, GRAIN SRC 0; SLICE's PIANO its middle C zone (shared);
+#                   1.2's PIANO HD user-slot file (gen_samples.py --user-slot: build/piano_hd/PIANO_HD), as old users may
+#                   have installed it: valid in USR1 and bit for bit as SET 0.
 # INPUT (tests/input_test.c): the key / button debounce of hal/fm1_input.h against the TIMER5 scan and bouncing
 #                   contacts: a press within 2 scans (<= 2.3 ms), one note per bouncy press, no early or hanging
 #                   release, stray samples ignored, fast repeats, the encoders' detents; the LED scan: lit LEDs every
@@ -203,6 +218,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "motion, whole-step chance, FUN7 migration, song restore, ARP repeat and the 1.2 ARP modes" "$OUT/motion_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/ratchet_test" tests/ratchet_test.c -lm
     run "RATCH: x1..x4 in a step (notes, chords, drum hits), gates, chance, swing, projects, user presets, AUTOMATION RATCH rows" "$OUT/ratchet_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/step15_test" tests/step15_test.c -lm
+    run "1.5 STEP: a note's LEN (TIEs on KNOB 3), a step's VEL (playback, AUTOMATION's VEL rows)" "$OUT/step15_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/fun10_test" tests/fun10_test.c -lm
     run "1.2 (FUN10): LFO 2 SYNC / TRIG / POL, NUDGE (record, QUANTIZE, play, controls), 128 motion records, FUN10 / FUN9 / FUN8 / FUN7, user presets" "$OUT/fun10_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/midi_control_test" tests/midi_control_test.c -lm
@@ -264,6 +281,14 @@ if [ -f build/gen/felucca_tables.h ]; then
     mkdir -p build/sound14_demo
     run "sound items: matrix S&H / SLEW / DEPTH, ANALOG SYNC / SUB, SPREAD (bit for bit at 0, L / R, mono sum), cost, demos" \
         "$OUT/sound14_test" build/sound14_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/insert_test" tests/insert_test.c -lm
+    mkdir -p build/insert_demo
+    run "INSERT (1.5): OFF / MIX 0 bit for bit, each TYPE (no DC, bounded, dry / wet), MIX glide, automation, stored, cost, demos" \
+        "$OUT/insert_test" build/insert_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/sound15_test" tests/sound15_test.c -lm
+    mkdir -p build/sound15_demo
+    run "1.5 sound items: ANALOG filter TYPE LP / BP / HP (responses, LP and other engines bit for bit), ENV SYNC (times at several tempi), cost, demos" \
+        "$OUT/sound15_test" build/sound15_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/slicer_test" tests/slicer_test.c -lm
     mkdir -p build/slicer_demo
     run "SLICER: no clicks, timing, sync with the sequencer, STUT, cost, demos" "$OUT/slicer_test" build/slicer_demo
@@ -277,6 +302,9 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "REVERB TYPE: ROOM / SPRING bit-identical, SPRING and HALL decay / stability / level, HALL silence / stereo / ringing, model changes, cost, demos" "$OUT/reverb_test" build/fx_demo build/reverb_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
     run "regression: golden renders, health, voices, CPU budget" "$OUT/regress" tests/golden.txt tests/cpu_baseline.txt
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/union_test" tests/union_test.c -lm
+    run "engine memory (1.5): every switch between the engines with per-part state sounds as in 1.4 (720 sequences)" \
+        "$OUT/union_test" tests/union_golden.txt
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/descdump" tests/descdump.c -lm
     echo "== parameter and engine tables as JSON (for the editor mock test)"
     "$OUT/descdump" > "$OUT/desc.json" || fail=1
@@ -315,12 +343,12 @@ if [ -f build/gen/felucca_tables.h ]; then
         echo "== SLICE: build/ was made with FELUCCA_SLICE=0 (no BREAK); run ./build.sh without it first"
         fail=1
     fi
-    # SAMPLE's PIANO (1.2): the lo-fi material, SLICE's own middle C, the 1.0 .. 1.1.5 PIANO as a user slot (PIANO HD)
-    if grep -q '^    {"PIANO", 0, 2},' build/gen/felucca_samples.h; then
+    # SAMPLE's PIANO (1.5: as 1.1.5), SLICE's PIANO (its middle C zone), 1.2's PIANO HD in a user slot
+    if grep -q '^    {"PIANO", 0, 5},' build/gen/felucca_samples.h; then
         mkdir -p build/sample_demo build/piano_hd
         python3 tools/gen_samples.py --user-slot PIANO "PIANO HD" build/piano_hd/PIANO_HD >/dev/null
         $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/sample_test" tests/sample_test.c -lm
-        run "SAMPLE: PIANO (2 zones at 11,025 Hz: split, pitch, length, GRAIN), SLICE's PIANO, the PIANO HD slot" "$OUT/sample_test" \
+        run "SAMPLE: PIANO (5 zones as 1.1.5: splits, pitch, length, GRAIN), SLICE's PIANO, a PIANO HD slot" "$OUT/sample_test" \
             build/piano_hd/PIANO_HD build/sample_demo
     else
         echo "== skip SAMPLE's PIANO (no CC0 library: assets/samples-cc0, tools/fetch_cc0.py)"

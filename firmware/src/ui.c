@@ -65,19 +65,22 @@ static uint32_t up_gen;                      /* bumped on every user bank change
 /* 1.2: three more two-valued MENU settings, bits of another byte no engine uses, saved with the settings; 0 in older
  * settings = today's behaviour (append-only, as ui_prefs): bit 0 DISPLAY > SCOPE MIX (Discussion #165, fx.c scope_mix),
  * bit 1 CONTROL > STEP PREVIEW ON (Discussion #169, ui_input.c step_preview), bit 2 CONTROL > CHORD ENTRY ADD (#155,
- * ui_input.c seq_entry). Bits 3-7 free */
+ * ui_input.c seq_entry). 1.5: bit 3 SYSTEM > HELP ON (Discussion #156, ui_help.c). Bits 4-7 free */
 #define ui_prefs2 (favorites.factory[15][24])
 #define PREF_X 0xFF0000u                       /* (menu_items.c MENU_FLAGS: a bit of ui_prefs2, << 16) */
 #define PREF_SCOPE_MIX (0x01u << 16)
 #define PREF_PREVIEW (0x02u << 16)
 #define PREF_CHORD_ADD (0x04u << 16)
+#define PREF_HELP (0x08u << 16)
 /* 1.3 (Discussions #112, #134): MENU > DISPLAY > HOME, what the HOME page shows under its four cards: 0 SCOPE (the
- * oscilloscope, as before), 1 TRACKS (the four tracks as rows: ui_graph.c draw_home_tracks). A byte of its own no engine
- * uses, saved with the settings; 0 in older settings = SCOPE; an unknown value (a later firmware's view) reads as SCOPE
- * and is kept as saved */
+ * oscilloscope, as before), 1 TRACKS (the four tracks as rows: ui_graph.c draw_home_tracks), 2 LEVELS (1.5, #134: the
+ * rows of TRACKS, and KNOB 1..4 the LEVEL of T1..T4 in place of the engine's four: home_param). A byte of its own no
+ * engine uses, saved with the settings; 0 in older settings = SCOPE; an unknown value (a later firmware's view) reads as
+ * SCOPE and is kept as saved (1.3 / 1.4 read LEVELS so) */
 #define ui_home_view (favorites.factory[15][26])
-enum { HV_SCOPE, HV_TRACKS, HV_COUNT };
-static int home_tracks(void) { return ui_home_view == HV_TRACKS; }
+enum { HV_SCOPE, HV_TRACKS, HV_LEVELS, HV_COUNT };
+static int home_tracks(void) { return ui_home_view == HV_TRACKS || ui_home_view == HV_LEVELS; }
+static int home_levels(void) { return ui_home_view == HV_LEVELS; }
 enum { RP_CLICK, RP_LEVEL, RP_COUNTIN };
 static uint32_t rp_get(uint32_t f)                     /* a field as the MENU steps it: 0..2 */
 {
@@ -148,6 +151,7 @@ static struct {
     uint32_t menu_sig, home_t0;  /* HOME press time (btn_hold) */
     uint8_t force;               /* full redraw pending */
     uint8_t msg_t;               /* transient message frames */
+    uint8_t help_t;              /* 1.5, MENU > HELP ON: frames the page's hint stays in the footer (ui_help.c) */
     uint8_t bpm_t;               /* frames the BPM stays highlighted after a SELECT turn */
     uint8_t act;                 /* action pages: the column whose action OCT+ does, + 1; 0 = none (act_col) */
     uint32_t rec_t0;             /* REC press time: a tap arms (btn_hold, no hold: held, REC opens its layer) */
@@ -160,8 +164,10 @@ static struct {
     uint8_t song_trk;            /* SONG: the lane (track) selected, 0..NTRK-1 */
     uint16_t ev_row;             /* SEQ > AUTOMATION (ui_events.c ev_*): the row selected (0 PLAY / CLEAR, 1 QUANTIZE, the
                                   * last + ADD; 1.2: up to EV_ROWS, past 255) */
-    uint8_t ev_step, ev_id;      /* .. + ADD: the step and the parameter (or EV_CHANCE, EV_RATCH, EV_NUDGE) it adds on */
+    uint8_t ev_step, ev_id;      /* .. + ADD: the step and the parameter (or EV_CHANCE, EV_RATCH, EV_NUDGE, EV_VEL) it
+                                  * adds on */
     uint16_t ev_keep;            /* .. the CHANCE / RATCH / NUDGE row being edited (its EVC code, 0 none): listed at its default */
+    uint8_t ev_vel;              /* .. 1.5: the VEL rows shown (+ ADD VEL's SHOW / HIDE; off when the page is entered) */
     uint8_t uboot;               /* main.c: seconds left before UPDATE MODE (OCT- + OCT+ held), 0 = none */
     uint32_t ly_t0;              /* the layer button's press time | 1, LY_* bits (ui_layer.c layer_gesture) */
     uint8_t ly;                  /* the layer whose button is down (LAYER_*), 0 = none */
@@ -183,6 +189,12 @@ static struct {
         uint8_t sig;             /* a card: what its value is of (label, unit, track, engine, palette) */
     } roll[5];
     int16_t roll_bpm;            /* the BPM last drawn */
+    struct {                     /* MIDI LEARN (midi_learn.c; here, not loose globals: the audio ISR's data keeps its
+                                  * layout and its cost, tests/target_budget.py) */
+        uint8_t on;              /* MIDI LEARN is on */
+        uint8_t pick, trk, id;   /* a parameter picked (1): its track and P_* id */
+        volatile uint8_t io[2];  /* midi_control.c ml_arm, ml_heard */
+    } ml;
 } ui;
 
 enum { CF_NONE, CF_CLEAR_SEQ, CF_CLEAR_TRK, CF_OVR_PROJ, CF_OVR_USER, CF_LOAD_PAT,
@@ -370,12 +382,14 @@ static uint32_t layer_leds(uint32_t *br);
 static uint32_t layer_btn(void);
 
 /* FM operator pages belong to DIGITAL; they never appear on other instruments (without FELUCCA_FM4: never). SLICES:
- * a SLICE track's (ui_slice.c); LANES / LANES 2 a DRUM track's (its lane levels); OPERATOR, OP ENV, OPERATOR 2 an FM6
+ * a SLICE track's (ui_slice.c); LANES / LANES 2 a DRUM track's (its lane levels); FILTER an ANALOG track's; OPERATOR, OP ENV, OPERATOR 2 an FM6
  * track's (its patch's operators, ui_fm6op.c) */
 static int page_visible(uint32_t i)
 {
     if (PAGES[i].scope == SC_TRACK && PAGES[i].id[0] >= P_LN0 && PAGES[i].id[0] <= P_LN7)
         return TSEL->eng_req % NENGINES == ENGI_DRUM;
+    if (PAGES[i].id[0] == P_FTYPE)                    /* FILTER (1.5, #104): ANALOG's */
+        return ENGINES[TSEL->eng_req % NENGINES] == &ENG_ANALOG;
     if (PAGES[i].graph >= GR_FMOP && PAGES[i].graph <= GR_FMENV)
         return TSEL->eng_req % NENGINES == ENGI_FM6;
 #if FELUCCA_SLICE
@@ -462,6 +476,11 @@ static uint32_t lock_id(uint32_t k)
 }
 
 static void ev_enter(void);
+/* 1.5 (Discussion #156): MENU > HELP ON: a page entered (here, go_home) shows its hint in the footer for ~2 s
+ * (ui_help.c, ui_draw.c draw_foot) */
+#define HELP_FRAMES 120u                       /* (~2 s at the UI's ~60 frames a second) */
+static int help_on(void) { return (ui_prefs2 & (PREF_HELP >> 16)) != 0u; }
+static void help_start(void) { ui.help_t = (uint8_t)(help_on() ? HELP_FRAMES : 0u); }
 static void page_entered(void)
 {
     const page_t *pg = cur_page();
@@ -473,6 +492,7 @@ static void page_entered(void)
     ui.entry_open = 0;
     ui.hot_t = 0;                                /* clear the previous page's emphasis */
     ui.act = pg->graph == GR_USER ? 4u : 0u;     /* the save screen is ready for OCT+ */
+    help_start();
     ui.force = 1;
 }
 
@@ -486,6 +506,30 @@ static void step_clear(step_t *st)
     st->vel = 0;
     st->hit = st->acc = 0;
     st->probability = 0;
+}
+
+/* LEN (1.5, Discussions #178, #173): a NOTE step's length on the piano roll is the step and the TIE steps after it
+ * (inside LEN, no wrap); SEQ > STEP's KNOB 3 on a note sets it (ui_input.c step_edit). Longer: the steps after it
+ * become clean TIEs (a REST or an empty step; it stops at the next step holding notes or hits, a REST's kept ones too,
+ * which stays, and at LEN);
+ * shorter: its last TIEs become RESTs (step_clear). The steps' locks stay. Returns the length it got */
+static uint32_t note_len(const track_t *t, uint32_t i)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), n = 1;
+    while (i + n < len && t->step[i + n].time == ST_TIE)
+        n++;
+    return n;
+}
+static uint32_t note_set_len(track_t *t, uint32_t i, uint32_t want)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), n = note_len(t, i);
+    for (; n > want && n > 1u; n--)
+        step_clear(&t->step[i + n - 1u]);
+    for (; n < want && i + n < len && !t->step[i + n].n && !t->step[i + n].hit; n++) {
+        step_clear(&t->step[i + n]);
+        t->step[i + n].time = ST_TIE;
+    }
+    return n;
 }
 
 /* ------------------------------------------------------- the DRUM grid --- */
@@ -591,7 +635,8 @@ static void note_name(char *b, uint32_t n)
 }
 
 /* a page button tapped (1.2, Discussion #153: SEQ STEP <-> AUTOMATION, GLO SONG (its only page: GLOBAL became HOME's
- * CLOCK, SYSTEM went to the MENU), SAVE USER -> PHRASES -> PROJECT -> TOOLS -> PRESETS; HOME: home_tap). From another
+ * CLOCK, SYSTEM went to the MENU), SAVE USER -> PRESETS -> PHRASES -> PROJECT -> TOOLS (1.5, #173: PRESETS second; up
+ * to 1.4.1 the last); HOME: home_tap). From another
  * family the family's page shown last (SAVE: USER); one that is not the family's any more (a page that moved, as GLOBAL
  * and SYSTEM in 1.2), or not shown for this track, gives the family's first */
 static void open_family(uint32_t fam)
@@ -625,6 +670,7 @@ static void go_home(void)
     ui.hot_t = 0;
     song.seq_mode = 0;
     ui.force = 1;
+    help_start();
 }
 
 /* HOME tapped (1.2): HOME -> MIXER (up to 1.1.5 GLO's first page) -> CLOCK (up to 1.1.5 GLO > GLOBAL) -> HOME; from any
@@ -681,7 +727,7 @@ static struct {
     uint32_t from_h;             /* pat_from_h[], pat_from[] of the copy (the header's slot letter) */
     uint8_t from;
     uint32_t t_ms;               /* time of the last load (the editor's SETs after it belong to it) */
-} undo;
+} undo __attribute__((section(".pool")));   /* (main loop only: off the audio code's .bss) */
 static uint8_t undo_depth;       /* loads nest (an engine jump loads its first preset): the outer one counts;
                                   * felucca_init / project_load raise it to take no copy at all */
 static uint32_t pat_sig[NTRK];   /* steps_sig of the pattern the last pattern load put into each track: such
@@ -1423,12 +1469,14 @@ static uint32_t preset_visible(uint32_t cur, uint32_t total, uint32_t row)
     return first + row < total ? first + row : total;
 }
 
-/* HOME: what KNOB k edits: the engine's four main parameters */
+/* HOME: the track KNOB k edits (MENU > HOME LEVELS, 1.5: track k; else the selected one) and what: the engine's four
+ * main parameters, or (LEVELS) the track's LEVEL, as the GLO layer's knobs */
+static track_t *home_trk(uint32_t k) { return home_levels() ? &trk[k & 3u] : TSEL; }
 static const param_desc_t *home_param(uint32_t k, int16_t **vp)
 {
-    uint32_t id = ENGINES[TSEL->eng_req % NENGINES]->knob[k & 3u];
-    *vp = &TSEL->p[id];
-    return track_desc(TSEL, id);
+    uint32_t id = home_levels() ? (uint32_t)P_LEVEL : ENGINES[TSEL->eng_req % NENGINES]->knob[k & 3u];
+    *vp = &home_trk(k)->p[id];
+    return track_desc(home_trk(k), id);
 }
 
 /* select track i (KNOB 1 on TRACKS, the editor): its sound, pages and pattern from now on */
@@ -1448,6 +1496,7 @@ static void track_select(uint32_t i)
 
 #include "ui_slice.c"                             /* EDIT > SLICES: SLICE's slices by hand (an action page too) */
 #include "ui_events.c"                            /* SEQ > AUTOMATION: locks, events, CHANCE, RATCH as a list (an action page) */
+#include "midi_learn.c"                           /* MIDI LEARN (1.5): GLO + D4, a knob, a CC */
 
 /* ---------------------------------------------------- action pages --- */
 /* Pages whose purpose is an action (SAVE > USER, PHRASES, PROJECT, TOOLS, EDIT > SLICES, SEQ > AUTOMATION): the knobs pick,

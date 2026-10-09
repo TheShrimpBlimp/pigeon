@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#define __attribute__(x)   /* (the sources' .pool sections: no Mach-O section names) */
 
 static uint8_t nor[0x100000];
 static int fail_after = -1;            /* torn-write injection: stop after N programs */

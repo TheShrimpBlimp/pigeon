@@ -176,6 +176,16 @@ def build_loader():
 
 # ---- app
 
+def ld_regions():
+    """firmware/app.ld's MEMORY regions: name -> (origin, length)"""
+    regs = {}
+    for m in re.finditer(r"^\s*(\w+)\s*\([rwx]+\)\s*:\s*ORIGIN\s*=\s*(\w+),\s*LENGTH\s*=\s*(\w+)",
+                         (FW / "app.ld").read_text(), re.M):
+        n = m.group(3)
+        regs[m.group(1)] = (int(m.group(2), 0), int(n[:-1], 0) * 1024 if n.endswith("K") else int(n, 0))
+    return regs
+
+
 def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
@@ -263,13 +273,18 @@ def check(img, syms, dis, rt):
     def sym(name):
         mm = re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M)
         return int(mm.group(1), 16) if mm else 0
-    bss = sym("_bss_end") - 0x01C08000
+    region = ld_regions()
+    ram_org, ram_len = region["RAM"]
+    pool_len = region["POOL"][1]
+    bss = sym("_bss_end") - ram_org
     pool = sym("_pool_end") - sym("_pool_start")
-    notes.append(f"image {len(img)} B; RAM .data+.bss {bss} B of 98304; pool {pool} B of {0x54000}")
-    if bss > 96 * 1024:
-        errors.append("RAM region overflow")
-    if 0x54000 - pool < 8192:                     # keep >= 8 KiB of the pool spare
-        errors.append(f"pool headroom {0x54000 - pool} B < 8192 B")
+    notes.append(f"image {len(img)} B; RAM .data+.bss {bss} B of {ram_len}; pool {pool} B of {pool_len}")
+    if region["RAM"][0] + ram_len != region["POOL"][0]:
+        errors.append("app.ld: POOL does not start where RAM ends")
+    if ram_len - bss < 4096:                      # keep >= 4 KiB of .bss spare (state the audio side touches)
+        errors.append(f"RAM headroom {ram_len - bss} B < 4096 B")
+    if pool_len - pool < 8192:                    # keep >= 8 KiB of the pool spare
+        errors.append(f"pool headroom {pool_len - pool} B < 8192 B")
     return errors, notes
 
 

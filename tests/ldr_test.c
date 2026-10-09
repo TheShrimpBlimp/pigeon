@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define __attribute__(x)   /* (the sources' .pool sections: no Mach-O section names) */
 
 #define FELUCCA_ID "ota-FM-1_900"
 #define FELUCCA_OTA_DRYRUN 0

@@ -172,22 +172,23 @@ static int preferences(void)
     uint32_t n = request(ED_INFO, a, 0);
     bad += check("INFO explicitly tags display capabilities after SONG without changing command 33",
         ED_SONG == 33 && ED_UI_STATE == 34 && ED_FAV_SET == 38 &&
-        host_wire[n - 44] == CHAIN_ROWS && host_wire[n - 43] == 0x55 &&
-        host_wire[n - 42] == 1 && host_wire[n - 41] == 9 &&
-        host_wire[n - 40] == 0x4d && host_wire[n - 39] == 1 &&
-        host_wire[n - 38] == 64u && host_wire[n - 37] == 1 &&   /* (64 kept: 41 01 says 128) */
-        host_wire[n - 36] == 0x42 && host_wire[n - 35] == 1 && host_wire[n - 34] == 3 &&
-        host_wire[n - 33] == 0x46 && host_wire[n - 32] == 1 && host_wire[n - 31] == FM6_NFACTORY &&
-        host_wire[n - 30] == 0 &&                        /* (no bank since 1.0.3) */
-        host_wire[n - 29] == 0x53 && host_wire[n - 28] == 1 && host_wire[n - 27] == 3 &&
-        host_wire[n - 26] == 0x50 && host_wire[n - 25] == 1 && host_wire[n - 24] == 3 &&   /* FM6 v2: no bank, preset patches */
-        host_wire[n - 23] == 0x4E && host_wire[n - 22] == 1 && host_wire[n - 21] == 24 &&   /* MENU settings: 24 items (1.3) */
-        host_wire[n - 20] == 0x52 && host_wire[n - 19] == 1 && host_wire[n - 18] == 4 &&   /* RATCH */
-        host_wire[n - 17] == 0x4C && host_wire[n - 16] == 1 && host_wire[n - 15] == 1 &&   /* 1.1 parameter locks */
-        host_wire[n - 14] == 0x41 && host_wire[n - 13] == 1 && host_wire[n - 12] == 0 && host_wire[n - 11] == 1 &&   /* 1.2: 128 */
-        host_wire[n - 10] == 0x54 && host_wire[n - 9] == 1 && host_wire[n - 8] == NUDGE_DIV &&   /* 1.2: NUDGE */
-        host_wire[n - 7] == 0x57 && host_wire[n - 6] == 1 && host_wire[n - 5] == NTRK &&   /* 1.2: SONG lanes */
-        host_wire[n - 4] == 0x56 && host_wire[n - 3] == 1 && host_wire[n - 2] == 32);   /* 1.4.1: FM6 voice bank */
+        host_wire[n - 47] == CHAIN_ROWS && host_wire[n - 46] == 0x55 &&
+        host_wire[n - 45] == 1 && host_wire[n - 44] == 9 &&
+        host_wire[n - 43] == 0x4d && host_wire[n - 42] == 1 &&
+        host_wire[n - 41] == 64u && host_wire[n - 40] == 1 &&   /* (64 kept: 41 01 says 128) */
+        host_wire[n - 39] == 0x42 && host_wire[n - 38] == 1 && host_wire[n - 37] == 3 &&
+        host_wire[n - 36] == 0x46 && host_wire[n - 35] == 1 && host_wire[n - 34] == FM6_NFACTORY &&
+        host_wire[n - 33] == 0 &&                        /* (no bank since 1.0.3) */
+        host_wire[n - 32] == 0x53 && host_wire[n - 31] == 1 && host_wire[n - 30] == 3 &&
+        host_wire[n - 29] == 0x50 && host_wire[n - 28] == 1 && host_wire[n - 27] == 3 &&   /* FM6 v2: no bank, preset patches */
+        host_wire[n - 26] == 0x4E && host_wire[n - 25] == 1 && host_wire[n - 24] == 25 &&   /* MENU settings: 25 items (1.5) */
+        host_wire[n - 23] == 0x52 && host_wire[n - 22] == 1 && host_wire[n - 21] == 4 &&   /* RATCH */
+        host_wire[n - 20] == 0x4C && host_wire[n - 19] == 1 && host_wire[n - 18] == 1 &&   /* 1.1 parameter locks */
+        host_wire[n - 17] == 0x41 && host_wire[n - 16] == 1 && host_wire[n - 15] == 0 && host_wire[n - 14] == 1 &&   /* 1.2: 128 */
+        host_wire[n - 13] == 0x54 && host_wire[n - 12] == 1 && host_wire[n - 11] == NUDGE_DIV &&   /* 1.2: NUDGE */
+        host_wire[n - 10] == 0x57 && host_wire[n - 9] == 1 && host_wire[n - 8] == NTRK &&   /* 1.2: SONG lanes */
+        host_wire[n - 7] == 0x56 && host_wire[n - 6] == 1 && host_wire[n - 5] == 32 &&   /* 1.4.1: FM6 voice bank */
+        host_wire[n - 4] == 0x43 && host_wire[n - 3] == 1 && host_wire[n - 2] == ML_N);   /* 1.5: MIDI LEARN */
     request(ED_UI_SET, a, 2);
     bad += check("UI_SET updates the actual palette and reports RAM-only saving",
         host_wire[5] == 3 && settings.palette == 7 && T_BG == UI_PALETTES[7].bg);
@@ -866,7 +867,7 @@ static uint32_t menu_set(uint32_t id, int32_t v)            /* -> rc; host_wire[
 }
 static int menu_protocol(void)
 {
-    static const char *const WANT[24][2] = {
+    static const char *const WANT[25][2] = {
         {"COLOR", 0}, {"STYLE", "FLAT,LINE"}, {"LARGE", "OFF,ON"}, {"ANIM", "ON,OFF,IDLE"}, {"LEDS", "OFF,DIM LO,DIM HI,INV"},
         {"HOLD", "0.3 s,0.4 s,0.5 s,0.6 s"}, {"KNOB ACCEL", "OFF,ON"}, {"FX LATCH", "OFF,ON"}, {"BPM LOCK", "OFF,ON"},
         {"SPEAKER EQ", "FLAT,LOWCUT,BASS+"}, {"USB LEVEL", "MASTER,FIXED"}, {"USB SERIAL", "ON,OFF"},
@@ -875,9 +876,10 @@ static int menu_protocol(void)
         {"SCREEN OFF", "NEVER,5 MIN,15 MIN,30 MIN,60 MIN"},
         {"SCOPE", "OUT,MIX"}, {"STEP PREVIEW", "OFF,ON"}, {"CHORD ENTRY", "HOLD,ADD"},                  /* (1.2) */
         {"MIDI IN", "CH1-4,SEL,CH5-8,CH9-12,CH13-16"}, {"TUNE", 0},   /* (1.2: the project's ROUT and TUNE; TUNE a number) */
-        {"HOME", "SCOPE,TRACKS"}};                                                                    /* (1.3) */
-    static const int32_t DEF[24] = {-1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};   /* (COLOR: the default palette) */
-    static const uint8_t TAB[24] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 4, 2, 2, 2, 4, 1, 0, 0, 1, 1, 3, 2, 0};   /* DISPLAY CONTROL AUDIO
+        {"HOME", "SCOPE,TRACKS,LEVELS"},                                                       /* (1.3; 1.5: LEVELS) */
+        {"HELP", "OFF,ON"}};                                                                         /* (1.5) */
+    static const int32_t DEF[25] = {-1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};   /* (COLOR: the default palette) */
+    static const uint8_t TAB[25] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 4, 2, 2, 2, 4, 1, 0, 0, 1, 1, 3, 2, 0, 4};   /* DISPLAY CONTROL AUDIO
                                                                                                          * MIDI SYSTEM (1.2) */
     static const char *const TABN[5] = {"DISPLAY", "CONTROL", "AUDIO", "MIDI", "SYSTEM"};
     int bad = 0, ok = 1;
@@ -888,7 +890,7 @@ static int menu_protocol(void)
     FILE *jf = json ? fopen(json, "w") : 0;
     reset();
     if (jf) fprintf(jf, "[");
-    for (i = 0; i < 24u; i++) {
+    for (i = 0; i < 25u; i++) {
         n = menu_desc(i, &it);
         joined[0] = 0;
         for (k = 0; k < it.nnames; k++) { if (k) strcat(joined, ","); strcat(joined, it.names[k]); }
@@ -910,7 +912,7 @@ static int menu_protocol(void)
         }
     }
     if (jf) { fprintf(jf, "]\n"); fclose(jf); }
-    bad += check("MENU_DESC: 24 items (1.0.4's 12 in the menu's order, then 1.1's CLICK, CLICK LEVEL, COUNT-IN, 1.2's RESTORE LAST, SCALE LEDS, SCREEN OFF, 1.2's SCOPE, STEP PREVIEW, CHORD ENTRY, MIDI IN, TUNE, 1.3's HOME), ids 0..23, names, defaults; TUNE a number -50..50 ct", ok);
+    bad += check("MENU_DESC: 25 items (1.0.4's 12 in the menu's order, then 1.1's CLICK, CLICK LEVEL, COUNT-IN, 1.2's RESTORE LAST, SCALE LEDS, SCREEN OFF, 1.2's SCOPE, STEP PREVIEW, CHORD ENTRY, MIDI IN, TUNE, 1.3's HOME, 1.5's HELP), ids 0..24, names, defaults; TUNE a number -50..50 ct", ok);
     bad += check("MENU_DESC (1.0.5): after the names (TUNE: the unit) each item's tab, index and name (DISPLAY CONTROL AUDIO MIDI SYSTEM)", ok);
     {   /* an older editor reads the names and stops: the tab is past them, nothing it reads moved */
         uint32_t m = menu_desc(4, &it), p = 14, q;
@@ -920,12 +922,12 @@ static int menu_protocol(void)
         bad += check("MENU_DESC: the tab comes after every byte of the 1.0.4 reply (older editors ignore it)", ok);
     }
     ok = 1;
-    for (i = 0; i < 24u; i++) {
+    for (i = 0; i < 25u; i++) {
         menu_desc(i, &it);
         ok &= strcmp(it.name, "CALIBRATION") && strcmp(it.name, "ABOUT") && strcmp(it.name, "INFO");
     }
-    n = menu_desc(24, &it);
-    ok &= n == 2u && it.index == 24 && it.id == 127;
+    n = menu_desc(25, &it);
+    ok &= n == 2u && it.index == 25 && it.id == 127;
     n = menu_desc(127, &it);
     bad += check("MENU_DESC: no CALIBRATION / INFO / ABOUT; an index past the list answers index, 127 (no item)",
                  ok && n == 2u && it.index == 127 && it.id == 127);
@@ -963,8 +965,9 @@ static int menu_protocol(void)
     ok &= menu_set(21, 2) == 0 && song.g[G_ROUTE] == 2 && menu_set(22, -13) == 0 && song.g[G_TUNE] == -13;   /* (1.2: the
                                                          * project's, rc 0: in the music, no settings record) */
     ok &= menu_set(23, 1) == 3 && ui_home_view == HV_TRACKS && ui_prefs2 == 7u && ui_scr == 1u;   /* (1.3: its own byte) */
-    for (i = 0; i < 24u; i++) {                         /* MENU_DESC reads them back */
-        static const int32_t SET[24] = {2, 1, 1, 1, 1, 3, 1, 1, 1, 2, 1, 0, 2, 0, 2, 1, 1, 2, 1, 1, 1, 2, -13, 1};
+    ok &= menu_set(24, 1) == 3 && ui_prefs2 == 15u && help_on();                                  /* (1.5: HELP, bit 3) */
+    for (i = 0; i < 25u; i++) {                         /* MENU_DESC reads them back */
+        static const int32_t SET[25] = {2, 1, 1, 1, 1, 3, 1, 1, 1, 2, 1, 0, 2, 0, 2, 1, 1, 2, 1, 1, 1, 2, -13, 1, 1};
         menu_desc(i, &it);
         ok &= it.value == SET[i];
     }
@@ -991,7 +994,7 @@ static int menu_protocol(void)
         static uint8_t fav0[sizeof favorites], set0[sizeof settings];
         uint8_t hold0 = settings_hold, leds0 = settings_leds;
         memcpy(fav0, &favorites, sizeof favorites); memcpy(set0, &settings, sizeof settings);
-        ok = menu_set(24, 1) == 1 && host_wire[6] == 24 && ed_rv(host_wire + 7) == 1;
+        ok = menu_set(25, 1) == 1 && host_wire[6] == 25 && ed_rv(host_wire + 7) == 1;
         ok &= menu_set(126, -3) == 1 && host_wire[6] == 126 && ed_rv(host_wire + 7) == -3;
         ok &= menu_set(127, 0) == 1 && host_wire[6] == 127;
         ok &= !memcmp(fav0, &favorites, sizeof favorites) && !memcmp(set0, &settings, sizeof settings) &&
@@ -1098,11 +1101,70 @@ static int drum_kit_retired(void)
     return bad;
 }
 
+/* 1.5 MIDI LEARN (78 LEARN_GET, 79 LEARN_SET; editor_learn.c): the map as the device keeps it (midi_learn.c) */
+static int learn_entry(uint32_t i, uint32_t used, uint32_t cc, uint32_t k, uint32_t id)   /* (a LEARN_GET reply) */
+{
+    const uint8_t *e = &host_wire[6u + 4u * i];      /* (ML_N, then the entries) */
+    return e[0] == used && e[1] == cc && e[2] == k && e[3] == id;
+}
+static int learn_protocol(void)
+{
+    int bad = 0, ok;
+    uint32_t n, i;
+    reset();
+    memset(favorites.factory[14], 0, 32);
+    n = request(ED_LEARN_GET, 0, 0);
+    ok = n == 6u + 1u + 4u * ML_N && host_wire[4] == ED_LEARN_GET && host_wire[5] == ML_N;
+    for (i = 0; i < ML_N; i++)
+        ok &= !memcmp(&host_wire[6u + 4u * i], "\0\0\0\0", 4);
+    bad += check("LEARN_GET: 16 entries, all empty at first", ok);
+    {
+        const uint8_t a[] = {0, 74, 3, P_E0 + 2}, b[] = {0, 20, 0, P_LEVEL}, c[] = {0, 20, 1, P_PAN};
+        n = request(ED_LEARN_SET, a, 4);
+        ok = n == 6u + 2u + 4u * ML_N && host_wire[4] == ED_LEARN_SET && (host_wire[5] == 0u || host_wire[5] == 3u) &&
+             host_wire[6] == ML_N && !memcmp(&host_wire[7], (const uint8_t[]){1, 74, 3, P_E0 + 2}, 4);   /* (rc, then GET's) */
+        request(ED_LEARN_SET, b, 4);
+        request(ED_LEARN_SET, c, 4);                     /* (CC20 again: T2 PAN in place of T1 LEVEL) */
+        n = request(ED_LEARN_GET, 0, 0);
+        ok &= learn_entry(0, 1, 74, 3, P_E0 + 2) && learn_entry(1, 1, 20, 1, P_PAN) && learn_entry(2, 0, 0, 0, 0);
+        bad += check("LEARN_SET op 0: learns (DRUM's TONE on CC74); CC20 again replaces its parameter", ok);
+    }
+    {
+        const uint8_t bad1[] = {0, 64, 0, 1}, bad2[] = {0, 21, 4, 1}, bad3[] = {0, 21, 0, P_COUNT}, bad4[] = {0, 120, 0, 1};
+        ok = request(ED_LEARN_SET, bad1, 4) && host_wire[5] == 1u;
+        ok &= request(ED_LEARN_SET, bad2, 4) && host_wire[5] == 1u;
+        ok &= request(ED_LEARN_SET, bad3, 4) && host_wire[5] == 1u;
+        ok &= request(ED_LEARN_SET, bad4, 4) && host_wire[5] == 1u;
+        n = request(ED_LEARN_GET, 0, 0);
+        ok &= learn_entry(0, 1, 74, 3, P_E0 + 2) && learn_entry(1, 1, 20, 1, P_PAN);
+        for (i = 0; i < ML_N - 2u; i++) {
+            const uint8_t f[] = {0, (uint8_t)(40u + i), 2, (uint8_t)i};
+            request(ED_LEARN_SET, f, 4);
+        }
+        { const uint8_t f[] = {0, 90, 2, 40}; ok &= request(ED_LEARN_SET, f, 4) && host_wire[5] == 5u; }
+        bad += check("LEARN_SET refuses CC64 / CC120, track 4, a parameter past P_COUNT (rc 1); a 17th: rc 5 (full)", ok);
+    }
+    {
+        const uint8_t one[] = {1, 74}, all[] = {2}, odd[] = {3};
+        request(ED_LEARN_SET, one, 2);
+        n = request(ED_LEARN_GET, 0, 0);
+        ok = learn_entry(0, 0, 0, 0, 0) && learn_entry(1, 1, 20, 1, P_PAN) && ml_count() == ML_N - 1u;
+        ok &= request(ED_LEARN_SET, odd, 1) && host_wire[5] == 1u;
+        request(ED_LEARN_SET, all, 1);
+        ok &= host_wire[5] != 1u && host_wire[5] != 5u && !ml_count() && !favorites.factory[14][0] && !memcmp(favorites.factory[14], favorites.factory[14] + 1, 31);
+        ok &= request(ED_LEARN_GET, odd, 1) == 0u;          /* (GET takes no arguments) */
+        bad += check("LEARN_SET op 1 clears one CC, op 2 all; unknown ops rc 1; GET with arguments: no reply", ok);
+    }
+    (void)n;
+    return bad;
+}
+
 #ifndef EDITOR_TEST_NO_MAIN                              /* (robust_test.c, fuzz_*.c: this file is their base) */
 int main(void)
 {
     int bad = preferences() + motion_locks() + framing() + uart_recovery() + steps() + samples() + song_protocol() + malformed_saves() +
-              fm6_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired();
+              fm6_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired() +
+              learn_protocol();
     printf("%s\n", bad ? "EDITOR TEST FAILED" : "editor test passed");
     return bad != 0;
 }

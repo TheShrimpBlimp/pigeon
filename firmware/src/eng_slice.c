@@ -61,7 +61,8 @@ typedef struct {
 static const slc_src_t SLC_BREAK = SLC_BREAK_INIT;
 static const slc_src_t SLC_PIANO = SLC_PIANO_INIT;
 static slc_src_t slc_usr[SMP_USER_SLOTS];
-static int16_t slc_rbuf[NPART][NVOICE][SLC_RB];       /* reverse windows, one per part voice */
+typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
+ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
 static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"};
 #define SLC_SRC_PIANO 4u
@@ -432,7 +433,7 @@ static int slc_man_restore(uint32_t k, uint32_t n, uint32_t end, const uint32_t 
 static int16_t *slc_rb(track_t *t, voice_t *v)
 {
     uint32_t p = (uint32_t)(t - trk), i = (uint32_t)(v - t->v);
-    return p < NPART && i < NVOICE ? slc_rbuf[p][i] : 0;
+    return p < NPART && i < NVOICE ? (*(slc_rbuf_t *)ENG_MEM(p))[i] : 0;
 }
 
 static void slice_note_on(track_t *t, voice_t *v)
@@ -642,4 +643,5 @@ static const engine_t ENG_SLICE = {
     .sampled = 1,
     .keys = slice_keys,
     .amp = slice_amp,
+    .mem = sizeof(slc_rbuf_t),
 };

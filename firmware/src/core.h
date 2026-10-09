@@ -68,6 +68,9 @@ enum {                          /* per-track parameters */
     P_LSYNC, P_LTRIG, P_LPOL,                  /* 1.2 (#154): LFO SYNC (OFF, a note value), TRIG (NOTE, FREE), POL (BI, UNI) */
     P_SQNT,                                    /* 1.2 (#162): QUANTIZE, the steps' recorded / nudged timing (ON: none) */
     P_SPRD,                                    /* (#148): SPREAD, the voices of a POLY / UNISON track around PAN (fx.c) */
+    P_ITYPE, P_IA, P_IB, P_IC, P_IMIX,         /* 1.5 (#78, #177): the INSERT, its TYPE, three values and MIX (fx.c) */
+    P_FTYPE,                                   /* 1.5 (#104): ANALOG's filter TYPE, LP (as before) / BP / HP (eng_analog.c) */
+    P_ESYNC,                                   /* 1.5 (#175): ENV SYNC: ATK DEC REL as note values of the tempo (voice.c) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -214,6 +217,10 @@ typedef struct {                 /* an engine (engines.c ENGINES[]; the eng_*.c 
      * done() says so (once per control tick, before the render), not at the end of the ADSR's release */
     uint8_t ownenv;
     int (*done)(struct track *t, voice_t *v);
+    /* bytes of the part's engine memory (engines.c eng_mem, at most ENG_MEM_PART) the engine keeps its state
+     * in, 0 = none: a part plays one engine at a time, so they share one region; on a switch to the engine
+     * (after the old one's fade) the region is zeroed when another engine had it (eng_mem_claim) */
+    uint16_t mem;
 } engine_t;
 
 /* ------------------------------------------------- tracks, the song --- */
@@ -347,7 +354,9 @@ typedef struct track {
     /* mix runtime */
     int32_t peak;
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST insert state (fx.c) */
-    uint8_t tail;                /* blocks to mix after the last voice (the DIST tail) */
+    uint8_t tail;                /* blocks to mix after the last voice (the DIST / INSERT tail) */
+    uint8_t ins_run;             /* the INSERT still sounds (fx.c track_insert: its wet share above 0) */
+    uint8_t rsv_sz[15];          /* (sizeof(track_t) a multiple of 16: below) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
     uint8_t xf_on, xf;           /* fading; blocks of the fade still to render */
@@ -361,6 +370,10 @@ typedef struct track {
     int16_t m_rnd;               /* .. its RAND */
     int32_t m_env;               /* the amp envelope of voice m_vi, last block (Q15) */
 } track_t;
+/* the audio ISR indexes trk[] with a multiply by a small immediate and a shift while the size is a multiple of 16; 1.5's
+ * new track parameters (the INSERT, the filter TYPE, ENV SYNC) and state would make it no multiple (the constant
+ * loaded first: +3 % on the ISR's static cost, target_budget.py): one pad, rsv_sz, keeps it */
+_Static_assert(sizeof(track_t) % 16u == 0, "track_t: a multiple of 16 bytes (a cheap trk[] index on the target)");
 
 typedef struct {
     int16_t g[G_COUNT];

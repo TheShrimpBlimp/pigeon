@@ -497,34 +497,42 @@ static int formats(void)
     ok &= !(st.raw[68u + P_COUNT + 2u] & 0x80u) && (st.raw[68u + P_COUNT + 2u + 3u] & 0x80u) &&   /* -8: bit 3 only */
           (st.raw[68u + P_COUNT + 2u + 9u] & 0x80u) && !(st.raw[68u + P_COUNT + 2u + 12u] & 0x80u);   /* +7: bits 0..2 */
     bad += check("FUN10 round trip: 3840 bytes, nudges (bit 7 of the note bytes), 128 records, LFO 2, QUANTIZE", ok);
-    {   /* a FUN10 of a 1.2 build before SPREAD (#148): 103 parameters (no P_SPRD), its engine values and their motion
-         * (the lock on E3) one id lower. It loads by count: SPREAD 0, the rest as written */
-        static project_store_t s103;
-        uint32_t pi = 68u, po = 68u, tr, m0;
-        memset(&s103, 0, sizeof s103);
-        ok = proj_pack(&st, &a) && !a.t[0].p[P_SPRD];
-        memcpy(s103.raw, st.raw, 68u);
-        s103.raw[66] = (uint8_t)(P_COUNT - 1u);
+    /* a FUN10 of a 1.2 build before SPREAD (#148): 103 parameters (no P_SPRD, nor 1.5's); one of 1.2 .. 1.4: 104 (no
+     * INSERT, filter TYPE, ENV SYNC: 1.5). Their engine values and their motion (the lock on E3) as many ids lower. They
+     * load by count: SPREAD 0, the INSERT OFF (its defaults), TYPE LP, ENV SYNC OFF, the rest as written */
+    for (uint32_t from = P_SPRD; from <= P_ITYPE; from += P_ITYPE - P_SPRD) {
+        static project_store_t so;
+        uint32_t pi = 68u, po = 68u, tr, m0, drop = P_E0 - from;
+        memset(&so, 0, sizeof so);
+        ok = proj_pack(&st, &a) && !a.t[0].p[P_SPRD] && !a.t[0].p[P_ITYPE] && !a.t[0].p[P_FTYPE] && !a.t[0].p[P_ESYNC];
+        memcpy(so.raw, st.raw, 68u);
+        so.raw[66] = (uint8_t)(P_COUNT - drop);
         for (tr = 0; tr < NTRK; tr++) {
             for (i = 0; i < P_COUNT; i++, pi++)
-                if (i != P_SPRD)
-                    s103.raw[po++] = st.raw[pi];
-            memcpy(s103.raw + po, st.raw + pi, 2u + NSTEP * 9u);
+                if (i < from || i >= P_E0)
+                    so.raw[po++] = st.raw[pi];
+            memcpy(so.raw + po, st.raw + pi, 2u + NSTEP * 9u);
             pi += 2u + NSTEP * 9u;
             po += 2u + NSTEP * 9u;
         }
-        memcpy(s103.raw + po, st.raw + pi, sizeof(chain_config_t) + sizeof(motion_store_t));
+        memcpy(so.raw + po, st.raw + pi, sizeof(chain_config_t) + sizeof(motion_store_t));
         m0 = po + sizeof(chain_config_t);
-        for (i = 0; i < s103.raw[m0]; i++) {
-            uint8_t *id = &s103.raw[m0 + 4u + 3u * i + 1u];
+        for (i = 0; i < so.raw[m0]; i++) {
+            uint8_t *id = &so.raw[m0 + 4u + 3u * i + 1u];
             if ((*id & 0x7Fu) >= P_E0)
-                (*id)--;                                /* (the lock bit kept) */
+                *id = (uint8_t)(*id - drop);            /* (the lock bit kept) */
         }
-        memcpy(s103.raw + PROJ_FM6_OFF, st.raw + PROJ_FM6_OFF, PROJ_STORE_SIZE - 4u - PROJ_FM6_OFF);
-        i = proj_hash(s103.raw, PROJ_STORE_SIZE - 4u);
-        memcpy(s103.raw + PROJ_STORE_SIZE - 4u, &i, 4);
-        ok &= proj_import(&b, &s103, sizeof s103) && !memcmp(&a, &b, sizeof a) && b.t[2].p[P_E0 + 3] == 5;
-        bad += check("a FUN10 of 103 parameters (1.2 before SPREAD): SPREAD 0, engine values and motion in place", ok);
+        memcpy(so.raw + PROJ_FM6_OFF, st.raw + PROJ_FM6_OFF, PROJ_STORE_SIZE - 4u - PROJ_FM6_OFF);
+        i = proj_hash(so.raw, PROJ_STORE_SIZE - 4u);
+        memcpy(so.raw + PROJ_STORE_SIZE - 4u, &i, 4);
+        ok &= so.raw[66] == (from == P_SPRD ? 103u : 104u) && proj_import(&b, &so, sizeof so) && !memcmp(&a, &b, sizeof a) &&
+              b.t[2].p[P_E0 + 3] == 5 && b.t[1].p[P_ITYPE] == 0 && b.t[1].p[P_IMIX] == 127 && b.t[1].p[P_FTYPE] == 0 &&
+              b.t[1].p[P_ESYNC] == 0;
+        bad += check(from == P_SPRD ? "a FUN10 of 103 parameters (1.2 before SPREAD): SPREAD 0, the INSERT OFF, TYPE LP, ENV SYNC OFF, "
+                                      "engine values and motion in place"
+                                    : "a FUN10 of 104 parameters (1.2 .. 1.4): the INSERT OFF, TYPE LP, ENV SYNC OFF, engine values and motion "
+                                      "in place",
+                     ok);
     }
     {   /* the song's sections (1.2): a slot per track, "-" silent, 5 bytes a row, 84 in all, right after the steps */
         project_t c = a, d;
@@ -646,7 +654,15 @@ static int formats(void)
         for (i = 0; i < 8u; i++) up_set_value(&r, 95u + i, (int16_t)(20 + i));
         up_params(&r, v, def);
         ok &= v[P_LSYNC] == 4 && v[P_LPOL] == 1 && v[P_SPRD] == 0 && v[P_E0] == 20 && v[P_E7] == 27;
-        bad += check("user presets: 104 parameters kept; 99 (1.1): LFO 2 / QUANTIZE defaults; 103: SPREAD 0; no nudge", ok);
+        r.np = 104;                                   /* 1.2 .. 1.4: its 96, then the engine's 8 */
+        t->p[P_SPRD] = 33;
+        for (i = 0; i < 96u; i++) up_set_value(&r, i, t->p[i]);
+        for (i = 0; i < 8u; i++) up_set_value(&r, 96u + i, (int16_t)(30 + i));
+        up_params(&r, v, def);
+        ok &= v[P_SPRD] == 33 && v[P_FTYPE] == 0 && v[P_ESYNC] == 0 && v[P_E0] == 30 && v[P_E7] == 37;
+        t->p[P_SPRD] = 0;
+        bad += check("user presets: 106 kept; 99 (1.1): LFO 2 / QUANTIZE defaults; 103: SPREAD 0; 104: TYPE LP, ENV SYNC OFF",
+                     ok);
     }
     return bad;
 }

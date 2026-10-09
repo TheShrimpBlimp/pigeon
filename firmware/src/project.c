@@ -61,7 +61,11 @@
  *     chain is 4 + 16 x 5 = 84 bytes (FUN6..FUN9: 36, rows {slot, repeat}, chain_v9_t; they load as sections with the
  *     four tracks on the row's slot, song_chain.c chain_from_v9: the same song).
  * 68 + 4 x (104 + 2 + 576) + chain + motion = 3268; the patches at PROJ_FM6_OFF (3312): 44 spare, room for 11 more
- * track parameters. FUN9 / FUN8 / FUN7 load as before (their 64 records of 4 bytes read by proj_motion_v9, every
+ * track parameters. 1.5 took seven of them (no format change, FUN10 as it was): the INSERT (P_ITYPE .. P_IMIX, 96..100),
+ * ANALOG's filter TYPE (P_FTYPE, 101) and ENV SYNC (P_ESYNC, 102), before the engine values (P_COUNT 111, P_E0 103; 16
+ * spare, room for 4). A FUN10 of 1.2 .. 1.4 (104) loads by count: the INSERT OFF, TYPE LP, ENV SYNC OFF (as they
+ * played), its engine values and their motion moved up by seven.
+ * Firmware 1.2 .. 1.4 refuses a FUN10 of more parameters than its own (np > P_COUNT): a 1.5 project shows EMPTY there. FUN9 / FUN8 / FUN7 load as before (their 64 records of 4 bytes read by proj_motion_v9, every
  * step's nudge 0: the timing they always had; parameters mapped by count, the four new ones at their defaults:
  * SYNC OFF, TRIG NOTE, POL BI, QUANTIZE ON, SPREAD 0, which play as before 1.2), and so do FUN6..FUN1. Firmware before 1.2
  * refuses a FUN10 everywhere (its size and magic are no format it knows): a slot holding one shows EMPTY there (the
@@ -90,7 +94,7 @@
  *
  * Built on the Mac too (tests/project_test.c, -DPROJ_HOST): the part above the #ifndef
  * PROJ_HOST needs core.h, params.c (TP) and engines.c. */
-#define PROJ_MAGIC 0x46554E41u                 /* "FUNA" (FUN10): 104 parameters, 128 motion records, the steps' nudge */
+#define PROJ_MAGIC 0x46554E41u                 /* "FUNA" (FUN10): 104 (1.5: 111) parameters, 128 motion records, nudges */
 #define PROJ_MAGIC_V9 0x46554E39u              /* "FUN9": FUN8, 64 bytes longer (the DRUM lane levels, 99 parameters) */
 #define PROJ_MAGIC_V8 0x46554E38u              /* "FUN8": FUN7 + the tracks' FM6 patches */
 #define PROJ_MAGIC_V7 0x46554E37u              /* "FUN7": serialized (byte params, packed steps), chain, motion */
@@ -744,7 +748,8 @@ static void proj_legacy_drums(track_t *t)
         t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
 }
 
-static project_t proj_scratch;              /* decoded main-loop work, never audio ISR */
+static project_t proj_scratch               /* decoded main-loop work, never audio ISR */
+    __attribute__((section(".pool")));
 static char proj_name[PROJ_NAME_LEN + 1u]    /* the name of the music as it is now (loaded, saved, the editor's */
     __attribute__((section(".pool")));       /* runtime restore); "" = none. A save takes it unless one is given */
 #define PROJ_NO_SLOT 0xFFu
@@ -753,7 +758,7 @@ static uint8_t proj_cur = PROJ_NO_SLOT;      /* the slot the music was loaded fr
 static union {                               /* serialized main-loop work; no retained expansion */
     project_store_t s;
     uint8_t raw[3840];                         /* (the staging of a backup object, up to a storage object: editor_backup.c) */
-} proj_wire_u;
+} proj_wire_u __attribute__((section(".pool")));
 #define proj_wire (proj_wire_u.s)
 static uint8_t proj_wire_gen;                /* +1 whenever proj_wire is rewritten (a backup's runtime copy lives there) */
 
@@ -1055,7 +1060,7 @@ static void project_load(uint32_t slot)
 #include "slice_store.c"                          /* SLICE's MAN slices, kept in the user slots */
 #endif
 #if FELUCCA_FLASH
-static persist_t persist_saved;
+static persist_t persist_saved __attribute__((section(".pool")));
 static uint8_t persist_pending;                 /* 1 requested, 2 waiting after a flash error */
 static uint32_t persist_retry_ms;
 #endif

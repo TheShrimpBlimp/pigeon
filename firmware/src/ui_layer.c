@@ -8,7 +8,8 @@
  *              steps that key through NONE and the effects (it holds the new one at once), EDIT puts the key's default
  *              back; kept with the settings (fx_keys) when the layer closes
  *   GLO  SET   black keys 1..4 (F#3 G#3 A#3 C#4) T1..T4 MUTE (latched; lit = sounding), F3..B3 SOLO T1..T4 while
- *              held (HOLD cells, a corner triangle), C4 UNMUTE ALL, F4 TAP tempo; KNOB 1..4 T1..T4 LEVEL;
+ *              held (HOLD cells, a corner triangle), C4 UNMUTE ALL, D4 MIDI LEARN on / off (1.5, midi_learn.c), F4 TAP
+ *              tempo; KNOB 1..4 T1..T4 LEVEL;
  *              GLO + PLAY: from the top without stopping
  *   SCL  SET   any key: its note name is ROOT; KNOB 1..4 ROOT SCL CHRD VOIC (LY_SCL: the SCL page's first two,
  *              the CHORD page's two; QNT TRN stay on SCL); the LEDs show the root lit and the scale's notes breathing
@@ -623,6 +624,8 @@ static void layer_key(uint32_t l, uint32_t k)
                 trk[i].p[P_MUTE] = 0;
         } else if (p == 7u) {
             glo_tap();
+        } else if (p == 5u) {
+            ml_toggle();                                /* D4: MIDI LEARN on / off (midi_learn.c) */
         }
     } else if (l == LAYER_SCL) {
         TSEL->p[P_ROOT] = (int16_t)((k + 5u) % 12u);    /* the key's note name (F3 = F) */
@@ -674,6 +677,7 @@ static void layer_knob(uint32_t k, int32_t s)
         *vp = (int16_t)clamp(*vp + accel(EN_K1 + k, s, TP[P_LEVEL].max - TP[P_LEVEL].min), TP[P_LEVEL].min,
                              TP[P_LEVEL].max);
         motion_capture(&trk[k], P_LEVEL, *vp);
+        ml_knob(&trk[k], P_LEVEL);                      /* (MIDI LEARN: Tk LEVEL picked) */
     } else if (l == LAYER_EDIT) {                       /* ENG, No., FAV */
         if (k == 0u)
             edit_load(eng_step(TSEL->eng_req, s), 0);
@@ -800,8 +804,8 @@ static uint32_t layer_leds(uint32_t *br)
             can = e < PF_N && ((ok >> e) & 1u);
             on = can && ((held >> e) & 1u);
         } else if (l == LAYER_GLO) {                    /* sounding lit; SOLO held lit, the others, C4, F4 breathe */
-            on = b ? p < NTRK && glo_sounding(p) : p < NTRK && ((lys.solo >> k) & 1u);
-            can = !b && (p < NTRK || p == 4u || (p == 7u && !song.g[G_CLOCK]));
+            on = b ? p < NTRK && glo_sounding(p) : (p < NTRK && ((lys.solo >> k) & 1u)) || (p == 5u && ui.ml.on);
+            can = !b && (p < NTRK || p == 4u || p == 5u || (p == 7u && !song.g[G_CLOCK]));
         } else if (l == LAYER_SCL) {                    /* the root lit, the scale's notes breathe */
             e = (k + 5u + 12u - root) % 12u;
             on = e == 0u;
@@ -842,9 +846,19 @@ static const char B_NOTE[NTRK] = {'F', 'G', 'A', 'C'};  /* black keys 1..4: F# G
 #define LM_Y 96                                          /* the black keys' row (22 px) */
 #define LM_H 22
 enum { LS_OFF, LS_SEL, LS_HELD, LS_WAIT, LS_DIM, LS_MUTE };
+/* 1.5 (#173): | LS_ALT, an idle (OFF, DIM) cell of the FX map's 2nd and 4th columns in a fill of its own, the columns
+ * light / dark in turn as the piano roll's keys, so the effects are told apart at a glance: SURF -> TEXT 22 % (the
+ * idle RAISE is 12 %); LINE (idle cells unfilled) 10 %; MONO (its one grey) none */
+#define LS_ALT 0x10u
+static uint16_t lc_alt(void)
+{
+    return ux.raise == UI_BW_GREY && ux.dim == UI_BW_GREY ? T_RAISE : ux_mix(T_SURF, T_TEXT, ux.style ? 10 : 22);
+}
 
 static uint16_t lc_fill(uint32_t st, uint16_t *ink)
 {
+    uint32_t alt = st & LS_ALT;
+    st &= ~LS_ALT;
     *ink = st == LS_DIM ? T_DIM : T_THEME;
     if (st == LS_MUTE) {
         *ink = T_INK;
@@ -858,7 +872,7 @@ static uint16_t lc_fill(uint32_t st, uint16_t *ink)
         *ink = T_INK;
         return T_THEME;
     }
-    return T_RAISE;
+    return alt ? lc_alt() : T_RAISE;
 }
 /* a cell at x, y, h px high: big (h > 30) the icon over the name; a name: compact, the icon at the right (none: no
  * icon); else a black key's: two icons at the right. tri: a HOLD cell in a SET layer */
@@ -881,7 +895,7 @@ static uint16_t lc_box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t fill
 static void lcell(int32_t x, int32_t y, int32_t h, const char *note, uint32_t icon, uint32_t icon2, const char *name,
                   uint32_t st, int tri)
 {
-    uint16_t ink, fill = lc_fill(st, &ink), idle = fill == T_RAISE;
+    uint16_t ink, fill = lc_fill(st, &ink), idle = fill == T_RAISE || ((st & LS_ALT) && fill == lc_alt());
     fill = lc_box(x, y, LC_W, h, fill);
     if (note)
         cv_text_on(x + 5, y + 3, &AF_S, note, idle ? T_MID : ink, fill);
@@ -932,7 +946,8 @@ static void layer_fx(void)
         st = p == ed ? LS_SEL : e >= PF_NFX || !((ok >> e) & 1u) ? LS_DIM : !((held >> e) & 1u) ? LS_OFF
            : (act >> e) & 1u ? LS_HELD : LS_WAIT;       /* (the key PRESETS assigns: the selection's fill) */
         n[0] = W_NOTE[p];
-        lcell(LC_X(p % 4u), 4 + (LF_H + 4) * (int32_t)(p / 4u), LF_H, n, 0, 0, e < PF_NFX ? PF_CELL[e] : "", st, 0);
+        lcell(LC_X(p % 4u), 4 + (LF_H + 4) * (int32_t)(p / 4u), LF_H, n, 0, 0, e < PF_NFX ? PF_CELL[e] : "",
+              st | (p & 1u ? LS_ALT : 0u), 0);           /* (#173: the 2nd and 4th columns' idle cells their own fill) */
     }
     for (e = 0; e < NTRK; e++) {                        /* the mutes of the black keys 1..4 */
         bnote(n, e);
@@ -949,6 +964,8 @@ static void layer_glo(void)
     }
     n[0] = 'C';
     lcell(LC_X(0), 50, LC_H, n, ICON_MUTE, 0, "ALL", LS_OFF, 0);   /* (unmute all) */
+    n[0] = 'D';
+    lcell(LC_X(1), 50, LC_H, n, ICON_MIDI, 0, "LEARN", ui.ml.on ? LS_SEL : LS_OFF, 0);   /* (MIDI LEARN, 1.5) */
     n[0] = 'F';
     lcell(LC_X(3), 50, LC_H, n, ICON_TEMPO, 0, "TAP", song.g[G_CLOCK] ? LS_DIM : LS_OFF, 0);
     for (e = 0; e < NTRK; e++) {                        /* the black keys 1..4: MUTE, latched */
@@ -1142,7 +1159,7 @@ static void draw_layer(void)
             sig = sig * 33u + perf_map[p];
     }
     else if (l == LAYER_GLO)
-        sig += perf_solo * 31u + (uint32_t)song.g[G_CLOCK] * 5u +
+        sig += perf_solo * 31u + (uint32_t)song.g[G_CLOCK] * 5u + ui.ml.on * 7u +
                (uint32_t)(trk[0].p[P_MUTE] | trk[1].p[P_MUTE] << 1 | trk[2].p[P_MUTE] << 2 | trk[3].p[P_MUTE] << 3) * 131u;
     else if (l == LAYER_SCL)
         sig += (uint32_t)TSEL->p[P_SCALE] * 31u;
@@ -1176,7 +1193,8 @@ static void draw_layer(void)
         cv_begin(240, H_FOOT, T_BG);
         const khint_t *ft = l == LAYER_FX && fx_key_held() ? FX_KEY_FOOT : l == LAYER_FX && perf_latch_on ? FX_LATCH_FOOT :
                             l == LAYER_GLO && ui.lock == LAYER_GLO ? GLO_LOCK_FOOT : LAYERS[l].foot;
-        cv_key_row(8, 232, 9, ft, ft[2].act ? 3u : 2u, 7u, T_BG);
+        int h = help_on() && help_row(HELP_LAYER[l], 21);   /* 1.5, HELP ON: a second row, what this one does not say */
+        cv_key_row(8, 232, h ? 2 : 9, ft, ft[2].act ? 3u : 2u, 7u, T_BG);
         cv_blit(0, Y_FOOT);
         ui.foot_sig = 0;
     }

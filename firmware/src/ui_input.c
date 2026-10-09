@@ -71,6 +71,7 @@ static int mom_turn(uint32_t k, int32_t s)
     const param_desc_t *d;
     int16_t *vp = 0;
     uint32_t i, g;
+    const track_t *t = ui.home ? home_trk(k) : TSEL;     /* (HOME LEVELS: KNOB k is track k's) */
     if (ui.home) {
         d = home_param(k, &vp);
     } else {
@@ -82,7 +83,7 @@ static int mom_turn(uint32_t k, int32_t s)
     }
     g = vp && vp >= song.g && vp < song.g + G_COUNT ? (uint32_t)(vp - song.g) : G_COUNT;
     if (!d || !vp || d->max == d->min ||
-        !((vp >= TSEL->p && vp < TSEL->p + P_COUNT) || (g <= G_CDEPTH && g != G_CLOCK) || g == G_RTYPE))
+        !((vp >= t->p && vp < t->p + P_COUNT) || (g <= G_CDEPTH && g != G_CLOCK) || g == G_RTYPE))
         return 0;                                      /* (only the values a sound and the FX are: no CLK, no actions) */
     for (i = 0; i < mom.n && mom.vp[i] != vp; i++)
         ;
@@ -109,6 +110,7 @@ static uint32_t oct_leds(void)
         return 1u;
     if (ui.menu && !ui.confirm)
         return ui.menu >= 2u ? 1u :                    /* (INFO, ABOUT: OCT- back, lit) */
+               ui.menu_sel == MI_LCLEAR ? (ml_count() ? OCT_BREATH : 0u) :   /* LEARN CLEAR: while CCs are learned */
                ui.menu_sel >= MI_VALUES ? OCT_BREATH :  /* CALIBRATION / INFO / ABOUT: OCT+ opens */
                (menu_step(ui.menu_sel, -1) != menu_get(ui.menu_sel) ? OCT_BREATH_DN : 0u) |   /* a value: each */
                (menu_step(ui.menu_sel, 1) != menu_get(ui.menu_sel) ? OCT_BREATH : 0u);         /* way it can go */
@@ -470,6 +472,7 @@ static void tracks_edit(uint32_t slot, int32_t steps)
     switch (slot) {
     case 3:
         t->p[P_MUTE] = (int16_t)(steps > 0);
+        ml_knob(t, P_MUTE);                             /* (MIDI LEARN: picked) */
         return;
     case 0:
         vp = &t->p[P_LEVEL];
@@ -486,6 +489,7 @@ static void tracks_edit(uint32_t slot, int32_t steps)
     }
     *vp = (int16_t)clamp(*vp + accel(EN_K1 + slot, steps, d->max - d->min), d->min, d->max);
     motion_capture(t, (uint32_t)(vp - t->p), *vp);
+    ml_knob(t, (uint32_t)(vp - t->p));
 }
 
 /* SEQ > STEP's piano roll (not the DRUM grid, whose white keys stay its steps): where step recording writes */
@@ -797,7 +801,16 @@ static void step_edit(uint32_t slot, int32_t steps)
         st->time = ST_NOTE;
         last_note = st->note[0];
         break;
-    case 2:
+    case 2:                                               /* TIME; a note's LEN (1.5: ui.c note_set_len) */
+        if (step_on(st)) {
+            uint32_t was = note_len(TSEL, ui.cursor), n;
+            step_undo_take(TSEL, 0x2000u);                /* (a knob turned on: one undo, SAVE held) */
+            n = note_set_len(TSEL, ui.cursor, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
+            motion_undo_done(TSEL);
+            if (steps > 0 && n == was)
+                ui_message(ui.cursor + n < (uint32_t)clamp(TSEL->p[P_SLEN], 1, NSTEP) ? "NOTE AHEAD" : "END OF PATTERN");
+            break;
+        }
         st->time = (uint8_t)clamp((int32_t)st->time + (steps > 0 ? 1 : -1), ST_NOTE, ST_REST);
         break;
     default: {                                            /* FLAG: - / ACC / SLD / A+S */
@@ -906,7 +919,10 @@ static void edit_param(uint32_t slot, int32_t steps)
         return;
     v = param_turn(d, *vp, accel(EN_K1 + slot, steps, d->fmt == F_ENUM ? 0 : d->max - d->min));
     *vp = (int16_t)v;
-    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);
+    if (pg->scope != SC_GLOBAL) {
+        motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);
+        ml_knob(TSEL, (uint32_t)(vp - TSEL->p));        /* (MIDI LEARN: picked) */
+    }
 }
 
 /* OCT+ on an action page: the picked action. A load stays picked (browse and load again); the others
@@ -1235,6 +1251,7 @@ static void ui_notices(void)
 {
     static uint32_t midi_t, midi_last;
     sample_notice();
+    ml_poll();                                          /* (MIDI LEARN: a CC came for the picked parameter) */
     if (motion_full) { motion_full = 0; ui_message("AUTOMATION FULL"); }
     if (midi_hint) {                                    /* MIDI notes into a track that is not selected */
         uint32_t h = midi_hint;
@@ -1288,7 +1305,7 @@ static void ui_input(void)
     if (((pressed >> panel.btn[B_REC]) & 1u) && ui.ly == LAYER_REC)
         ui.rec_t0 |= 2u;                                /* (REC is its layer's button now: its tap is layer_tap's) */
     layer_oct_open(pressed);                            /* (OCT± with a SET layer's button down: it opens now) */
-    oct = oct_taps(pressed, ui.menu || ui.confirm || act_cols() || name_on() || layer_set_open());
+    oct = oct_taps(pressed, ui.menu || ui.confirm || act_cols() || name_on() || layer_set_open() || ui.ml.on);
     oct = layer_oct(pressed, oct);                      /* (a SET layer's OCT-: put back) */
     layer_masks();                                      /* seq.c: keys pressed with a layer's button are its own */
     lay = layer_held();
@@ -1468,8 +1485,8 @@ static void ui_input(void)
         case B_OCTDN:
         case B_OCTUP: {
             uint32_t both = (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
-            if (act_cols() || layer_set_open())         /* action pages: enter / back (below); SET layers: OCT- */
-                break;
+            if (act_cols() || layer_set_open() || ui.ml.on)   /* action pages: enter / back (below); SET layers: OCT-; */
+                break;                                  /* MIDI LEARN: clear / done (below) */
             if ((fm1_in.buttons & both) == both)
                 song.octave = 0;
             else
@@ -1494,6 +1511,8 @@ static void ui_input(void)
             ui.act = 0;
         else
             go_home();
+    } else if (ui.ml.on && oct) {                          /* MIDI LEARN: OCT- clears the picked CC, OCT+ done */
+        ml_oct(oct);
     }
     song.grid = (uint8_t)keys_mode();                 /* (seq.c: the keys are the grid's) */
 #if FELUCCA_SLICE
@@ -1565,7 +1584,8 @@ static void ui_input(void)
             int16_t *vp;
             const param_desc_t *d = home_param(k, &vp);
             *vp = (int16_t)param_turn(d, *vp, accel(EN_K1 + k, s, d->fmt == F_ENUM ? 0 : d->max - d->min));
-            motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);
+            motion_capture(home_trk(k), (uint32_t)(vp - home_trk(k)->p), *vp);   /* (LEVELS: that track's, as MIXER) */
+            ml_knob(home_trk(k), (uint32_t)(vp - home_trk(k)->p));
         } else {
             edit_param(k, s);
         }

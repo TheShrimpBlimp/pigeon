@@ -178,6 +178,7 @@ static void ui_power_on(void)
     proj_name[0] = 0;
     proj_cur = PROJ_NO_SLOT;
     memset(&favorites, 0, sizeof favorites);
+    ml_off();                                     /* (MIDI LEARN off, nothing learned) */
     memset(&undo, 0, sizeof undo);
     fop_op = fop_stg = 0;                         /* (FM6's operator pages: OP 1, stage 1, as at power-on) */
     memset(pat_last, 0, sizeof pat_last);
@@ -852,6 +853,8 @@ static int test_save(void)
         bad += check("..OCT+ again stores the edited sound with that name (SAVE, OCT+, OCT+)",
                      !name_on() && up_used(0) && up_value(up_rec(0), P_E0) == 5 && ui.act == 0u && str_eq(nmb, au));
     }
+    press(B_SAVE);
+    bad += check("1.5 (#173): SAVE again: PRESETS (the engines and sounds, one tap on)", cur_page()->graph == GR_BROWSE);
     press(B_SAVE);
     bad += check("1.2: SAVE again: PHRASES (the patterns, after the sounds)", cur_page()->graph == GR_PATS);
     press(B_SAVE);
@@ -1599,11 +1602,11 @@ static int test_menu_tabs(void)
             }
     }
     ui_prefs = 0;
-    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 7 6 1 5 rows), 1..8 each in a run, fit the page; tab gaps "
+    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 7 6 2 5 rows), 1..8 each in a run, fit the page; tab gaps "
                  "constant (S, LARGE)",
                  ok && MTAB_COUNT == 5u && str_eq(MTAB_NAME[0], "DISPLAY") && str_eq(MTAB_NAME[MTAB_MIDI], "MIDI") &&
                  mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 7u && mtab_rows(MTAB_AUDIO) == 6u &&
-                 mtab_rows(MTAB_MIDI) == 1u && mtab_rows(MTAB_SYSTEM) == 5u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&
+                 mtab_rows(MTAB_MIDI) == 2u && MI_TAB[MI_LCLEAR] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 6u && MI_TAB[MI_TUNE] == MTAB_AUDIO &&   /* (1.5: LEARN CLEAR, HELP) */
                  MI_TAB[MI_MIDIIN] == MTAB_MIDI && MI_TAB[MI_INFO] == MTAB_SYSTEM && MI_INFO >= MI_VALUES);
 
     ui_power_on();
@@ -1619,7 +1622,8 @@ static int test_menu_tabs(void)
     turn(EN_PRESET, 1); turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_LATCH;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_LOWCUT && menu_tab() == MTAB_AUDIO;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_MIDIIN && menu_tab() == MTAB_MIDI;   /* (1.2) */
-    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_MIDIIN;  /* (its only row) */
+    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_LCLEAR;  /* (1.5: LEARN CLEAR, then round) */
+    turn(EN_PRESET, 1); ok &= ui.menu_sel == MI_MIDIIN;
     turn(EN_ALGO, 1); ok &= ui.menu_sel == MI_SERIAL && menu_tab() == MTAB_SYSTEM;
     turn(EN_ALGO, -1); turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LOWCUT;
     turn(EN_ALGO, -1); ok &= ui.menu_sel == MI_LATCH;   /* (back at the row left there) */
@@ -1643,6 +1647,8 @@ static int test_menu_tabs(void)
     ok = 1;
     for (i = 0; i < MI_VALUES; i++) {
         uint32_t n = menu_n(i), v, j, want;
+        if (!menu_valued(i))                           /* (1.5: LEARN CLEAR, an action) */
+            continue;
         uint8_t seen[128] = {0};                       /* (1.2: TUNE has 101 values) */
         ui.menu_sel = (uint8_t)i;
         for (j = 0; j <= n; j++)                       /* down to the first value (COLOR: round) */
@@ -2592,7 +2598,7 @@ static int test_presets_knob(void)
 }
 
 /* 1.2 (Discussion #153): the pages by button. HOME: HOME > MIXER > CLOCK; SEQ: STEP <-> AUTOMATION, held SEQ TOOLS
- * everywhere; GLO: SONG (GLOBAL became CLOCK, SYSTEM the MENU's); SAVE: USER -> PHRASES -> PROJECT -> TOOLS -> PRESETS. AUTOMATION's list edits a step's
+ * everywhere; GLO: SONG (GLOBAL became CLOCK, SYSTEM the MENU's); SAVE: USER -> PRESETS -> PHRASES -> PROJECT -> TOOLS (1.5). AUTOMATION's list edits a step's
  * CHANCE / RATCH (the step's own fields, nothing else), one undo each; a remembered page that left its family */
 static int steps_but(const track_t *t, const step_t *ref, uint32_t at, const step_t *want)   /* the steps = ref, at: want */
 {
@@ -2605,7 +2611,7 @@ static int steps_but(const track_t *t, const step_t *ref, uint32_t at, const ste
 static uint32_t auto_cur(void) { uint16_t rw[EV_ROWS]; return ev_cur(rw, 0); }
 static int test_page_cycles(void)
 {
-    static const char *const SAVE_CYC[6] = {"USER", "PHRASES", "PROJECT", "TOOLS", "PRESETS", "USER"};
+    static const char *const SAVE_CYC[6] = {"USER", "PRESETS", "PHRASES", "PROJECT", "TOOLS", "USER"};   /* (1.5, #173) */
     int bad = 0, ok = 1;
     uint32_t i, n0;
     step_t ref[NSTEP], want;
@@ -2617,7 +2623,7 @@ static int test_page_cycles(void)
         press(B_SAVE); frames(320);
         ok &= !ui.home && cur_page()->fam == FAM_SAVE && str_eq(cur_page()->title, SAVE_CYC[i]);
     }
-    bad += check("1.2: SAVE cycles USER > PHRASES > PROJECT > TOOLS > PRESETS > USER", ok);
+    bad += check("1.5 (#173): SAVE cycles USER > PRESETS > PHRASES > PROJECT > TOOLS > USER", ok);
     ok = 1;
     for (i = 0; i < NPAGES; i++) {                       /* every page in a family its button reaches, and its LED */
         uint32_t f = PAGES[i].fam;
@@ -3504,7 +3510,7 @@ static int engine_cycle(const char *const *want, uint32_t n)   /* EDIT tapped fr
 }
 static int test_edit_cycle(void)
 {
-    static const char *const CYC_A[] = {"EDIT 1", "EDIT 2", "VOICE", "VOICE 2", "VOICE 3", "EDIT 1"};
+    static const char *const CYC_A[] = {"EDIT 1", "EDIT 2", "FILTER", "VOICE", "VOICE 2", "VOICE 3", "EDIT 1"};   /* (1.5: FILTER) */
     static const char *const CYC_D[] = {"EDIT 1", "EDIT 2", "OP1 ENV", "OP2 ENV", "OP3 ENV", "OP4 ENV",
                                         "OP LEVEL", "VOICE", "VOICE 2", "VOICE 3", "EDIT 1"};
     int bad = 0, ok;
@@ -3518,7 +3524,7 @@ static int test_edit_cycle(void)
         ok &= !str_eq(PAGES[i].title, "ENGINE");
     bad += check("no ENGINE page (engines are the EDIT layer's)", ok);
     set_engine_of(TSEL, 0);
-    bad += check("EDIT cycle (ANALOG): EDIT 1 EDIT 2 VOICE VOICE 2 VOICE 3 EDIT 1", engine_cycle(CYC_A, NELEM(CYC_A)));
+    bad += check("EDIT cycle (ANALOG): EDIT 1 EDIT 2 FILTER VOICE VOICE 2 VOICE 3 EDIT 1", engine_cycle(CYC_A, NELEM(CYC_A)));
 #if FELUCCA_FM4
     set_engine_of(TSEL, 1);
     bad += check("EDIT cycle (DIGITAL): EDIT 1 EDIT 2 OP1..OP4 ENV OP LEVEL VOICE VOICE 2 VOICE 3 EDIT 1",
@@ -3855,7 +3861,8 @@ static int test_quick_layers(void)
     ok = trk[1].p[P_MUTE] == 1 && ui.layer == LAYER_GLO && !gates() && mo_w == mo;
     a = leds_at(0); b2 = leds_at(250);
     ok &= ((a & b2) >> black(0)) & 1u && !(((a | b2) >> black(1)) & 1u);           /* T1 sounding lit, T2 muted dark */
-    ok &= ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(7)) & 1u && !(((a | b2) >> white(5)) & 1u);
+    ok &= ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(7)) & 1u && ((a ^ b2) >> white(5)) & 1u &&   /* (D4: LEARN) */
+          !(((a | b2) >> white(6)) & 1u);
     key_up(black(1)); btn_up(B_GLO); frame();
     bad += check("GLO + black key 2: T2 MUTE latched (SET), silent, no MIDI; LEDs: sounding lit, muted dark", ok &&
                  trk[1].p[P_MUTE] == 1 && !ui.layer);
@@ -8879,6 +8886,104 @@ static int test_fm6_ops(void)
 static uint16_t tr_px(int32_t x, int32_t y) { return swap16(host_screen[(uint32_t)y * 240u + (uint32_t)x]); }
 static int32_t tr_y(uint32_t c) { return Y_GRAPH + (int32_t)c * TR_PITCH; }
 static int32_t tr_x(uint32_t i) { return 3 + tr_bx(i) + TR_BW / 2; }   /* a step's bar, its middle column */
+/* 1.5 (#173): the FX map's columns light / dark in turn (ui_layer.c LS_ALT): an idle cell's fill, read inside its top
+ * edge, the same in columns 1 and 3 and in 2 and 4 and different between them, every row, FLAT and LINE (LINE: the
+ * 1st / 3rd unfilled, the panel's colour); MONO (its one grey) all alike */
+static int test_fx_map_columns(void)
+{
+    int bad = 0, ok = 1;
+    uint32_t st, pal, r, c;
+    for (pal = 0; pal < 2u; pal++)
+        for (st = ST_FLAT; st <= ST_LINE; st++) {
+            ui_power_on();
+            settings.palette = (uint8_t)(pal ? UI_BW_INDEX : UI_GREY_INDEX);
+            ui_style = (uint8_t)st;
+            style_apply();
+            palette_set(settings.palette);
+            ui.home = 1; ui.layer = LAYER_FX; ui.force = 1;
+            draw_layer();
+            for (r = 0; r < 4u; r++) {
+                uint16_t px[4];
+                for (c = 0; c < 4u; c++)
+                    px[c] = tr_px(LC_X(c) + 27, Y_GRAPH + 4 + (LF_H + 4) * (int32_t)r + 1);
+                ok &= px[0] == px[2] && px[1] == px[3] && (pal ? px[0] == px[1] : px[0] != px[1]);
+                ok &= !st || pal || px[0] == T_SURF;
+            }
+            ui.layer = 0;
+        }
+    ui_style = ST_FLAT; style_apply(); settings.palette = UI_GREY_INDEX; palette_set(UI_GREY_INDEX);
+    bad += check("1.5 #173: the FX map's columns alternate light / dark (FLAT, LINE; MONO: one grey)", ok);
+    return bad;
+}
+
+/* 1.5 (Discussion #156): HELP. MENU > SYSTEM > HELP (OFF by default, bit 3 of ui_prefs2 alone); every page a button
+ * reaches (DIGITAL's retired OP pages aside), HOME, HOME LEVELS, the DRUM grid and every layer has a hint of 2..3 key
+ * hints that fits its footer row with every word (cv_key_row drops none); ON: a page entered shows its hint ~2 s, then
+ * the footer as before; OFF: none */
+static int help_fits(const char *s)
+{
+    khint_t kh[3];
+    char b[48];
+    uint32_t n = help_parse(s, kh, b, sizeof b), i;
+    int32_t w = 6 * ((int32_t)n - 1);
+    int ok = n >= 2u && n <= 3u;
+    for (i = 0; i < n; i++) {
+        ok &= kh[i].key < KC_COUNT && kh[i].act[0] != 0;
+        w += kh_w(kh[i].key, kh[i].act);
+    }
+    if (!ok || w > 224) printf("  help: \"%s\" %u hints, %d px of 224\n", s, n, w);
+    return ok && w <= 224;
+}
+static int test_help(void)
+{
+    int bad = 0, ok;
+    uint8_t before[32];
+    uint32_t i, l;
+    ui_power_on();
+    memcpy(before, favorites.factory[15], 32);
+    ok = !help_on() && menu_get(MI_HELP) == 0u && str_eq(MI_NAME[MI_HELP], "HELP") && MI_TAB[MI_HELP] == MTAB_SYSTEM &&
+         MI_HELP < MI_VALUES && str_eq(menu_vname(MI_HELP, 1), "ON");
+    menu_put(MI_HELP, 1);
+    ok &= help_on() && menu_get(MI_HELP) == 1u && favorites.factory[15][24] == (uint8_t)(before[24] | 8u);
+    for (i = 0; i < 32u; i++)
+        ok &= i == 24u || favorites.factory[15][i] == before[i];
+    bad += check("1.5 MENU > SYSTEM > HELP: OFF by default, ON a bit of its own (ui_prefs2 bit 3)", ok);
+
+    ok = 1;
+    for (i = 0; i < NPAGES; i++) {                     /* every page but DIGITAL's OP1..4 ENV / OP LEVEL (FM4 only) */
+        uint8_t h = ui.home, pg = ui.page;
+        if (PAGES[i].fam == FAM_EDIT && PAGES[i].id[0] >= P_FM1_ATK && PAGES[i].id[0] <= P_FM4_LEVEL)
+            continue;
+        ui.home = 0; ui.page = (uint8_t)i;
+        if (!help_page()) { printf("  help: no hint for %s\n", PAGES[i].title); ok = 0; }
+        else ok &= help_fits(help_page());
+        ui.home = h; ui.page = pg;
+    }
+    ok &= help_fits(H_HOME) && help_fits(H_LEVELS) && help_fits(H_GRID);
+    for (l = LAYER_FX; l < LAYER_N; l++)
+        ok &= help_fits(HELP_LAYER[l]);
+    bad += check("1.5 HELP: a hint for every page, HOME, LEVELS, the grid and every layer; each fits its row, no word dropped", ok);
+
+    ui_power_on();
+    menu_put(MI_HELP, 1);
+    press(B_ENV);
+    ok = ui.help_t > 0u && str_eq(help_page(), "[K1-4]A D S R[ENV]ENV DEST");
+    frames(2200);
+    ok &= ui.help_t == 0u;
+    press(B_SAVE);
+    ok &= ui.help_t > 0u && cur_page()->graph == GR_USER && str_eq(help_page(), "[K1]SLOT[OCT+]SAVE[SAVE]PRESETS");
+    press(B_HOME);
+    ok &= ui.home && ui.help_t > 0u && str_eq(help_page(), H_HOME);
+    menu_put(MI_HOME, HV_LEVELS);
+    ok &= str_eq(help_page(), H_LEVELS);
+    menu_put(MI_HOME, HV_SCOPE);
+    menu_put(MI_HELP, 0);
+    press(B_ENV);
+    ok &= ui.help_t == 0u;
+    bad += check("1.5 HELP ON: a page entered (a button, HOME) shows its hint ~2 s, then not; OFF: never", ok);
+    return bad;
+}
+
 static int test_home_tracks(void)
 {
     int bad = 0, ok;
@@ -8889,9 +8994,10 @@ static int test_home_tracks(void)
     int16_t v0;
     ui_power_on();
     memcpy(before, favorites.factory[15], 32);
-    ok = ui_home_view == 0u && !home_tracks() && menu_get(MI_HOME) == 0u && menu_n(MI_HOME) == 2u &&
+    ok = ui_home_view == 0u && !home_tracks() && menu_get(MI_HOME) == 0u && menu_n(MI_HOME) == 3u &&
          str_eq(MI_NAME[MI_HOME], "HOME") && str_eq(menu_vname(MI_HOME, 0), "SCOPE") &&
-         str_eq(menu_vname(MI_HOME, 1), "TRACKS") && MI_TAB[MI_HOME] == MTAB_DISPLAY && MI_HOME < MI_VALUES;
+         str_eq(menu_vname(MI_HOME, 1), "TRACKS") && str_eq(menu_vname(MI_HOME, 2), "LEVELS") &&   /* (1.5: LEVELS) */
+         MI_TAB[MI_HOME] == MTAB_DISPLAY && MI_HOME < MI_VALUES;
     menu_put(MI_HOME, 1);
     ok &= ui_home_view == 1u && home_tracks() && menu_get(MI_HOME) == 1u;
     for (i = 0; i < 32u; i++)                           /* (byte 26 only: SCREEN OFF, the 1.2 flags, the FX keys kept) */
@@ -8911,13 +9017,62 @@ static int test_home_tracks(void)
     hold(B_HOME);                                       /* the menu: DISPLAY, down to HOME, K1 right */
     for (i = 0; i < 7u; i++) turn(EN_PRESET, 1);
     ok = ui.menu == 1 && ui.menu_sel == MI_HOME;
-    turn(EN_K1, 1); ok &= home_tracks();
-    turn(EN_K3, 1); ok &= home_tracks();               /* (stops at TRACKS) */
+    turn(EN_K1, 1); ok &= home_tracks() && !home_levels();
+    turn(EN_K3, 1); ok &= home_levels();               /* (1.5: LEVELS, the last) */
+    turn(EN_K3, 1); ok &= home_levels();               /* (stops there) */
+    press(B_OCTDN); ok &= home_tracks() && !home_levels();
     press(B_OCTDN); ok &= !home_tracks();
     press(B_OCTUP); ok &= home_tracks();
     press(B_HOME); frame();
     ok &= !ui.menu && ui.home;
-    bad += check("1.3 MENU: HOME's row (any knob, OCT+ / OCT-), the menu closed: HOME", ok);
+    bad += check("1.3 MENU: HOME's row (any knob, OCT+ / OCT-: SCOPE TRACKS LEVELS), the menu closed: HOME", ok);
+
+    /* 1.5 (#134): HOME LEVELS: the rows of TRACKS, KNOB 1..4 the LEVEL of T1..T4 (the selected track's engine untouched),
+     * MOMENTARY on any of them. And ANIM no longer sets
+     * HOME (up to 1.4.1 its MENU row fell through into HOME's) */
+    ui_power_on();
+    menu_put(MI_HOME, HV_LEVELS);
+    song.sel = 0;
+    go_home(); frame();
+    {
+        int16_t lv[NTRK], e0[NTRK][P_COUNT];
+        uint32_t k;
+        const param_desc_t *d;
+        int16_t *vp;
+        for (k = 0; k < NTRK; k++) { lv[k] = trk[k].p[P_LEVEL]; memcpy(e0[k], trk[k].p, sizeof e0[k]); }
+        turn(EN_K2, -5);
+        turn(EN_K4, 3);
+        ok = home_tracks() && home_levels() && trk[1].p[P_LEVEL] < lv[1] && trk[3].p[P_LEVEL] > lv[3] &&
+             trk[0].p[P_LEVEL] == lv[0] && trk[2].p[P_LEVEL] == lv[2];
+        for (k = 0; k < P_COUNT; k++)                   /* (nothing else of any track) */
+            ok &= (k == P_LEVEL || (trk[0].p[k] == e0[0][k] && trk[1].p[k] == e0[1][k] && trk[2].p[k] == e0[2][k] &&
+                                    trk[3].p[k] == e0[3][k]));
+        d = home_param(2, &vp);
+        ok &= vp == &trk[2].p[P_LEVEL] && d == &TP[P_LEVEL] && home_trk(2) == &trk[2];
+        bad += check("1.5 HOME LEVELS: KNOB 2 / 4 the LEVEL of T2 / T4, nothing else of any track", ok);
+        k = (uint32_t)trk[2].p[P_LEVEL];
+        btn_down(B_LFO); frame();
+        turn(EN_K3, -6);
+        ok = trk[2].p[P_LEVEL] < (int16_t)k && mom.n == 1u;
+        btn_up(B_LFO); frame();
+        bad += check("1.5 HOME LEVELS: MOMENTARY (LFO held) on T3's LEVEL, back when LFO is let go",
+                     ok && trk[2].p[P_LEVEL] == (int16_t)k && !mom.n);
+        menu_put(MI_HOME, HV_TRACKS);
+        lv[1] = trk[1].p[P_LEVEL];
+        turn(EN_K2, 4);
+        bad += check("1.5 HOME TRACKS (not LEVELS): KNOB 2 the selected track's engine again, no level",
+                     trk[1].p[P_LEVEL] == lv[1] && !home_levels());
+        menu_put(MI_HOME, HV_LEVELS);
+        menu_put(MI_ANIM, 1u);
+        ok = home_levels() && menu_get(MI_ANIM) == 1u;
+        menu_put(MI_ANIM, 0u);
+        ok &= home_levels() && menu_get(MI_ANIM) == 0u;
+        menu_put(MI_HOME, HV_SCOPE);
+        menu_put(MI_ANIM, 2u);
+        ok &= !home_tracks() && menu_get(MI_ANIM) == 2u;
+        menu_put(MI_ANIM, 0u);
+        bad += check("1.5 MENU ANIM leaves HOME as it is (it fell through into HOME up to 1.4.1)", ok);
+    }
 
     /* the rows: T1 (not selected) a line, T2 selected, T3 muted, T4 the DRUM beat */
     ui_power_on();
@@ -9116,7 +9271,7 @@ static uint64_t qa_beat(uint32_t lanes, double *low)
     double lp = 0;
     for (p = 0; p < NPART; p++)
         memset(trk[p].v, 0, sizeof trk[p].v);
-    memset(drum_kit, 0, sizeof drum_kit);
+    memset(eng_mem, 0, sizeof eng_mem);
     *low = 0;
     for (s = 0; s < 16u; s++) {
         uint32_t hit = (s % 4u == 0u ? 1u : 0u) | (s % 8u == 4u ? 2u : 0u) | (s == 14u ? 4u : 0u) |
@@ -9302,7 +9457,7 @@ static int test_edit_quick_actions(void)
             uint64_t h = 1469598103934665603ull;
             for (k = 0; k < NPART; k++)
                 memset(trk[k].v, 0, sizeof trk[k].v);
-            memset(drum_kit, 0, sizeof drum_kit);
+            memset(eng_mem, 0, sizeof eng_mem);
             for (j = 0; j < 2u; j++)
                 trk_note_on(&trk[3], NOTE2[j], 100);
             for (j = 0; j < 64u; j++) {
@@ -9403,6 +9558,8 @@ int main(void)
     bad += test_fm6_charts();
     bad += test_fm6_ops();
     bad += test_home_tracks();
+    bad += test_fx_map_columns();
+    bad += test_help();
     bad += test_no_flash();
 #if FELUCCA_FM4
     bad += test_fm_charts();                        /* (DIGITAL's charts: built with FELUCCA_FM4=1 only) */

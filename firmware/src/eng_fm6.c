@@ -30,8 +30,8 @@
  * matrix's CUT), SHP the feedback, PIT the pitch (bend, glide, tune: the voice's pitch and fine factor).
  * Six voices per part at most (engine_t.poly).
  *
- * State: per voice an fm6_note_t (fm6_note, 244 bytes, a side array as PHYS's slots: voice_t.s[] is too
- * small), per part the patch, the patch through the macros (fm6_eff, rebuilt in the audio ISR when either
+ * State: per voice an fm6_note_t (in the part's engine memory as PHYS's slots, engines.c eng_mem; fm6_note_of:
+ * voice_t.s[] is too small), per part the patch, the patch through the macros (fm6_eff, rebuilt in the audio ISR when either
  * changes) and the LFO (once a block). */
 #include "fm6_core.c"
 #include "felucca_fm6.h"         /* tools/gen_fm6_patches.py: FM6_INIT, FM6_FACTORY[] */
@@ -45,7 +45,7 @@
 static uint8_t fm6_patch[NTRK][FP_SIZE + 1u];   /* the tracks' patches (main loop writes, then fm6_pgen) */
 static volatile uint8_t fm6_pgen[NTRK];          /* +1 after each write of fm6_patch[t] */
 static uint8_t fm6_slot[NTRK];                   /* the SLOT value last loaded (main loop); 0xFF = none */
-static uint8_t fm6_own[NTRK][FM6_PACKED];        /* the own patch while SLOT shows a factory one (fm6_poll) */
+static uint8_t fm6_own[NTRK][FM6_PACKED] __attribute__((section(".pool")));   /* the own patch while SLOT shows a factory one (fm6_poll) */
 static uint8_t fm6_own_ok;                       /* bit tr: fm6_own[tr] holds it */
 static struct {                                  /* the patch through the macros: the audio ISR's copy */
     uint8_t p[FP_SIZE + 1u];
@@ -55,7 +55,7 @@ static struct {                                  /* the patch through the macros
 } fm6_eff[NTRK];
 static fm6_lfo_t fm6_lfo[NTRK];
 static int32_t fm6_lfo_v[NTRK], fm6_lfo_d[NTRK]; /* this block's LFO value and delay (Q24) */
-static fm6_note_t fm6_note[NTRK][FM6_POLY];
+ENG_MEM_FITS("FM6", sizeof(fm6_note_t) * FM6_POLY);
 /* the voice bank (fm6_vbank.c; in the pool, zeroed at boot: no bank without the store) */
 static uint32_t fm6_bank_used __attribute__((section(".pool")));   /* bit k: B k+1 holds a voice */
 static int (*fm6_bank_read)(uint32_t k, uint8_t *pk) __attribute__((section(".pool")));   /* voice k -> pk, 0 = read */
@@ -327,7 +327,7 @@ static fm6_note_t *fm6_note_of(track_t *t, voice_t *v)
     if (t < &trk[0] || t >= &trk[NPART])
         return 0;
     i = (uint32_t)(v - t->v);
-    return i < FM6_POLY ? &fm6_note[t - trk][i] : 0;
+    return i < FM6_POLY ? (fm6_note_t *)ENG_MEM(t - trk) + i : 0;
 }
 
 static void fm6_note_on(track_t *t, voice_t *v)
@@ -439,4 +439,5 @@ static const engine_t ENG_FM6 = {
     .block = fm6_block,
     .ownenv = 1,
     .done = fm6_done,
+    .mem = sizeof(fm6_note_t) * FM6_POLY,
 };

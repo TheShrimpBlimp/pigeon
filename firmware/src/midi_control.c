@@ -225,11 +225,68 @@ static const uint8_t MIDI_CC_ENG[NENGINES] = {
     0x80,                                             /* SLICE TONE */
 #endif
 };
+/* a CC sets parameter id of track t as a knob would: 0..127 over its range */
+static void midi_cc_set(track_t *t, uint32_t id, uint32_t value)
+{
+    const param_desc_t *d = param_desc_of(eng_idx(t->eng_req), id);
+    int32_t v = d->min + ((int32_t)value * (d->max - d->min) + 63) / 127;
+    if (d->max <= d->min || t->p[id] == v)
+        return;
+    t->p[id] = (int16_t)v;
+    (void)motion_capture(t, id, (int16_t)v);
+}
+/* MIDI LEARN (1.5, Discussion #170): up to ML_N CCs, each set to one parameter of one track, whatever channel it
+ * comes on (a channel ROUT ignores stays ignored) and whichever track that channel plays. Kept with the settings in
+ * the 32 bytes of favorites.factory[14] (no engine 14: favorites.c; all 0 in every older setting = nothing learned),
+ * an entry two bytes, as a 16-bit value LSB first: bits 0..6 the CC, 7..8 the track, 9..15 the parameter's code, 0 =
+ * an empty entry: a common parameter its P_* id + 1 (1 .. ML_E0 - 1: their ids never move, new ones go before P_E0),
+ * an engine parameter ML_E0 + k for P_E0 + k (P_E0 moves when common ones are added). A learned CC no longer reaches
+ * the standard map (#103) on any channel: the controller is the user's now. The CCs with a meaning of their own
+ * (midi_control's cases, CC0 / 32 bank select, CC11 EXPR, CC96 / 97 data increment, CC120..127) are never learned. The UI
+ * (midi_learn.c) writes the entries with the interrupts off; ml_arm / ml_heard hand a CC heard while learning to it */
+#define ML_N 16u
+#define ML_E0 120u
+typedef char ml_ids_fit[P_E0 < ML_E0 && P_COUNT - P_E0 == 8 ? 1 : -1];
+static uint8_t *const ml_tab;               /* favorites.factory[14] (midi_learn.c: a build without the UI, none) */
+static volatile uint8_t *const ml_io;       /* ui.ml.io (midi_learn.c; not globals here: the ISR's data keeps its layout) */
+#define ml_arm (ml_io[0])                   /* the UI waits for a CC (MIDI LEARN with a parameter picked) */
+#define ml_heard (ml_io[1])                 /* .. the CC that came meanwhile, + 1 (0 none) */
+static uint32_t ml_id(uint32_t code)        /* an entry's code -> P_* id, P_COUNT: none this firmware knows */
+{
+    return code >= ML_E0 ? P_E0 + code - ML_E0 : code && code <= P_E0 ? code - 1u : P_COUNT;
+}
+static int ml_free_cc(uint32_t cc)          /* (CC1 6 38 64 98..101 120..127: midi_control's own) */
+{
+    return cc && cc < 120u && cc != 1u && cc != 6u && cc != 11u && cc != 32u && cc != 38u && cc != 64u &&
+           (cc < 96u || cc > 101u);
+}
+/* 1: cc is learned (set here) or taken by MIDI LEARN waiting for one */
+static int __attribute__((noinline)) midi_learned(uint32_t cc, uint32_t value)
+{
+    uint32_t i, e, id, hit = 0;
+    if (!ml_tab || !ml_free_cc(cc))
+        return 0;
+    if (ml_arm) {
+        if (!ml_heard)
+            ml_heard = (uint8_t)(cc + 1u);
+        return 1;
+    }
+    for (i = 0; i < ML_N; i++) {
+        e = ml_tab[2u * i] | (uint32_t)ml_tab[2u * i + 1u] << 8;
+        if ((e >> 9) && (e & 127u) == cc) {
+            if ((id = ml_id(e >> 9)) < P_COUNT)
+                midi_cc_set(&trk[(e >> 7) & 3u], id, value);
+            hit = 1;
+        }
+    }
+    return hit;
+}
+
 static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint32_t value)
 {
-    const param_desc_t *d;
     uint32_t i, id = 0xFFFFu, e;
-    int32_t v;
+    if (midi_learned(cc, value))                /* (a learned CC is the user's: not the map's) */
+        return;
     for (i = 0; i < NELEM(MIDI_CC_MAP); i++)
         if (MIDI_CC_MAP[i][0] == cc)
             id = MIDI_CC_MAP[i][1];
@@ -241,12 +298,7 @@ static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint3
             return;
         id = P_E0 + e - 1u;
     }
-    d = param_desc_of(eng_idx(t->eng_req), id);
-    v = d->min + ((int32_t)value * (d->max - d->min) + 63) / 127;
-    if (d->max <= d->min || t->p[id] == v)
-        return;
-    t->p[id] = (int16_t)v;
-    (void)motion_capture(t, id, (int16_t)v);
+    midi_cc_set(t, id, value);
 }
 
 static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)

@@ -13,6 +13,7 @@ static void draw_menu(void);
 static int name_on(void);                              /* NAME (ui_name.c) */
 static uint64_t lock_held(void);                       /* parameter locks: the steps held on STEP (ui_input.c) */
 static void name_draw(void);
+#include "ui_help.c"                                   /* 1.5: HELP's hints (draw_foot, ui_layer.c draw_layer) */
 
 /* --------------------------------------------------------- drawing --- */
 #define COL_W CARD_W                                  /* a card: 57 x 44 at x 3 + 59 c, y 28 */
@@ -724,12 +725,12 @@ static void sound_name(const track_t *t, char *b)
 
 static void draw_foot(void)
 {
-    char s[48], pn[16], ti[20];
+    char s[48], pn[16], ti[20], ln[24];
     const track_t *t = TSEL;
     uint32_t sig;
     const page_t *pg = cur_page();
     const engine_t *e = ENGINES[TSEL->eng_req % NENGINES];
-    const char *ename = e->name;
+    const char *ename = e->name, *help;
     int32_t x;
     sound_name(t, pn);
     if (ui.home)
@@ -754,11 +755,21 @@ static void draw_foot(void)
     }
     if (grid_on())
         sig += 0x51EDu + (uint32_t)black_held(GK_ACC) * 977u;
+    help = ui.help_t && !ui.ml.on ? help_page() : 0;   /* 1.5, HELP ON: the page's hint for ~2 s after it was entered
+                                                       * (not while MIDI LEARN shows its line) */
+    if (help)
+        sig = str_hash(sig + 0x4E1Bu, help);
+    if (ui.ml.on && !act_cols()) {                        /* MIDI LEARN (midi_learn.c): what is picked, its CC */
+        ml_line(ln);
+        sig += str_hash(0x1EA2u, ln);
+    }
     if (!ui.force && sig == ui.foot_sig)
         return;
     ui.foot_sig = sig;
     cv_begin(240, H_FOOT, T_BG);
-    if (act_cols()) {                                 /* row 1: the OCT+ / OCT- hint in place of the steps */
+    if (help) {                                       /* row 1: the hint in place of the steps or the OCT+ / OCT- hint */
+        help_row(help, 2);
+    } else if (act_cols()) {                          /* row 1: the OCT+ / OCT- hint in place of the steps */
         char ha[16], hb[16];
         khint_t kh[3];
         uint32_t rn = foot_rename();
@@ -772,6 +783,11 @@ static void draw_foot(void)
         } else {
             cv_key_row(8, 232, 2, kh, 2, act_ready() ? 3u : 2u, T_BG);
         }
+    } else if (ui.ml.on) {                               /* row 1: MIDI LEARN's line, OCT+ DONE at the right */
+        khint_t kh = {KC_OCTUP, "DONE"};
+        int32_t kw = kh_w(KC_OCTUP, "DONE");
+        cv_free_text(8, 2, &AF_S, ln, T_ACCENT, T_BG, 232 - kw - 8 - 8);
+        cv_key_row(232 - kw, 232, 2, &kh, 1, 1u, T_BG);
     } else if (grid_on()) {                           /* row 1: the page, and what the keys do */
         char b[16];
         uint32_t len = (uint32_t)t->p[P_SLEN];
@@ -858,7 +874,10 @@ static void draw_columns(void)
             const param_desc_t *d = home_param(c, &vp);
             param_format(d, *vp, val, &unit);
             card_mot_of(vp);
-            draw_column(c, d->label, val, unit, VAL(c), RATIO(d, enum_rank(d, *vp)), param_icon(d, *vp));
+            if (home_levels())                         /* 1.5: T1..T4 LEVEL, the track's cushion, muted: DIM */
+                draw_column(c, "LEVEL", val, unit, trk[c].p[P_MUTE] ? T_DIM : VAL(c), RATIO(d, *vp), trk_icon(c, 1));
+            else
+                draw_column(c, d->label, val, unit, VAL(c), RATIO(d, enum_rank(d, *vp)), param_icon(d, *vp));
         }
         return;
     }
@@ -914,7 +933,7 @@ static void draw_columns(void)
         }
         step = ev_step_of(c);
         id = k == EVK_REC ? MOTION_ID(&motion.event[c & 0xFFu]) : k == EVK_ADD ? ui.ev_id :
-             k == EVK_CHANCE ? EV_CHANCE : k == EVK_RATCH ? EV_RATCH : EV_NUDGE;
+             k == EVK_CHANCE ? EV_CHANCE : k == EVK_RATCH ? EV_RATCH : k == EVK_VEL ? EV_VEL : EV_NUDGE;
         draw_column(0, "ROW", val, "", VAL(0u), -1, ICON_AUTO);
         fmt_int(val, (int32_t)step + 1);
         draw_column(1, "STEP", val, "", k != EVK_ADD || step < (uint32_t)t->p[P_SLEN] ? VAL(1u) : T_DIM, -1, ICON_AUTO);
@@ -931,6 +950,17 @@ static void draw_columns(void)
             ev_nudge_fmt(val, sv);
             draw_column(3, "VALUE", val, "/16", k != EVK_ADD && ev_nudge_plays(t, cs) ? VAL(3u) : T_DIM, (sv + 8) * 66,
                         ICON_AUTO);
+            return;
+        }
+        if (id == EV_VEL) {                            /* a step's VEL (1.5): 1..127, DIM where it does not play; */
+            const step_t *cs = &t->step[step % NSTEP];  /* + ADD: the rows shown or not */
+            int32_t sv = ev_sval(cs, EVK_VEL);
+            if (k == EVK_ADD) {
+                draw_column(3, "ROWS", ui.ev_vel ? "SHOWN" : "HIDDEN", "", T_DIM, -1, ICON_AUTO);
+                return;
+            }
+            fmt_int(val, sv);
+            draw_column(3, "VALUE", val, "", ev_vel_plays(cs) ? VAL(3u) : T_DIM, sv * 1000 / 127, ICON_LEVEL);
             return;
         }
         if (id == EV_CHANCE || id == EV_RATCH) {       /* a step's CHANCE (the die) / RATCH; + ADD: what it adds */
@@ -1122,7 +1152,12 @@ static void draw_columns(void)
             fmt_int(sl + 1, TSEL->p[P_SLEN]);
             draw_column(0, "STEP", sn, sl, VAL(0u), -1, ICON_AUTO);
             draw_column(1, "NOTE", val, u, step_on(st) ? VAL(1u) : T_DIM, -1, ICON_AUTO);
-            draw_column(2, "TIME", TIME_N[st->time % 3u], "", VAL(2u), -1, ICON_AUTO);
+            if (step_on(st)) {                            /* a note: its LEN (1.5, KNOB 3: the TIEs after it) */
+                fmt_int(sn, (int32_t)note_len(TSEL, ui.cursor));
+                draw_column(2, "LEN", sn, "", VAL(2u), -1, ICON_AUTO);
+            } else {
+                draw_column(2, "TIME", TIME_N[st->time % 3u], "", VAL(2u), -1, ICON_AUTO);
+            }
             draw_column(3, "FLAG", FLAG_N[(st->flags & SF_ACCENT ? 1u : 0u) | (st->flags & SF_SLIDE ? 2u : 0u)], "",
                         VAL(3u), -1, ICON_AUTO);
         }
@@ -1452,6 +1487,8 @@ static void ui_draw_page(uint32_t counting)
         ui.bpm_t--;
     if (ui.hot_t)
         ui.hot_t--;
+    if (ui.help_t)
+        ui.help_t--;
     felucca_dbg.stage = 6;
     draw_foot();
     ui.force = 0;
