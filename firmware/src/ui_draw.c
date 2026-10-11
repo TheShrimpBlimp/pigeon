@@ -1436,6 +1436,9 @@ static void style_apply(void)
 }
 
 static void ui_draw_page(uint32_t counting);
+#if FELUCCA_KO
+#include "ko_ui.c"
+#endif
 static void ui_draw(void)
 {
     static uint8_t counting;
@@ -1496,6 +1499,9 @@ static void ui_draw_page(uint32_t counting)
         ui.force = 0;
         return;
     }
+#if FELUCCA_KO
+    if (ko_home()) { ko_draw(); return; }
+#endif
     if (!ui.home && !page_visible(ui.page)) {          /* an OP page of a track that is not DIGITAL (without
                                                          * FELUCCA_FM4: any track): EDIT 1 */
         ui.page = (uint8_t)page_first(FAM_EDIT);

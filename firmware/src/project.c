@@ -1156,6 +1156,9 @@ static void settings_poll(void)
     persist_t p;
 #if FELUCCA_SLICE
     slc_store_poll();                              /* SLICE's slices edited on the SLICES page */
+#if FELUCCA_KO
+    ko_store_poll();
+#endif
 #endif
     if (!persist_pending || !flash_ok || transport_busy() ||
         (persist_pending == 2u && (uint32_t)(fm1_ms - persist_retry_ms) < 1000u))

@@ -36,6 +36,7 @@
 #define LDR_DATA_HI 0xE0000u                    /* bytes (user samples) the host writes */
 #define LDR_NSEC ((LDR_APP_HI - LDR_APP_LO) >> 12)
 #define LDR_FL_MAX 0x100000u                    /* flash.bin: at most the 1 MiB part */
+#include "../hal/ko_layout.h"
 
 static int ldr_fread(uint32_t off, void *p, uint32_t n);
 static int ldr_erase(uint32_t off);
@@ -109,7 +110,7 @@ static int ldr_session(void)
 {
     static uint8_t hdr[0x400], sec[0x1000], cur[0x1000];
     static uint16_t sc[LDR_NSEC];
-    uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, want = ~0u, done = 0;   /* (no CRC16: no flash.bin entry) */
+    uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, want = ~0u, done = 0, ko_layout = 0;
     int rc;
     /* 1. UFW header + entry list (ota.c; it leaves the entries decoded in hdr) */
     if ((rc = ota_ufw(hdr, &fl_off, &fl_size, &ota_off, &ota_len)) != 0)
@@ -130,8 +131,22 @@ static int ldr_session(void)
     /* 2b. the whole package first: nothing is erased for a damaged one */
     if ((rc = ldr_check(fl_off, fl_size, want, sc, sec)) != 0)
         return rc;
+    /* A checksum-protected package descriptor authorizes this exact layout.
+     * No device-stored length can move the erase boundary. */
+    if (ota_read(fl_off+LDR_APP_LO+KO_LAYOUT_ENTRY,sec,32)) return -7;
+    ldr_sfc(sec,32,KO_LAYOUT_ENTRY,key);
+    if (ota_memeq(sec+16,(const uint8_t *)KO_LAYOUT_NAME,8)) {
+        if (ota_crc16(sec+2,30,0) != ota_rd16(sec) || ota_rd32(sec+4) != KO_APP_HI ||
+            ota_rd32(sec+8) != KO_APP_DATA_HI-KO_APP_HI) return -14;
+        ko_layout = 1;
+    }
+    if (ldr_fread(0xA0000u,cur,4)) return -8;
+    if (!ko_layout && ota_rd32(cur) == KO_BANK_MAGIC) return -15; /* export/erase bank before downgrade */
     /* 3. app area, sector by sector */
     for (s = LDR_APP_LO; s < LDR_APP_HI; s += 0x1000u) {
+        if (ko_layout && s >= KO_APP_HI && s < KO_APP_DATA_HI) {
+            done += 0x1000u; ldr_progress(done,LDR_APP_HI-LDR_APP_LO); continue;
+        }
         uint32_t again;
         for (again = 0;; again++) {                      /* as checked in 2b, else read it again */
             for (k = 0; k < 0x1000u; k += 512u)
@@ -172,6 +187,7 @@ static int ldr_session(void)
         uint8_t r[80];
         if (s - 0x1000u >= LDR_DATA_LO && s - 0x1000u < LDR_DATA_HI)
             continue;                                    /* Felucca's store: user data that may look like one */
+        if (s-0x1000u >= KO_TOP_LO && s-0x1000u < KO_TOP_HI) continue;
         if (ldr_fread(s - 0x100u, r, 80))
             break;
         if (ota_rd16(r + 6) == 0x5441u && ota_rd16(r) && ota_rd16(r) == ota_crc16(r + 2, 78, 0))

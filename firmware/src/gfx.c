@@ -132,11 +132,24 @@ static uint32_t ux_luma(uint16_t c)        /* 0..255 */
     return ((c >> 11) * 255u / 31u * 54u + ((c >> 5) & 63u) * 255u / 63u * 183u + (c & 31u) * 255u / 31u * 19u) >> 8;
 }
 
+#if defined(FELUCCA_KO) && FELUCCA_KO
+static uint8_t ko_palette_on;
+#endif
 static void palette_set(uint32_t i)
 {
     const ui_pal_t *p = &UI_PALETTES[i % NPALETTES];
+#if defined(FELUCCA_KO) && FELUCCA_KO
+    ui_pal_t green = *p;
+    if (ko_palette_on) {
+        green.bg = 0x0020; green.surf = 0x0101; green.text = 0xBFF7;
+        green.theme = 0x07E0; green.accent = 0xAFE8; p = &green;
+    }
+#endif
     i %= NPALETTES;
     ux.mono = i == UI_GREY_INDEX;
+#if defined(FELUCCA_KO) && FELUCCA_KO
+    if (ko_palette_on) { ux.mono = 0; i = NPALETTES; }
+#endif
     ux.bg = p->bg; ux.surf = ux.style ? p->bg : p->surf; ux.text = p->text; ux.theme = p->theme; ux.accent = p->accent;
     ux.mid = ux_mix(p->bg, p->text, UI_MID_PCT);
     ux.dim = ux_mix(p->bg, p->text, UI_DIM_PCT);

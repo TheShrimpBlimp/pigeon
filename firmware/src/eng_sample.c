@@ -64,18 +64,56 @@ static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", 
 #define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)
 #endif
 static const uint8_t *smp_user_xip(uint32_t k) { return SMP_USER_XIP(k); }
+static uint32_t smp_user_gen;
 #if FELUCCA_SLICE
 static void slc_user_scan(uint32_t k, int valid);   /* eng_slice.c: SLICE's slice table of the slot */
 #else
 #define slc_user_scan(k, valid) ((void)0)
 #endif
-static uint32_t smp_user_gen;                       /* + 1 per slot scan (GRAIN: its seek index follows uploads) */
+#if FELUCCA_KO_STORAGE
+#include "ko_bank.c"
+#endif
+static inline uint32_t smp_byte(uint32_t off)
+{
+#if FELUCCA_KO_STORAGE
+    if (off & KO_VOFF) return ko_bank_byte(off & ~KO_VOFF);
+#endif
+    return SMP_DATA[off];
+}
+/* Paired KO song: two independently encoded chunks in USR1 / USR3.
+ * Existing headers remain version 1; reserved words bind the pair. No partition moves. */
+#define SMP_KO_PAIR 0x31534F4Bu /* KOS1 */
+static int smp_ko_pair_requested(void)
+{
+#if FELUCCA_KO
+    const smp_user_hdr_t *a = (const smp_user_hdr_t *)smp_user_xip(0);
+    return a->magic == SMP_USER_MAGIC && a->rsv == 0x4Bu && a->rsv2[0] == SMP_KO_PAIR;
+#else
+    return 0;
+#endif
+}
+static int smp_ko_pair_valid(void)
+{
+    const smp_user_hdr_t *a = (const smp_user_hdr_t *)smp_user_xip(0);
+    const smp_user_hdr_t *b = (const smp_user_hdr_t *)smp_user_xip(2);
+    return smp_ko_pair_requested() && usr_nz[0] == 1 && usr_nz[2] == 1 &&
+        b->rsv == 0x4Cu && b->rsv2[0] == SMP_KO_PAIR && a->rsv2[1] == b->rsv2[1] &&
+        a->data_len <= SMP_USER_SIZE - SMP_USER_DATA - 4096u &&
+        usr_zone[0][0].rate == usr_zone[2][0].rate;
+}
 
 /* (re)read slot k from flash: valid header -> zones usable; call after boot and after an upload
  * (main loop: SLICE scans the slot's audio here). The zones are checked in a copy: an unusable slot leaves
  * every zone of it empty (n 0: a voice still on it ends), never a half-checked one */
 static void smp_user_scan(uint32_t k)
 {
+#if FELUCCA_KO_STORAGE
+    if (*(const uint32_t *)smp_user_xip(0) == KO_BANK_MAGIC) {
+        if (!k) ko_bank_scan();
+        return;
+    }
+    ko_bank_active = 0;
+#endif
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
     smp_zone_t zt[16];
     uint32_t i, base, nz = 0;
@@ -123,6 +161,9 @@ static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int
 /* SET / SRC si (0..SMP_NALL - 1) has no sample data: an empty or invalid user slot, a built-in set without data */
 static int smp_set_missing(uint32_t si)
 {
+#if FELUCCA_KO_STORAGE
+    if (ko_bank_active && si == SMP_NSETS && ko_bank.codec == KO_CODEC_MP3) return 1;
+#endif
     if (si < SMP_NSETS)
         return !SMP_ZONES[SMP_SETS[si].z0].n;
     return !usr_nz[(si - SMP_NSETS) % SMP_USER_SLOTS];
@@ -138,7 +179,7 @@ static inline const smp_zone_t *smp_zone(uint32_t zi)
  * index, s[2] previous sample, s[3] current sample, s[4] zone, s[5] step Q16 */
 static inline int32_t sample_next(const smp_zone_t *z, voice_t *v, int loop)
 {
-    uint32_t pos = v->ph[0], b = SMP_DATA[z->off + (pos >> 1)];
+    uint32_t pos = v->ph[0], b = smp_byte(z->off + (pos >> 1));
     uint32_t code = (pos & 1u) ? (b >> 4) : (b & 15u);
     int32_t step = IMA_STEP[(uint32_t)v->s[1] <= 88u ? v->s[1] : 88], vd = step >> 3;
     if (code & 4u)
@@ -190,7 +231,32 @@ static void sample_note_on(track_t *t, voice_t *v)
     v->s[7] = 0;                 /* lo-pass state */
     if (smp_set_missing(si))
         v->s[6] = 2;             /* 2 = no sample data: the sine (smp_sine; ph[0] its phase) */
+#if FELUCCA_KO
+    if (ko_kit(t)) {                                /* unloaded pads are silent, never a fallback sine */
+        if (zi == 0xFFFFu || smp_set_missing(si))
+            v->s[6] = 1;
+        v->gate = 0;                               /* sequencer gate length does not truncate a hit */
+    }
+#endif
 }
+
+#if FELUCCA_KO
+static int32_t sample_ko_keys(const track_t *t, uint32_t k)
+{
+    int32_t pad = ko_pad(k);
+    return ko_kit(t) ? (pad < 0 ? 255 : 60 + pad) : -1;
+}
+static int32_t sample_ko_amp(track_t *t, voice_t *v, int32_t adsr)
+{
+    if (!ko_kit(t))
+        return adsr;
+    if (!v->active) return adsr;                    /* budget/overload fades must still finish */
+    if (v->s[6]) { v->active = 0; return 0; }
+    v->stage = 2;
+    v->env = 1 << 24;
+    return 32767;
+}
+#endif
 
 static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
@@ -201,6 +267,10 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
     uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);   /* Q16 samples per output */
     int32_t bits = p[P_E2], lp = 4000 + ((clamp((p[P_E4] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15);
     int32_t drv = p[P_E6], sh = bits / 10;
+    int loop = p[P_E3];
+#if FELUCCA_KO
+    if (ko_kit(t)) loop = 0;
+#endif
     if (v->s[6] == 2) {                               /* no sample data: the sine at the note's pitch + TUNE */
         smp_sine(out, n, m, p[P_E1] * 16, lp, &v->ph[0], &v->s[7]);
         return;
@@ -210,7 +280,7 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
         return;
     }
     if (v->ph[0] == 0 && v->ph[1] == 0 && v->s[3] == 0)
-        v->s[3] = sample_next(z, v, p[P_E3]);         /* prime the interpolator */
+        v->s[3] = sample_next(z, v, loop);         /* prime the interpolator */
     for (i = 0; i < n; i++) {
         int32_t s;
         frac += stepq;
@@ -226,7 +296,7 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
                 }
                 break;
             }
-            v->s[3] = sample_next(z, v, p[P_E3]);
+            v->s[3] = sample_next(z, v, loop);
         }
         s = v->s[2] + (((v->s[3] - v->s[2]) * (int32_t)(frac >> 1)) >> 15);
         if (sh)                                       /* BITS: 0 = clean, up to 12 bits removed */
@@ -252,7 +322,11 @@ static const engine_t ENG_SAMPLE = {
         {"CUT", F_INT, 0, 127, 127, 0, 0},
         {"-", F_INT, 0, 0, 0, 0, 0},
         {"DRV", F_PCT, 0, 127, 0, 0, 0},
+#if FELUCCA_KO
+        {"KIT", F_ENUM, 0, 1, 0, N_ONOFF_E, 0},
+#else
         {"-", F_INT, 0, 0, 0, 0, 0},
+#endif
     },
     .presets = SMP_PRESET_TABLE,
     .npresets = SMP_NPRESETS,
@@ -260,4 +334,8 @@ static const engine_t ENG_SAMPLE = {
     .render = sample_render,
     .knob = {P_E0, P_E4, P_ATK, P_REL},
     .sampled = 1,
+#if FELUCCA_KO
+    .keys = sample_ko_keys,
+    .amp = sample_ko_amp,
+#endif
 };

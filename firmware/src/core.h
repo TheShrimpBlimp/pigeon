@@ -12,6 +12,19 @@
 #define NPART 4                  /* synth parts: tracks 1..4 */
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
 #define NSTEP 64
+#ifndef FELUCCA_KO
+#define FELUCCA_KO 0             /* optional sampler interface; ordinary Felucca is unchanged */
+#endif
+#include "../hal/ko_layout.h"
+#if FELUCCA_KO_STORAGE && !FELUCCA_KO
+#error "KO storage requires FELUCCA_KO=1"
+#endif
+#if FELUCCA_KO_STORAGE && ((defined(FELUCCA_FLASH) && !FELUCCA_FLASH) || (defined(FELUCCA_OTA) && !FELUCCA_OTA))
+#error "KO storage requires flash storage and the editor upload protocol"
+#endif
+#if FELUCCA_KO && defined(FELUCCA_SLICE) && !FELUCCA_SLICE
+#error "KO requires the SLICE engine"
+#endif
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
 #ifndef FELUCCA_SLICE
 #define FELUCCA_SLICE 1          /* the SLICE engine (eng_slice.c), engine 13; FELUCCA_SLICE=0 builds without it */
@@ -391,6 +404,9 @@ typedef struct {
 
 static track_t trk[NTRK];        /* the instrument: four parts */
 static song_t song;
+#if FELUCCA_KO
+#include "ko_state.h"
+#endif
 #define TSEL (&trk[song.sel])    /* the selected track */
 
 /* SWING of a track's step clock: the track's own plus the global one, at most 100 (#31). The sequencer

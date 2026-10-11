@@ -22,6 +22,8 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you fi
 - Editor: [web editor](https://hugelton.github.io/Felucca/webapp/editor/); its development has moved to
   [Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp)
 - Build: [BUILDING.md](BUILDING.md)
+- Optional expanded sampler storage: [one-minute song banks](docs/KO_STORAGE.md) (`FELUCCA_KO=1 FELUCCA_KO_STORAGE=1`; shared flash, MP3 or lower-rate ADPCM)
+- Optional sampler interface: [KO Mode v0.1](docs/KO_MODE.md) (`FELUCCA_KO=1`; one chopped song sample and 16 drum pads)
 
 <a href="https://hugelton.itch.io/felucca"><img src="https://static.itch.io/images/badge-color.svg" alt="Available on itch.io" width="74"></a>
 

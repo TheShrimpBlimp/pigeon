@@ -49,6 +49,12 @@ and the version string `v1.0`; the package is `build/felucca-1.0.fwsc`, and
 (`felucca-1.0-app.bin`), `SHA256SUMS`, the sample attribution, `LICENSE`, `LICENSING.md` and
 `LICENSES/` (the package contains Apache-2.0 SDK files, so the licence texts travel with it).
 
+The optional sampler profiles use `FELUCCA_KO=1`; add `FELUCCA_KO_STORAGE=1`
+for the shared song/drum flash bank and MP3 decoder. The latter replaces factory
+sample audio and changes the application reservation; see
+[Expanded KO storage](docs/KO_STORAGE.md) for migration and validation details.
+It requires flash storage, the editor upload protocol and the SLICE engine.
+
 Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `core.h` and `icons.c`):
 
 | Flag | Default | |

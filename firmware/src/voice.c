@@ -86,6 +86,9 @@ static uint32_t trk_nvoice(const track_t *t)
 /* the part's voice mode: P_VOICE, POLY for an engine of hits (engine_t.oneshot: DRUM) */
 static uint32_t trk_vmode(const track_t *t)
 {
+#if FELUCCA_KO
+    if (ko_song(t)) return V_POLY;                   /* independent held/latching chops */
+#endif
     return ENGINES[t->engine]->oneshot ? V_POLY : (uint32_t)t->p[P_VOICE];
 }
 
@@ -365,6 +368,20 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
     uint32_t any = 0, i, mode = trk_vmode(t);
     if (t->p[P_MUTE])
         return;
+#if FELUCCA_KO
+    if (ko_song(t)) {
+        int stopped = 0;
+        for (i = 0; i < NVOICE; i++) {
+            voice_t *v = &t->v[i];
+            if (v->active && v->gate && v->note == note &&
+                ((uint32_t)v->s[4] & (KO_VOICE | KO_V_LATCH)) == (KO_VOICE | KO_V_LATCH)) {
+                v->s[4] &= (int32_t)~(KO_V_LATCH | KO_V_NO_LOOP);
+                v->gate = 0; v->stage = 3; stopped = 1;
+            }
+        }
+        if (stopped) return;                         /* press again: release the latched chop */
+    }
+#endif
     if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
         for (i = 0; i < t->xp_n && t->xp_note[i] != note; i++)
             ;
@@ -435,6 +452,11 @@ static void trk_note_off(track_t *t, uint32_t note)
     }
     for (i = 0; i < NVOICE; i++)                        /* a fallback above already has its new pitch */
         if (t->v[i].note == note && t->v[i].gate) {
+#if FELUCCA_KO
+            if (ko_song(t) && t->v[i].active &&
+                ((uint32_t)t->v[i].s[4] & (KO_VOICE | KO_V_LATCH)) == (KO_VOICE | KO_V_LATCH))
+                continue;                           /* latch applies to key, MIDI and sequencer note events */
+#endif
             t->v[i].gate = 0;
             t->v[i].stage = 3;
         }
@@ -444,6 +466,10 @@ static void trk_all_off(track_t *t)
 {
     uint32_t i;
     for (i = 0; i < NVOICE; i++) {
+#if FELUCCA_KO
+        if (t->engine == 13u && ((uint32_t)t->v[i].s[4] & KO_VOICE))
+            t->v[i].s[4] &= (int32_t)~(KO_V_NO_LOOP | KO_V_LATCH);
+#endif
         t->v[i].gate = 0;
         t->v[i].stage = t->v[i].active ? 3 : 0;
     }

@@ -5,6 +5,12 @@ Felucca is free software, licensed under the GNU General Public License, version
 bundled or ported parts keep their own licences; they are listed below, and their licence
 texts are in `LICENSES/`.
 
+The optional expanded KO storage profile also bundles libmad under
+GPL-2.0-or-later. Its original notices and license are retained in
+`firmware/vendor/libmad/COPYRIGHT` and `firmware/vendor/libmad/COPYING`; provenance
+and the local bounds fix are documented in `firmware/vendor/libmad/FELUCCA_ORIGIN.md`.
+The combined firmware remains GPL-3.0-only.
+
 Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 
 ## What is GPL-3.0-only

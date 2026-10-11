@@ -168,6 +168,10 @@ CC="${CC:-cc} -O1 -Wall -Wno-unused-function"
 fail=0
 run() { echo "== $1"; shift; "$@" || fail=1; }
 
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_test" tests/ko_test.c -lm
+run "KO: pads, independent chops, one shots, compression, metadata and unchanged project format" "$OUT/ko_test"
+run "KO kit upload: exact zones and pad order" python3 tests/ko_upload_test.py
+
 $CC -o "$OUT/storage_test" tests/storage_test.c
 run "flash storage (A/B, torn writes)" "$OUT/storage_test"
 

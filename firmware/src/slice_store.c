@@ -32,6 +32,9 @@ _Static_assert(sizeof(slc_rec_t) == 152u, "SLICE record layout");
 /* slot k's sample leaves its last sector free (the record can go there) */
 static int slc_rec_room(uint32_t k)
 {
+#if FELUCCA_KO_STORAGE
+    if (ko_bank_active) return !k;
+#endif
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
     return usr_nz[k] && h->data_len <= SLC_REC_OFF - SMP_USER_DATA;
 }
@@ -45,6 +48,9 @@ static void slc_rec_make(uint32_t k, slc_rec_t *r)
     r->magic = SLC_REC_MAGIC;
     r->len = s ? s->len : 0u;
     r->crc = ((const smp_user_hdr_t *)smp_user_xip(k))->crc;
+#if FELUCCA_KO_STORAGE
+    if (!k && ko_bank_active) r->crc = ko_bank_song_crc;
+#endif
     if (m) {
         r->n = m->n;
         r->end = m->end;
@@ -62,15 +68,25 @@ static void slc_store_load(uint32_t k)
     if (!s || !slc_rec_room(k))
         return;
     memcpy(&c, r, sizeof c);                         /* (one read of the flash) */
+    uint32_t crc = ((const smp_user_hdr_t *)smp_user_xip(k))->crc;
+#if FELUCCA_KO_STORAGE
+    if (!k && ko_bank_active) crc = ko_bank_song_crc;
+#endif
     if (c.magic != SLC_REC_MAGIC || c.rcrc != st_crc32(&c, sizeof c - 4u) || c.len != s->len ||
-        c.crc != ((const smp_user_hdr_t *)smp_user_xip(k))->crc || !c.n)
+        c.crc != crc || !c.n)
         return;
     slc_man_restore(k, c.n, c.end, c.pos);
 }
 
 /* write slot k's record if the flash holds something else: 0 nothing to do, 1 no room, 2 flash error, 3 written */
+#if FELUCCA_KO
+#include "ko_store.c"
+#endif
 static int slc_store_write(uint32_t k)
 {
+#if FELUCCA_KO
+    if (!k && usr_nz[0]) return ko_store_sector(0);
+#endif
     slc_rec_t r;
     uint32_t off = SMP_USER_BASE + k * SMP_USER_SIZE + SLC_REC_OFF;
     if (!usr_nz[k])                                  /* emptied or being uploaded meanwhile: nothing to keep */
@@ -105,4 +121,10 @@ static void slc_store_poll(void)
         ui_message("SLICES SAVED");
 }
 
-static void slc_store_boot(void) { slc_man_load = slc_store_load; }   /* persist_boot: before the slot scans */
+static void slc_store_boot(void)
+{
+    slc_man_load = slc_store_load;
+#if FELUCCA_KO
+    ko_load_hook = ko_store_load;
+#endif
+}   /* persist_boot: before the slot scans */

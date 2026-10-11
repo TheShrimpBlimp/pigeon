@@ -1285,6 +1285,13 @@ static void layer_lock_input(uint32_t pressed);
 static int page_tap(uint32_t b)
 {
     uint32_t f;
+#if FELUCCA_KO
+    if (ko.on && song.sel < 2u && (b == B_FX || b == B_ENV || b == B_LFO || (b == B_EDIT && ui.home))) {
+        ko.view = b == B_FX ? (ko.view == 1 ? 2 : 1) : b == B_ENV ? 3 : b == B_LFO ? 4 :
+            (!song.sel && ko.view == 0 ? 5 : 0);
+        go_home(); ui.force = 1; return 1;
+    }
+#endif
     if (b == B_EDIT && detail_on()) {                    /* DETAIL (1.5.1): the step's CHANCE RATCH NUDGE VEL back */
         if (chain_busy())
             ui_message("STOP TO EDIT");
@@ -1373,6 +1380,16 @@ static void ui_input(void)
     int32_t s, sel = 0, ks[4] = {0, 0, 0, 0};
     static uint32_t lock_ms;                            /* BPM LOCK: the last locked SELECT turn (fm1_ms | 1; 0 none) */
     midi_pc_poll();                                     /* MIDI Program Change (before fm6_poll: a bank voice) */
+#if FELUCCA_KO
+    uint8_t ko_was_on = ko.on;
+    ko.on = (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    if (ko_was_on != ko.on) {
+        ko_palette_on = ko.on; palette_set(settings.palette);
+        if (!ko.on) trk_all_off(&trk[0]);
+        ui.force = 1; ko.revision++;
+    }
+    if (ko.on) ko_prepare();
+#endif
     fm6_poll();                                         /* FM6: PTCH turned -> its patch */
 #if !FELUCCA_FM4
     for (k = 0; k < NTRK; k++)                          /* a DIGITAL sound any other way (the paths convert it */
@@ -1585,6 +1602,15 @@ static void ui_input(void)
             break;
         case B_OCTDN:
         case B_OCTUP: {
+#if FELUCCA_KO
+            if (ko_home()) {
+                if (!ko_ready()) { if (b == B_OCTUP) ko_setup(); }
+                else if (!song.sel) {
+                    ko_pitch_turn(b == B_OCTUP ? 1 : -1); ui.force = 1;
+                }
+                break;
+            }
+#endif
             uint32_t both = (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
             if (act_cols() || layer_set_open() || ui.ml.on)   /* action pages: enter / back (below); SET layers: OCT-; */
                 break;                                  /* MIDI LEARN: clear / done (below) */
@@ -1616,6 +1642,15 @@ static void ui_input(void)
         ml_oct(oct);
     }
     song.grid = (uint8_t)keys_mode();                 /* (seq.c: the keys are the grid's) */
+#if FELUCCA_KO
+    if (ko_home() && !song.sel && notes && !lay) {
+        for (uint32_t key = 0; key < 27u; key++)
+            if ((notes >> key) & 1u) {
+                int32_t pad = ko_pad(key);
+                if (pad >= 0) ko_select((uint32_t)pad + ko.bank * KO_PADS);
+            }
+    }
+#endif
 #if FELUCCA_SLICE
     if (notes && slice_page_on())                       /* SLICES: a key picks the slice it plays */
         slice_keys_pick(notes);
@@ -1640,10 +1675,20 @@ static void ui_input(void)
      * pass runs, so one landing after the layer's read went to the page as well: KNOB 1..4 edited the layer's control
      * and the page under it (HOME's sound, motion recorded), PRESETS could load a sound. They stay for the next pass */
     kq |= lay;
-    if (!lay && (s = panel_enc(EN_PRESET)) != 0)
+    if (!lay && (s = panel_enc(EN_PRESET)) != 0) {
+#if FELUCCA_KO
+        if (ko_home()) {
+            if (!song.sel) ko_select((uint32_t)clamp((int32_t)ko.selected + s, 0, KO_CHOPS - 1));
+        } else
+#endif
         presets_turn(s);
+    }
     if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
-        track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0, NTRK - 1));
+        track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0,
+#if FELUCCA_KO
+            ko.on ? 1 :
+#endif
+            NTRK - 1));
     if ((s = glo ? sel : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
         if (glo || !(ui_prefs & PREF_BPM_LOCK)) {
             song.g[G_BPM] = (int16_t)clamp(song.g[G_BPM] + accel(EN_SELECT, s, 200), GP[G_BPM].min, GP[G_BPM].max);
@@ -1661,6 +1706,9 @@ static void ui_input(void)
         uint64_t held;
         if ((s = panel_enc(EN_K1 + k)) == 0)
             continue;
+#if FELUCCA_KO
+        if (ko_home()) { ko_knob(k, s); continue; }
+#endif
         if (mom_down())                                 /* (LFO + a knob, MOMENTARY or not: LFO's release opens no page) */
             ui.pg_down &= (uint16_t)~(1u << panel.btn[B_LFO]);
         if ((held = lock_held()) != 0u) {               /* a step held on STEP: KNOB k locks (parameter locks) */

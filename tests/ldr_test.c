@@ -139,7 +139,8 @@ static int check(const char *what, int ok) { printf("%-56s %s\n", what, ok ? "ok
 int main(int argc, char **argv)
 {
     size_t olen;
-    static uint8_t user[0x1000];
+    static uint8_t user[0x1000], reclaimed[KO_APP_DATA_HI-KO_APP_HI], top[KO_TOP_HI-KO_TOP_LO];
+    int expanded = argc > 3 && !strcmp(argv[3], "ko-storage");
     uint8_t *old, head[0x4000];
     uint32_t ofo, nfo, i;
     int bad = 0, rc;
@@ -174,6 +175,20 @@ int main(int argc, char **argv)
         logical[at] ^= 0x01;
         requests = 0;
     }
+    if (expanded) {
+        uint32_t key; uint8_t descriptor[32];
+        ldr_chip_key(&key);
+        memcpy(descriptor,logical+nfo+LDR_APP_LO+KO_LAYOUT_ENTRY,32);
+        ldr_sfc(descriptor,32,KO_LAYOUT_ENTRY,key);
+        bad+=check("expanded package advertises checked KO layout",ota_memeq(descriptor+16,(const uint8_t *)KO_LAYOUT_NAME,8)&&
+            ota_rd32(descriptor+4)==KO_APP_HI&&ota_rd32(descriptor+8)==sizeof reclaimed);
+        for(i=0;i<sizeof reclaimed;i++) reclaimed[i]=(uint8_t)(i*13u+1u);
+        for(i=0;i<sizeof top;i++) top[i]=(uint8_t)(i*11u+3u);
+        /* Sample bytes that resemble a valid update record must survive cleanup. */
+        memcpy(top+0xF00,nor+0xE4F00,112);
+        memcpy(nor+KO_APP_HI,reclaimed,sizeof reclaimed);
+        memcpy(nor+KO_TOP_LO,top,sizeof top);
+    }
     /* a sector that comes in different the second time (a transfer error after the check) is read again */
     flip_addr = nfo + 0x20000u; flip_on = 2; flip_seen = 0;
     rc = ldr_session();
@@ -181,7 +196,9 @@ int main(int argc, char **argv)
     bad += check("install completes", rc == 0);
     bad += check("a sector changed in transfer after the check is read again", flip_seen == 3);
     flip_addr = 0xFFFFFFFFu;
-    bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, 0x93000 - 0x4000));
+    bad += check("app area == the new package's flash.bin", !memcmp(nor + 0x4000, logical + nfo + 0x4000, (expanded?KO_APP_HI:0x93000)-0x4000) &&
+        (!expanded || (!memcmp(nor+KO_APP_DATA_HI,logical+nfo+KO_APP_DATA_HI,0x93000-KO_APP_DATA_HI)&&
+         !memcmp(nor+KO_APP_HI,reclaimed,sizeof reclaimed)&&!memcmp(nor+KO_TOP_LO,top,sizeof top))));
     bad += check("flash head [0, 0x4000) untouched", !memcmp(nor, head, sizeof head));
     bad += check("finish asked (0xF0000000)", f0_asked >= 1);
     bad += check("update records cleared (RAM + flash 0xE4F00, the stock firmware's 0xE8F00)",
@@ -192,6 +209,15 @@ int main(int argc, char **argv)
     erases = 0; requests = 0;
     rc = ldr_session();
     bad += check("re-run with the same package erases nothing", rc == 0 && erases == 0);
+    if (expanded) {
+        uint8_t *next=logical; size_t next_len=logical_len;
+        ota_wr32(nor+0xA0000,KO_BANK_MAGIC);
+        logical=old; logical_len=olen; erases=0;
+        rc=ldr_session();
+        bad+=check("standard downgrade with active bank refused before erase",rc==-15&&erases==0&&
+            !memcmp(nor+KO_APP_HI,reclaimed,sizeof reclaimed)&&!memcmp(nor+KO_TOP_LO,top,sizeof top));
+        logical=next; logical_len=next_len;
+    }
     /* a package for another chip key is refused before any erase */
     {
         uint8_t save = logical[nfo + 0x4000 + 5];

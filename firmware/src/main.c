@@ -190,9 +190,17 @@ static void fm1_main(void)
         settings_save();
     }
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
+#if FELUCCA_KO
+    ko.on = (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    ko_palette_on = ko.on; palette_set(settings.palette);
+    if (ko.on) ko_prepare();
+#endif
     for (ms = 0; ms < 400u; ms += 10u) {      /* the splash; the pot followed (MIDI IN plays under it) */
         fm1_delay_ms(10);
         master_poll();
+#if FELUCCA_KO_STORAGE
+        ko_pcm_poll();
+#endif
     }
     kb_boot_hold = 0;
     lcd_fill(0, 0, 240, 240, T_BG);
@@ -212,6 +220,9 @@ static void fm1_main(void)
                 song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
         }
         master_poll();
+#if FELUCCA_KO_STORAGE
+        ko_pcm_poll();
+#endif
         {   /* OCT- + OCT+ held 5 s: enter UBOOT with RAM intact (debug / update); a countdown
              * shows from 2 s over the whole screen (the menu and the dialogs too: ui_draw), letting
              * go cancels it */

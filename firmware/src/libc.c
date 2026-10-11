@@ -28,6 +28,16 @@ int memcmp(const void *a, const void *b, unsigned n)
     return 0;
 }
 
+#if FELUCCA_KO_STORAGE
+void *memmove(void *d, const void *s, unsigned n)
+{
+    unsigned char *p = d; const unsigned char *q = s;
+    if (p > q) { while (n) { n--; p[n] = q[n]; } }
+    else { while (n--) *p++ = *q++; }
+    return d;
+}
+#endif
+
 static int str_eq(const char *a, const char *b)
 {
     while (*a && *a == *b) {

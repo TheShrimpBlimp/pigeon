@@ -811,6 +811,9 @@ static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_
     slicer_track_sd(t, b, d, n);
     if ((pf.mute >> (t - trk)) & 1u)
         perf_mute_sd((uint32_t)(t - trk), b, d, n);
+#if FELUCCA_KO
+    ko_compress(t, b, d, n);                            /* same gain preserves SPREAD's stereo balance */
+#endif
     for (i = 0; i < n; i++) {
         int32_t x = ((b[i] >> 2) * lvl) >> 10, a = x < 0 ? -x : x, y = ((d[i] >> 2) * lvl) >> 10;
         int32_t xs = clamp(x, -xmax, xmax);
@@ -840,6 +843,9 @@ static void mix_part(track_t *t, uint32_t n)
         t->tail = t->p[P_ITYPE] ? 64 : 16;              /* blocks of DIST / INSERT state to run out after the last
                                                          * voice (the INSERT's: 46 ms, a flanger's feedback) */
     else if ((!t->tail || !(t->p[P_DIST] | t->p[P_ITYPE]) || !--t->tail) && !slicer_busy(t)) {
+#if FELUCCA_KO
+        ko_compress(t, b, 0, n);                           /* detector/gain release continues through silence */
+#endif
         slicer_track(t, 0, n);                          /* (the SLICER's step clock runs on) */
         if (t->ins_run && !t->p[P_ITYPE])
             ins_rest(t);                                /* TYPE OFF while silent: no fade-out left for the next note */
@@ -859,6 +865,9 @@ static void mix_part(track_t *t, uint32_t n)
     }
     if (!spread_on) {                                   /* (the mix's values read after the calls: none is held over
                                                          * them, no spill in the loop: the ISR's cost as before 1.5) */
+#if FELUCCA_KO
+        ko_compress(t, b, 0, n);
+#endif
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;

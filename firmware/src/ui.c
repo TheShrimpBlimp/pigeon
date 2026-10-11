@@ -72,6 +72,9 @@ static uint32_t up_gen;                      /* bumped on every user bank change
 #define PREF_PREVIEW (0x02u << 16)
 #define PREF_CHORD_ADD (0x04u << 16)
 #define PREF_HELP (0x08u << 16)
+#if FELUCCA_KO
+#define PREF_KO (0x10u << 16)
+#endif
 /* 1.3 (Discussions #112, #134): MENU > DISPLAY > HOME, what the HOME page shows under its four cards: 0 SCOPE (the
  * oscilloscope, as before), 1 TRACKS (the four tracks as rows: ui_graph.c draw_home_tracks), 2 LEVELS (1.5, #134: the
  * rows of TRACKS, and KNOB 1..4 the LEVEL of T1..T4 in place of the engine's four: home_param). A byte of its own no
@@ -693,6 +696,9 @@ static void go_home(void)
  * (ui_input) */
 static void home_tap(void)
 {
+#if FELUCCA_KO
+    if (ko.on) { ko.view = 0; go_home(); ui.force = 1; return; }
+#endif
     uint32_t i = ui.page + 1u;
     if (ui.home) {
         ui.fam_last[FAM_TRK] = 0;                     /* (open_family: the family's first, the MIXER) */

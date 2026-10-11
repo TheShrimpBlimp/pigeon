@@ -28,6 +28,8 @@ import struct
 from pathlib import Path
 
 APP_SLOT = 0x8DFBC
+KO_APP_HI = 0x78000
+KO_APP_SLOT = APP_SLOT - (0x93000 - KO_APP_HI)
 FLASH_SIZE = 0x93000
 KEY = 0x980F
 # flash header: JieLi SDK defaults (burner_size 544, VID "0.01", flash_size 0xFF000,
@@ -104,7 +106,7 @@ def sdk_file(rel):
         raise SystemExit(f"fm1pkg_make: {path}: {e.strerror}. Set AC79_SDK to a JieLi AC79 SDK checkout.")
 
 
-def flash_image(app, key):
+def flash_image(app, key, ko_storage=False):
     spl = sdk_file("uboot.boot")                         # SDK SPL, BANKCB-encoded as in the SDK
     cfg_tool = sdk_file("cfg_tool.bin")
     eq = sdk_file("cfg/eq_cfg_hw.bin")
@@ -126,20 +128,24 @@ def flash_image(app, key):
         enc(head, o, 32)
     f[0:len(head)] = head
     # ---- app area (plain first, then SFC)
-    if len(app) > APP_SLOT:
-        raise SystemExit(f"app is {len(app)} B, the slot is {APP_SLOT} B")
-    app = app + b"\xFF" * (APP_SLOT - len(app))
-    blk = 0x120 + APP_SLOT + len(cfg_tool)              # app_area_head block size
+    app_slot = KO_APP_SLOT if ko_storage else APP_SLOT
+    if len(app) > app_slot:
+        raise SystemExit(f"app is {len(app)} B, the slot is {app_slot} B")
+    app = app + b"\xFF" * (app_slot - len(app))
+    blk = 0x120 + app_slot + len(cfg_tool)              # app_area_head block size
     area = bytearray(b"\xFF" * blk)
-    area[0x120:0x120 + APP_SLOT] = app
-    area[0x120 + APP_SLOT:blk] = cfg_tool
-    ents = [entry(crc16(app), 0x120, APP_SLOT, 0x82, 0xFF, 0, "app.bin"),
-            entry(crc16(cfg_tool), 0x120 + APP_SLOT, len(cfg_tool), 0x82, 0xFF, 0, "cfg_tool.bin"),
+    area[0x120:0x120 + app_slot] = app
+    area[0x120 + app_slot:blk] = cfg_tool
+    ents = [entry(crc16(app), 0x120, app_slot, 0x82, 0xFF, 0, "app.bin"),
+            entry(crc16(cfg_tool), 0x120 + app_slot, len(cfg_tool), 0x82, 0xFF, 0, "cfg_tool.bin"),
             # region descriptors; the bytes after the names are SDK packer fields (VM size, "CODE", "AUTO")
             entry(0xFFFF, 0x93000, 352256, 0x12, 0x80, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
             entry(0xFFFF, 0, FLASH_SIZE, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
             entry(0xFFFF, 0xE9000, 0x1000, 0x92, 0x80, 0, bytes.fromhex("4254494600ffffffffffffff4155544f")),
             entry(0xFFFF, 0xEA000, 0x12000, 0x92, 0x81, 1, "USR")]
+    if ko_storage:
+        ents[-1] = entry(0xFFFF, 0xEA000, 0x12000, 0x92, 0x81, 0, "USR")
+        ents.append(entry(0xFFFF, KO_APP_HI, 0x92000-KO_APP_HI, 0x92, 0x81, 1, "KOPOOL2"))
     area[32:32 + len(b"".join(ents))] = b"".join(ents)
     area[0:32] = entry(crc16(area[32:blk]), 0x02000120, blk, 0x83, 0xFF, 0, "app_area_head")
     # nested cfg directory right after the block: SDK default EQ table
@@ -147,6 +153,8 @@ def flash_image(app, key):
     cfg_body = eq_e + eq
     cfg = entry(crc16(cfg_body), 0x20, 0x20 + len(cfg_body), 0x83, 0xFF, 1, "cfg") + cfg_body
     region = bytearray(area + cfg)
+    if ko_storage and len(region) > KO_APP_HI-0x4000:
+        raise SystemExit("KO package crosses the reclaimed application boundary")
     sfc(region, 0, len(region), 0, key)
     f[0x4000:0x4000 + len(region)] = region
     return bytes(f)

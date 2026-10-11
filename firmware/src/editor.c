@@ -88,6 +88,8 @@ static int ed_smp_erase(uint32_t k, uint32_t all)  /* header sector, or the whol
     uint32_t i, took;
     int rc = 0;
     usr_nz[k] = 0;
+    slc_user_scan(k, 0);
+    smp_user_gen++;
     for (i = 0; i < 16u; i++)
         usr_zone[k][i].n = 0;                     /* a sounding voice ends instead of reading 0xFF */
     for (i = 0; i < (all ? SMP_USER_SIZE / 0x1000u : 1u) && !rc; i++) {
@@ -99,6 +101,9 @@ static int ed_smp_erase(uint32_t k, uint32_t all)  /* header sector, or the whol
     return rc;
 }
 static int ed_flash_stop(void);
+#if FELUCCA_KO_STORAGE
+#include "ko_bank_editor.c"
+#endif
 static int ed_smp_end(uint32_t k, const uint8_t *a, uint32_t na)
 {
     const smp_user_hdr_t *h = (const smp_user_hdr_t *)ed_smp_buf;
@@ -432,6 +437,12 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         (cmd >= ED_FM6B_BEGIN && cmd <= ED_FM6B_END))
         autosave_hold();                                /* (a transfer: no autosave meanwhile, project.c) */
     ed_begin(cmd);
+#if FELUCCA_KO_STORAGE
+    if (ko_bank_handle(cmd,a,na)) { ed_send(); return; }
+    if ((ko_bank_active || ko_upload_total) && cmd >= ED_SMP_BEGIN && cmd <= ED_SMP_ERASE) {
+        ed_b(na ? a[0] : 0); ed_b(6); ed_send(); return;
+    }
+#endif
     if (ed_ui_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_fm6_handle(cmd, a, na)) { ed_send(); return; }
@@ -644,6 +655,9 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
             ed_str(nm, 8);
             ed_b(usr_nz[i] ? (h->data_len + 1023u) / 1024u : 0u);
         }
+#if FELUCCA_KO
+        ed_b(0x4B); ed_b(1); /* K, paired-song protocol version */
+#endif
         break;
     case ED_UP_LIST: {                                     /* start, count -> start, count, total, per slot: used, engine, name;
                                                             * (1.2) then per slot its category (category.c CAT_*, 0 unused):

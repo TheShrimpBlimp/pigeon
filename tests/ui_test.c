@@ -42,7 +42,9 @@
 #include <stddef.h>
 #include <stdint.h>
 static uint32_t host_slots[3u * 0x14000u / 4u];          /* USR1..3 (zero: empty), as the flash at 0xA0000 */
+#ifndef SMP_USER_XIP
 #define SMP_USER_XIP(k) ((const uint8_t *)host_slots + (k) * SMP_USER_SIZE)
+#endif
 #define main hostsim_main
 #include "hostsim.c"
 #undef main
@@ -9559,7 +9561,10 @@ static int test_edit_quick_actions(void)
     return bad;
 }
 
-int main(void)
+#ifndef UI_TEST_MAIN
+#define UI_TEST_MAIN main
+#endif
+int UI_TEST_MAIN(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     int bad = 0;

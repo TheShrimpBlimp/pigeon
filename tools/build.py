@@ -179,8 +179,9 @@ def build_loader():
 def ld_regions():
     """firmware/app.ld's MEMORY regions: name -> (origin, length)"""
     regs = {}
+    linker = OUT / "app_ko.ld" if os.environ.get("FELUCCA_KO_STORAGE") == "1" else FW / "app.ld"
     for m in re.finditer(r"^\s*(\w+)\s*\([rwx]+\)\s*:\s*ORIGIN\s*=\s*(\w+),\s*LENGTH\s*=\s*(\w+)",
-                         (FW / "app.ld").read_text(), re.M):
+                         linker.read_text(), re.M):
         n = m.group(3)
         regs[m.group(1)] = (int(m.group(2), 0), int(n[:-1], 0) * 1024 if n.endswith("K") else int(n, 0))
     return regs
@@ -190,7 +191,7 @@ def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
-                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST"):
+                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST", "FELUCCA_KO", "FELUCCA_KO_STORAGE"):
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
@@ -216,8 +217,22 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     elf = OUT / "felucca.elf"
-    tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
-       OUT / "felucca.o", "-o", elf)
+    extra, linker = [], FW / "app.ld"
+    if os.environ.get("FELUCCA_KO_STORAGE") == "1":
+        vendor = FW / "vendor" / "libmad"
+        sources = ["bit", "fixed", "frame", "huffman", "layer12", "layer3", "stream", "synth", "timer"]
+        extra = [OUT / f"mad_{s}.o" for s in sources] + [OUT / "ko_mp3.o"]
+        vf = [*CFLAGS, "-fwrapv", "-DFPM_64BIT", "-DNDEBUG", "-DHAVE_LIMITS_H", "-DSIZEOF_INT=4",
+              "-DSIZEOF_LONG=4", "-DSIZEOF_LONG_LONG=8", "-Dmalloc=ko_mad_malloc", "-Dcalloc=ko_mad_calloc",
+              "-Dfree=ko_mad_free", "-Ifirmware/vendor/libmad/felucca_std"]
+        tc_all(*[("cc", *vf, "-c", vendor / f"{s}.c", "-o", extra[i]) for i,s in enumerate(sources)],
+               ("cc", *vf, "-c", FW / "src" / "ko_mp3.c", "-o", extra[-1]))
+        linker = OUT / "app_ko.ld"
+        linker.write_text((FW / "app.ld").read_text().replace("LENGTH = 0x8DFBC",f"LENGTH = {fm1pkg_make.KO_APP_SLOT:#x}")
+                          .replace("LENGTH = 72K","LENGTH = 64K").replace("ORIGIN = 0x01C1A000","ORIGIN = 0x01C18000")
+                          .replace("LENGTH = 0x5A000","LENGTH = 0x5C000"))
+    tc("pi32v2/bin/ld", *(["--gc-sections"] if extra else []), "-T", linker,
+       OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o", OUT / "felucca.o", *extra, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
@@ -267,7 +282,8 @@ def check(img, syms, dis, rt):
             val = (int(v[0]) & 0xFFFFFFFF) if v[0] else int(v[1], 16) & 0xFFFFFFFF
             if 0xFFC00000 <= val < 0xFFD00000:
                 errors.append(f"reference to ROM address {val:#010x}")
-    if len(img) > APP_SLOT:
+    limit = fm1pkg_make.KO_APP_SLOT if os.environ.get("FELUCCA_KO_STORAGE") == "1" else APP_SLOT
+    if len(img) > limit:
         errors.append(f"image {len(img)} B exceeds the app slot")
 
     def sym(name):
@@ -367,7 +383,8 @@ def main():
         print("  FAIL ", e)
     if errors:
         raise SystemExit("build: checks failed")
-    pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY), ota, PRODUCT)
+    pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY,
+                         ko_storage=os.environ.get("FELUCCA_KO_STORAGE") == "1"), ota, PRODUCT)
     (OUT / name).write_bytes(pkg)
     att = SRC / "assets" / "samples-cc0" / "ATTRIBUTION.txt"
     if att.exists():
@@ -388,6 +405,9 @@ def main():
             shutil.copy(f, rel / "LICENSES" / f.name)
         for doc in ("LICENSE", "LICENSING.md"):
             shutil.copy(SRC / doc, rel / doc)
+        if os.environ.get("FELUCCA_KO_STORAGE") == "1":
+            for doc in ("COPYING", "COPYRIGHT", "FELUCCA_ORIGIN.md"):
+                shutil.copy(FW / "vendor" / "libmad" / doc,rel / "LICENSES" / f"libmad-{doc}")
         if att.exists():
             shutil.copy(att, rel / "ATTRIBUTION.txt")
         print(f"release  {rel}/")

@@ -1,0 +1,123 @@
+# Expanded KO sample storage
+
+An optional `FELUCCA_KO_STORAGE=1` profile keeps the existing Felucca engines,
+parameter IDs and FUNA projects, but replaces factory sample audio with a shared
+flash bank for one chopped song and up to sixteen drum one-shots. Standard
+Felucca and `FELUCCA_KO=1` without this flag retain their original storage layout.
+Factory sample sets retain their IDs and use Felucca's missing-sample fallback;
+projects that used those factory recordings therefore sound different in this profile.
+
+## Capacity and formats
+
+The bank is 421,888 bytes (412 KiB). Its header sector takes 4 KiB, leaving
+417,792 bytes (408 KiB) shared by encoded audio, waveform and MP3 seek indices.
+Drums use mono IMA ADPCM at 22.05 kHz. The song uses either:
+
+- Indexed mono MP3 at 22.05 kHz, 24–64 kbps; default 32 kbps. The importer disables
+  the bit reservoir so chops can seek with bounded decode work. Ordinary MP3
+  files cannot be copied directly to the device.
+- Mono IMA ADPCM at 8, 11.025, 16 or 22.05 kHz, selected at import.
+
+| Song format | With 3.2 seconds of drums total | With 9.6 seconds of drums total |
+|---|---:|---:|
+| MP3 24 kbps | about 119 seconds | about 96 seconds |
+| MP3 32 kbps | about 90 seconds | about 73 seconds |
+| MP3 48 kbps | about 61 seconds | about 49 seconds |
+| ADPCM 11.025 kHz | about 68 seconds | about 55 seconds |
+| ADPCM 22.05 kHz | about 34 seconds | about 28 seconds |
+
+These estimates include the maximum 8 KiB waveform and MP3 frame index where
+applicable. Encoder padding/alignment slightly reduce the limit. The importer
+reports actual usage and rejects oversized banks before connecting to a device.
+A tested 60-second, 32 kbps song plus sixteen 0.6-second drum hits uses 367,694
+bytes, leaving 54,194 bytes free. A minute of 11.025 kHz ADPCM also fits with a
+shorter kit. Neither MP3 nor lowered-rate ADPCM restores lost audio quality later.
+
+## Build and import
+
+```sh
+FELUCCA_KO=1 FELUCCA_KO_STORAGE=1 PYTHON=.venv/bin/python ./build.sh
+python3 -m pip install --target build/codec-python lameenc
+python3 tools/ko_bank.py build beat.kob song.wav kick.wav snare.wav hat.wav
+```
+
+Use `--bitrate 24` for more MP3 duration, or `--codec adpcm --rate 11025` for the
+lower CPU option. Up to sixteen drum WAV paths are assigned in the supplied pad
+order. Host import computes waveform peaks and transient chop starts; all chop
+controls remain editable. The existing KO loop/latch, pitch, zoom and FX controls
+continue to apply. MP3 song playback requires KO mode on T1; SAMPLE/GRAIN
+continue to use ADPCM sources. Compressed reverse playback is disabled.
+
+After separately installing and validating this firmware on the device:
+
+```sh
+python3 tools/ko_bank.py info
+python3 tools/ko_bank.py upload beat.kob
+python3 tools/ko_bank.py export backup.kob
+```
+
+Upload replaces the entire song/kit bank. Back up the existing three FSMP slots
+before migration using the existing Web editor full backup; the first new bank
+overwrites their contents. The new uploader negotiates the exact bank layout
+before any write. Its legacy counterpart is blocked while a KOB2 bank is active.
+Export includes the separate 4 KiB chop/compressor metadata sector; uploading
+that export restores those edits. The existing Web editor full backup does not
+include this new bank, so use `ko_bank.py export` for its audio and edits. Audio hashes bind edits to the matching song
+and kit. An interrupted upload leaves the bank unavailable, rather than exposing
+partially uploaded audio. Re-upload a complete bank to recover.
+
+For a standard-firmware downgrade, export the bank and use
+`python3 tools/ko_bank.py erase` **before** installing the standard firmware.
+The updated loader rejects the downgrade while the KOB2 marker exists. Erase
+invalidates the bank and legacy slot headers; it does not securely erase audio.
+Older loaders and external full-flash tools do not know these protections.
+
+## Flash layout
+
+| Physical range (end exclusive) | Bank allocation |
+|---|---:|
+| `0xA0000–0xB3000` | 76 KiB, including bank header |
+| `0xB4000–0xDC000` | 160 KiB |
+| `0x78000–0x92000` | 104 KiB reclaimed application space |
+| `0xEA000–0xFC000` | 72 KiB package-declared USR region |
+| `0xB3000–0xB4000` | Separate chop/compressor metadata |
+
+Project, preset, settings, bootloader and Bluetooth configuration regions are
+excluded. The linker and package maker enforce the smaller application boundary.
+A checked `KOPOOL2` package descriptor tells the loader to preserve reclaimed
+audio during updates. Record cleanup also preserves the top sample region, even
+if audio bytes resemble an OTA record. No additional physical flash is assumed.
+
+## Runtime and verification
+
+MP3 uses a fixed-point libmad decoder with preallocated state and no heap. One
+decoder runs in the main loop; the audio interrupt reads two 576-sample PCM
+buffers per song voice plus a 192-sample bridge at each loop start. Samples remain in flash. Eight voices remain shared
+across all tracks. Seek jobs decode up to three frames to recover synthesis
+history, or up to four for a bridge spanning two frames; cache misses output
+silence and increment a counter. Initial attacks wait for current and prefetched
+PCM. The bridge occupies spare engine memory and handles frame crossings at loop
+boundaries. Waveform drawing never decodes audio.
+
+The profile reallocates the existing 432 KiB SRAM budget to 64 KiB static RAM
+and 368 KiB pool; build checks require 4 KiB and 8 KiB minimum headroom,
+respectively. Final usage is reported by the build, not inferred from file sizes.
+
+Run `python3 tests/ko_storage_test.py` with the MP3 encoder dependency installed.
+It tests a minute-long fixture, seeked versus sequential decode, real bank upload
+handlers against simulated NOR, editable loops/latch, voice caches, persistence,
+corruption and write boundaries, with ASan/UBSan. The codec's fixed-point wrap
+arithmetic and existing firmware shift arithmetic are excluded from UBSan;
+memory and array bounds remain checked. Expanded loader preservation tests run:
+
+```sh
+cc -O2 tests/ldr_test.c -o build/ko-host/ldr_test
+build/ko-host/ldr_test build/host/old.fwsc build/felucca.fwsc ko-storage
+python3 tests/target_budget.py build/felucca.dis tests/target_budget.txt
+```
+
+The ordinary full regression suite must be run after a standard build, because
+its reference renders use factory audio. Static render instruction checks do
+not bound MP3 decode time. FM1 listening, boot/update behavior and real audio
+deadlines with eight pitched voices and stacked effects still require hardware
+validation. The source/build/test work does not flash or access the device.
