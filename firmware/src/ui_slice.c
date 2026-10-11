@@ -233,14 +233,15 @@ static void slice_env(uint32_t a, uint32_t b)
         return;
 #if FELUCCA_KO_STORAGE
     if (ko_compressed(s)) {
+        const ko_bank_hdr_t *bank=s==&slc_usr[2] ? &ko_bank_second : &ko_bank;
         for (c = 0; c < SP_COLS; c++) {
             uint32_t start = a+(c*(b-a))/SP_COLS, end = a+((c+1u)*(b-a))/SP_COLS;
-            uint32_t q0 = (uint32_t)(((uint64_t)start*ko_bank.wave_bins)/len);
-            uint32_t q1 = (uint32_t)(((uint64_t)end*ko_bank.wave_bins)/len);
+            uint32_t q0 = (uint32_t)(((uint64_t)start*bank->wave_bins)/len);
+            uint32_t q1 = (uint32_t)(((uint64_t)end*bank->wave_bins)/len);
             int32_t lo = 127, hi = -128;
-            if (q1 >= ko_bank.wave_bins) q1 = ko_bank.wave_bins-1;
+            if (q1 >= bank->wave_bins) q1 = bank->wave_bins-1;
             for (uint32_t q = q0; q <= q1; q++) {
-                int32_t l = (int8_t)ko_bank_byte(ko_bank.wave_off+q*2), h = (int8_t)ko_bank_byte(ko_bank.wave_off+q*2+1);
+                int32_t l = (int8_t)ko_bank_byte(bank->wave_off+q*2), h = (int8_t)ko_bank_byte(bank->wave_off+q*2+1);
                 lo = l < lo ? l : lo; hi = h > hi ? h : hi;
             }
             sp.lo[c] = (int8_t)clamp(lo,-64,63); sp.hi[c] = (int8_t)clamp(hi,-64,63);

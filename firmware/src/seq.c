@@ -469,6 +469,9 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
     uint32_t len = t->p[P_SLEN] > 0 ? (uint32_t)t->p[P_SLEN] : 1u, idx = t->seq_idx % len, k;
     uint32_t period = div_samples((uint32_t)t->p[P_SDIV]), cur = step_samples(t, period, t->seq_idx);
     uint32_t next = t->seq_pos > cur / 2u, sounds;
+#if FELUCCA_KO
+    if (ko_seq_end(t)) next=0;
+#endif
     int32_t off = rec_nudge(t->seq_pos >= cur ? 0 : next ? -(int32_t)(cur - t->seq_pos) : (int32_t)t->seq_pos, period);
     step_t *s;
     if (next)
@@ -539,6 +542,9 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         if (t->rskip_n < 4u)
             t->rskip[t->rskip_n++] = (uint8_t)note;
     }
+#if FELUCCA_KO
+    if (ko_seq_on(t)) return;
+#endif
     if (!t->rh_n || t->rh_start != idx) {           /* a new hold (one in another step ends) */
         t->rh_n = 0;
         t->rh_start = (uint8_t)idx;
@@ -555,6 +561,9 @@ static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
 {
     step_t *s;
     uint32_t k;
+#if FELUCCA_KO
+    if (ko_seq_on(t)) { t->rh_n=0; return; } /* sampler steps are triggers, not held-note ties */
+#endif
     if (!t->rh_n)
         return;
     if (!((song.rec >> trk_index(t)) & 1u) || t->rh_ties + 1u >= len) {
@@ -610,6 +619,13 @@ static __attribute__((noinline)) void cin_keep(track_t *t, uint32_t note, uint32
 
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
+#if FELUCCA_KO
+    if (ko_seq_on(t) && !song.playing && !cin_left && !chain.running && ((song.rec>>(t-trk))&1u)) {
+        uint32_t index=ko_seq[t-trk].cursor % (uint32_t)t->p[P_SLEN];step_t *s=&t->step[index];
+        memset(s,0,sizeof *s);s->time=ST_NOTE;s->n=1;s->note[0]=(uint8_t)note;s->vel=(uint8_t)vel;
+        t->seq_active=1;ko_seq[t-trk].cursor=(uint8_t)((index+1u) % (uint32_t)t->p[P_SLEN]);
+    }
+#endif
     last_note = (uint8_t)note;
     if (cin_left)
         cin_keep(t, note, vel);
@@ -763,7 +779,7 @@ static void keyboard_block(void)
     }
     lay = (fm1_in.buttons & kb_mask) || kb_lock;  /* (#83: kb_lock, a layer locked open with no button held) */
     fx = (fm1_in.buttons & perf_mask) || (kb_lock & 2u);
-    mute = song.grid == 2u ? ~0u : song.grid == 3u ? SONG_KEYS : 0u;   /* the keys that never sound here */
+    mute = (song.grid == 2u || song.grid >= 4u) ? ~0u : song.grid == 3u ? SONG_KEYS : 0u;   /* the keys that never sound here */
     for (k = 0; k < 27u; k++) {
         if (!((ch >> k) & 1u))
             continue;
@@ -814,6 +830,9 @@ static void seq_start(void)
     chain_start();
     for (i = 0; i < NTRK; i++) {                   /* every track from its step 0, together */
         track_t *t = &trk[i];
+#if FELUCCA_KO
+
+#endif
         t->seq_idx = (uint16_t)(t->p[P_SLEN] - 1);
         t->seq_pos = 0x7FFFFFFF;                   /* step 0 fires on the first block */
         t->rskip_n = 0;
@@ -835,6 +854,12 @@ static void seq_start(void)
 static void seq_release(track_t *t)
 {
     uint32_t i;
+#if FELUCCA_KO
+    /* Explicit kit gate locks opt into truncation; ordinary one-shots stay full. */
+    if(ko_kit(t) && !ko_seq_end(t) && (motion_locked[trk_index(t)][P_SGATE/32u]&(1u<<(P_SGATE%32u))))
+        for(uint32_t v=0;v<NVOICE;v++) if(t->v[v].active)
+            for(i=0;i<t->seq_n;i++) if(t->v[v].note==t->seq_notes[i]) {voice_kill(&t->v[v]);break;}
+#endif
     for (i = 0; i < t->seq_n; i++)
         trk_note_off(t, t->seq_notes[i]);
     t->seq_n = 0;
@@ -1112,6 +1137,46 @@ static void seq_tick(track_t *t, uint32_t n)
         seq_ratchet(t, period);
 }
 
+#if FELUCCA_KO
+/* Actual voice completion, not estimated duration: includes pitch and decoder priming.
+ * Missing/stealed voices finish; rests and ties without a voice use one tempo step. */
+static void ko_end_capture(track_t *t)
+{
+    uint32_t p=(uint32_t)(t-trk);
+    for(uint32_t i=0;i<NVOICE;i++) {
+        voice_t *v=&t->v[i];int matches=0;
+        for(uint32_t j=0;j<t->seq_n;j++) if(v->note==t->seq_notes[j]) matches=1;
+        if(v->active && matches && v->age!=ko_seq[p].baseline[i]) {
+            ko_seq[p].age[i]=v->age;
+            if(ko_song(t)) {v->s[4]=(v->s[4]|KO_V_NO_LOOP)&(int32_t)~KO_V_LATCH;v->gate=1;}
+        }
+    }
+    ko_seq[p].pending=t->xf_on || t->xp_n;
+}
+static void ko_end_tick(track_t *t, uint32_t n)
+{
+    if (!song.playing) return;
+    uint32_t p=(uint32_t)(t-trk), period=div_samples((uint32_t)t->p[P_SDIV]);
+    int first=t->seq_pos>=0x7fffffffu, waiting=0, tracked=0;
+    if (!first) {
+        if(ko_seq[p].pending) {ko_end_capture(t);if(ko_seq[p].pending) return;}
+        t->seq_pos+=n;
+        for(uint32_t i=0;i<NVOICE;i++) if(ko_seq[p].age[i]) {
+            const voice_t *v=&t->v[i];tracked=1;
+            if(v->active && v->age==ko_seq[p].age[i] && (!ko_song(t)||v->s[6]!=2)) waiting=1;
+        }
+        if(waiting || (!tracked && t->seq_pos<step_samples(t,period,t->seq_idx))) return;
+    }
+    /* Clear latch/loop before release so stored per-chop performance flags stay untouched. */
+    if(ko_song(t)) for(uint32_t i=0;i<NVOICE;i++) if(ko_seq[p].age[i] && t->v[i].age==ko_seq[p].age[i]) t->v[i].s[4]&=(int32_t)~KO_V_LATCH;
+    seq_release(t);t->seq_pos=0;t->seq_idx=(uint16_t)((t->seq_idx+1u) % (uint32_t)t->p[P_SLEN]);
+    for(uint32_t i=0;i<NVOICE;i++) {ko_seq[p].baseline[i]=t->v[i].age;ko_seq[p].age[i]=0;}
+    ko_seq_firing=(uint8_t)(1u<<p);seq_play(t,t->seq_idx,period);ko_seq_firing=0;
+    t->rat_left=0;t->nd_late=t->nd_early=0;t->seq_hold=1;
+    ko_end_capture(t);
+}
+#endif
+
 /* MIDI in: the track a channel plays (0..15): G_ROUTE CH1-4 (0) channels 1..4 their parts (5..16 never get
  * here: midi_event drops them), SEL (1) every channel the selected track; CH5-8 .. CH13-16 (2..4) as CH1-4 on
  * their four channels (midi_base) */
@@ -1262,6 +1327,7 @@ static void events_block(uint32_t n)
             t->arp_phys = 0;
             arp_forget(t);
         }
+        if (FELUCCA_SAMPLER_ONLY && i>=SAMPLER_PARTS) continue;
         engine_block(t);                              /* engine switch: fade, then switch (voice.c) */
         /* ARP turned off, or HOLD released with no key down: drop the latched chord */
         if ((t->armp && !t->p[P_AMODE]) || (t->aholdp && !t->p[P_AHOLD] && !t->arp_phys)) {
@@ -1305,13 +1371,17 @@ static void events_block(uint32_t n)
     if (aud_req)
         seq_audition();                               /* (STEP PREVIEW: a step sounds, stopped) */
     chain_tick(seq_n);
-    for (i = 0; i < NTRK; i++)
+    for (i = 0; i < (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NTRK); i++) {
+#if FELUCCA_KO
+        if (ko_seq_end(&trk[i]) && !chain.running) ko_end_tick(&trk[i],n); else
+#endif
         seq_tick(&trk[i], seq_n);
+    }
     if (cin_flush)
         cin_record();
     if (song.playing)
         click_tick(seq_n);
-    for (i = 0; i < NPART; i++)
+    for (i = 0; i < (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NPART); i++)
         arp_step(&trk[i], clock_mode ? seq_n : n, clock_mode && song.playing ? seq_n : n);
     beat_pos += clock_mode ? seq_n : n;               /* the beat the ARP LED flashes on (ui_leds) */
     if (beat_pos >= beat_samples()) {

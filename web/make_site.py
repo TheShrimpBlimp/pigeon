@@ -8,6 +8,7 @@
                               JieLi SDK files under Apache-2.0, see LICENSING.md)
   webapp/installer/index.html index_pkg.html, self-contained (fm1pkg.js, fm1ota.js, metadata inlined)
   webapp/editor/index.html    editor.html (+ fukiai.ttf, FUKIAI-LICENSE.txt)
+  webapp/pigeon/index.html   offline local Pigeon sample GUI (+ bundled encoder/source)
   src/                        not touched
 
   web/make_site.py build/felucca-X.Y.fwsc X.Y OUT_DIR
@@ -75,14 +76,19 @@ def main(pkg, version, out):
     for doc in ("LICENSE", "LICENSING.md"):
         shutil.copy(HERE.parent / doc, fw / doc)
     shutil.copy(HERE / "editor.html", ed / "index.html")
-    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js"):
+    for f in ("fukiai.ttf", "FUKIAI-LICENSE.txt", "fm1backup.js", "ko_bank.js"):
         if (HERE / f).exists():
             shutil.copy(HERE / f, ed / f)
+    # Standalone sample GUI; these parent modules keep the same relative URLs as web/.
+    shutil.copytree(HERE / "pigeon", out / "webapp" / "pigeon", dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("test*.mjs"))
+    for dependency in ("fm1backup.js", "ko_bank.js"):
+        shutil.copy(HERE / dependency, out / "webapp" / dependency)
     (out / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><title>Felucca</title>'
         '<meta http-equiv="refresh" content="0; url=webapp/installer/">'
         '<a href="webapp/installer/">Felucca installer</a>\n', encoding="utf-8")
-    print(f"site: {out}: webapp/installer ({len(html)} B), webapp/editor, firmware/{name} ({len(raw)} B, {product})")
+    print(f"site: {out}: webapp/installer ({len(html)} B), webapp/editor, webapp/pigeon, firmware/{name} ({len(raw)} B, {product})")
 
 
 if __name__ == "__main__":

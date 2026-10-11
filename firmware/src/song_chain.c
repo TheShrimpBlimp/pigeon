@@ -32,6 +32,14 @@ static struct {
     uint8_t rec;
     uint32_t carry;
 } chain;
+#if FELUCCA_KO
+/* Sources reuse chain.source. Prepared in the main loop; live launches publish
+ * only a slot byte, never decode projects or access flash in the audio ISR. */
+static uint8_t ko_pattern_sel, ko_copy_slot=255, ko_section, ko_pattern_mask;
+static volatile uint8_t ko_launch_ready, ko_launch_mode, ko_launch_pending=255;
+static volatile uint8_t ko_pattern_active=255, ko_pattern_commit=255;
+static uint32_t ko_bar_pos;
+#endif
 /* a silent lane: its steps (empty: nothing plays) and its timing (a 4/4 bar of 1/16: the section's length when every
  * track is silent) */
 static const step_t chain_silent[NSTEP] = {{{0}}};
@@ -144,6 +152,10 @@ static void chain_start(void)
         memcpy(chain.timing[i], &trk[i].p[P_SLEN], sizeof chain.timing[i]);
         chain.qnt[i] = (uint8_t)trk[i].p[P_SQNT];
     }
+#if FELUCCA_KO
+    ko_bar_pos=0;
+    if(ko_launch_mode) ko_pattern_active=chain.config.row[0].slot[0];
+#endif
     chain.row = 0;
     chain.remaining = chain.config.row[0].repeat;
     chain.carry = 0;
@@ -155,6 +167,10 @@ static void chain_stop(void)
 {
     uint32_t i;
     chain.armed = 0;
+#if FELUCCA_KO
+    if(ko_launch_mode && chain.running && ko_pattern_active<4) ko_pattern_commit=ko_pattern_active;
+    ko_launch_ready=ko_launch_mode=0;ko_launch_pending=ko_pattern_active=255;ko_bar_pos=0;
+#endif
     if (!chain.running)
         return;
     for (i = 0; i < NTRK; i++) {
@@ -166,8 +182,33 @@ static void chain_stop(void)
 }
 static void chain_tick(uint32_t n)
 {
+#if FELUCCA_KO
+    const track_t *t = &trk[chain.running ? chain.clk % NTRK : 0];
+#else
     const track_t *t = &trk[chain.clk % NTRK];
+#endif
     uint32_t length;
+#if FELUCCA_KO
+    if(ko_launch_ready && song.playing && (!chain.running || ko_launch_mode)) {
+        uint32_t bar=16u*div_samples(2);
+        ko_bar_pos+=n;
+        int at_end=t->seq_idx+1u==(uint32_t)t->p[P_SLEN] && t->seq_pos+n>=step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx);
+        int boundary=chain_config.rsv[0]==1 ? at_end : ko_bar_pos>=bar;
+        if(boundary) {
+            uint32_t carry=chain_config.rsv[0]==1 ? t->seq_pos+n-step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx) : ko_bar_pos%bar;
+            ko_bar_pos=carry;
+            uint32_t slot=ko_launch_pending;
+            if(slot<4u) {
+                ko_launch_pending=255;ko_launch_mode=1;
+                chain.config.count=1;chain.config.row[0]=chain_row_of(slot,1);
+                if(!chain.running) { chain.armed=1;chain_start();ko_bar_pos=carry; }
+                else {chain.row=0;chain.remaining=1;chain_apply();}
+                ko_pattern_active=(uint8_t)slot;chain.carry=carry;
+            }
+        }
+        if(ko_launch_mode) return; /* one pattern loops until another is launched */
+    }
+#endif
     if (!chain.running || t->seq_pos >= 0x7FFFFFFFu || t->seq_idx + 1u != (uint32_t)t->p[P_SLEN])
         return;
     length = step_samples(t, div_samples((uint32_t)t->p[P_SDIV]), t->seq_idx);

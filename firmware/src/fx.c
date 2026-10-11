@@ -796,6 +796,9 @@ static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_
     int32_t *d = spread_buf;
     uint32_t i;
     int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN], s = (t->p[P_SPRD] + 1) >> 1;
+#if FELUCCA_KO
+    if (ko_states[0].on && ko_muted(t)) lvl = 0;
+#endif
     int32_t pa = clamp(pan - s, -64, 63), pb = clamp(pan + s, -64, 63);
     int32_t gla = 4096 - (pa > 0 ? pa * 64 : 0), gra = 4096 + (pa < 0 ? pa * 64 : 0);
     int32_t glb = 4096 - (pb > 0 ? pb * 64 : 0), grb = 4096 + (pb < 0 ? pb * 64 : 0);
@@ -869,6 +872,9 @@ static void mix_part(track_t *t, uint32_t n)
         ko_compress(t, b, 0, n);
 #endif
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
+#if FELUCCA_KO
+        if (ko_states[0].on && ko_muted(t)) lvl = 0;
+#endif
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;
         int32_t xmax = c > d ? c : d;
@@ -937,14 +943,14 @@ static void mix_block(int32_t *out, uint32_t n)
         send_c[i] = send_d[i] = send_r[i] = mix_l[i] = mix_r[i] = 0;
     events_block(n);
     perf = perf_begin(n);                               /* the FX hold layer at work (perform.c) */
-    for (i = 0; i < NPART; i++)
+    for (i = 0; i < (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NPART); i++)
         mix_part(&trk[i], n);
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);
     if (hl.side)
         rev_side_mix(mix_l, mix_r, n);                  /* HALL: stereo */
-    if (scope_mix)
+    if (!FELUCCA_SAMPLER_ONLY && scope_mix)
         scope_take_mix(n);
     if (perf) {
         perf_master(out, n);

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Build/upload/export an optional KO storage v2 bank. No device access for build.
+"""Build/upload/export an KO storage v2/v3 bank. No device access for build.
 
-  ko_bank.py build OUT.kob SONG.wav [DRUM.wav ...] [--codec mp3|adpcm] [--bitrate 32] [--rate 11025]
+  ko_bank.py build OUT.kob SONG.wav [DRUM.wav ...] [--codec mp3|adpcm] [--bitrate 32] [--rate 11025] [--song2 SONG2.wav]
+  ko_bank.py add-song OUT.kob BACKUP.kob SONG2.wav
   ko_bank.py upload BANK.kob
   ko_bank.py export OUT.kob
   ko_bank.py info
@@ -9,7 +10,7 @@
 
 MP3 encoding needs libmp3lame, or `python3 -m pip install --target build/codec-python lameenc`.
 The device decoder only accepts the indexed mono/no-reservoir subset built here.
-Upload replaces the song AND kit as one bank; build takes 0..16 drums in pad order.
+Upload replaces both songs AND kit as one bank; build takes 0..16 drums in pad order.
 Export includes chop/compressor metadata. Old firmware is rejected before writes.
 """
 import argparse
@@ -143,7 +144,7 @@ def onsets(samples,rate):
     return starts
 
 
-def build(song,drums=(),codec="mp3",bitrate=32,rate=11025,name=None):
+def build(song,drums=(),codec="mp3",bitrate=32,rate=11025,name=None,song2=None):
     if len(drums)>16 or codec not in ("mp3","adpcm") or rate not in (8000,11025,16000,22050):
         raise ValueError("unsupported bank configuration")
     if bitrate not in (24,32,40,48,56,64):
@@ -181,6 +182,29 @@ def build(song,drums=(),codec="mp3",bitrate=32,rate=11025,name=None):
     header+=struct.pack('<I',zlib.crc32(header))
     image=header.ljust(HEAD,b'\xff')+payload
     validate(image)
+    return combine(image,build(song2,(),codec,bitrate,rate)) if song2 else image
+
+
+def combine(first,second):
+    """Two independently indexed songs in the same bounded flash pool."""
+    f=validate(first);g=validate(second)
+    if f[1]!=2 or g[1]!=2 or g[11]: raise ValueError('combine needs one-song base and a kit-free second song')
+    metadata=first[f[2]:]
+    first=first[:f[2]];second=second[:g[2]]
+    pad=(-len(first))%256
+    delta=len(first)+pad-HEAD
+    payload=first[HEAD:]+b"\0"*pad+second[HEAD:]
+    used=HEAD+len(payload)
+    if used>SIZE: raise ValueError(f"two songs and kit need {used:,} bytes; capacity is {SIZE:,}")
+    crc=zlib.crc32(payload)
+    a=list(struct.unpack_from("<20I",first));b=list(struct.unpack_from("<20I",second))
+    a[1]=3;a[2]=b[2]=used;a[3]=b[3]=crc;a[17]=HEADER
+    for i in (7,9,14): b[i]+=delta
+    def header(fields,old):
+        h=struct.pack("<20I",*fields)+old[80:HEADER-4]
+        return h+struct.pack("<I",zlib.crc32(h))
+    image=(header(a,first)+header(b,second)).ljust(HEAD,b"\xff")+payload+metadata
+    validate(image)
     return image
 
 
@@ -189,12 +213,12 @@ def validate(image):
         raise ValueError("truncated bank")
     f=struct.unpack_from('<20I',image)
     magic,version,used,crc,codec,rate,samples,so,sl,ko,kl,kn,frames,skip,wo,wb,an,*reserved=f
-    if magic!=MAGIC or version!=2 or not HEAD<=used<=SIZE or len(image) not in (used,used+4096) or \
+    if magic!=MAGIC or version not in (2,3) or not HEAD<=used<=SIZE or len(image) not in (used,used+4096) or \
        zlib.crc32(image[:HEADER-4])!=struct.unpack_from('<I',image,HEADER-4)[0] or \
        zlib.crc32(image[HEAD:used])!=crc:
         raise ValueError("invalid bank header, length or CRC")
     if codec not in (1,2) or not 4000<=rate<=44100 or not 0<samples<=8000000 or not 0<=kn<=16 or \
-       not 1<=an<=32 or any(reserved) or not 1<=wb<=4096 or \
+       not 1<=an<=32 or (reserved!=([HEADER,0,0] if version==3 else [0,0,0])) or not 1<=wb<=4096 or \
        not (HEAD<=ko<=ko+kl<=so<so+sl<=wo<wo+wb*2<=used):
         raise ValueError("invalid bank ranges")
     starts=struct.unpack_from('<32I',image,80)[:an]
@@ -222,13 +246,43 @@ def validate(image):
             if x!=255 or y&254!=0xF2 or z&12 or not 1<=br<=8 or w>>6!=3 or \
                b-a!=72000*(0,8,16,24,32,40,48,56,64)[br]//22050+((z>>1)&1) or image[so+a+4+(0 if y&1 else 2)]:
                 raise ValueError("unsupported MP3 frame")
+    if version==3:
+        if len(image)<2*HEADER: raise ValueError("truncated second song header")
+        h=image[HEADER:2*HEADER]
+        second=validate(h+image[HEADER:])
+        if second[1]!=2 or second[2]!=used or second[3]!=crc or second[11] or second[10] or second[7]<wo+wb*2:
+            raise ValueError("invalid second song layout")
     return f
+
+
+def storage_summary(image):
+    f=validate(image)
+    def song_at(off):
+        h=struct.unpack_from('<20I',image,off)
+        name=image[off+656:off+664].split(b'\0',1)[0].decode('ascii','replace')
+        return dict(name=name or 'UNTITLED',seconds=round(h[6]/h[5],3),
+                    codec='mp3' if h[4]==2 else 'adpcm',bytes=h[8]+h[15]*2)
+    songs=[song_at(0)]
+    if f[1]==3: songs.append(song_at(HEADER))
+    return dict(songs=songs,drums=dict(pads=f[11],bytes=f[10]),
+                payload_used=f[2]-HEAD,payload_capacity=SIZE-HEAD,
+                free=SIZE-f[2],percent=round((f[2]-HEAD)*100/(SIZE-HEAD),1))
+
+
+def preview(image):
+    s=storage_summary(image)
+    print('Pigeon — combined sample storage')
+    for i,song in enumerate(s['songs'],1):
+        print(f"  Song {i}: {song['name']} / {song['seconds']:.2f}s / {song['codec']} / {song['bytes']/1024:.1f} KiB")
+    print(f"  Drum kit: {s['drums']['pads']} pads / {s['drums']['bytes']/1024:.1f} KiB")
+    print(f"  Total: {s['payload_used']/1024:.1f} / {s['payload_capacity']/1024:.0f} KiB ({s['percent']}%) — {s['free']/1024:.1f} KiB free")
+    print('  Upload replaces both songs and the drum kit together.')
 
 
 def negotiate(link):
     r=link.req(90,[])
     expected=[0x4B,2]+u21(SIZE)+u21(HEAD)
-    if len(r)!=10 or r[:8]!=expected or r[9]!=3:
+    if len(r)!=10 or r[0]!=expected[0] or r[1] not in (2,3) or r[2:8]!=expected[2:8] or r[9]!=3:
         raise ValueError("device does not support this exact KO storage layout; nothing written")
     return r
 
@@ -241,12 +295,14 @@ def request_ok(link,cmd,args,timeout=5):
 
 def upload(link,image):
     fields=validate(image); used=fields[2]
-    negotiate(link)
+    capability=negotiate(link)
+    if fields[1]==3 and capability[1]!=3: raise ValueError("device lacks two-song support; nothing written")
     request_ok(link,91,u21(used))
     for off in range(HEAD,used,256):
         request_ok(link,92,u21(off)+pack7(image[off:min(off+256,used)]))
-    for off in range(0,HEADER,256):
-        request_ok(link,92,u21(off)+pack7(image[off:min(off+256,HEADER)]))
+    header_size=HEADER*(2 if fields[1]==3 else 1)
+    for off in range(0,header_size,256):
+        request_ok(link,92,u21(off)+pack7(image[off:min(off+256,header_size)]))
     request_ok(link,93,[],30)
     if len(image)>used:
         for off in range(0,4096,256):
@@ -280,20 +336,38 @@ def main():
     sub=parser.add_subparsers(dest='command',required=True)
     b=sub.add_parser('build'); b.add_argument('out'); b.add_argument('song'); b.add_argument('drums',nargs='*')
     b.add_argument('--codec',choices=('mp3','adpcm'),default='mp3'); b.add_argument('--bitrate',type=int,default=32)
-    b.add_argument('--rate',type=int,choices=(8000,11025,16000,22050),default=11025); b.add_argument('--name')
-    sub.add_parser('upload').add_argument('file'); sub.add_parser('export').add_argument('file')
+    b.add_argument('--rate',type=int,choices=(8000,11025,16000,22050),default=11025); b.add_argument('--name'); b.add_argument('--song2',help='second independent song WAV')
+    add=sub.add_parser('add-song');add.add_argument('out');add.add_argument('bank');add.add_argument('song')
+    add.add_argument('--codec',choices=('mp3','adpcm'),default='mp3');add.add_argument('--bitrate',type=int,default=32)
+    add.add_argument('--rate',type=int,choices=(8000,11025,16000,22050),default=11025)
+    sub.add_parser('preview').add_argument('file'); sub.add_parser('upload').add_argument('file'); sub.add_parser('export').add_argument('file')
     sub.add_parser('info'); sub.add_parser('erase')
+    d=sub.add_parser('diagnostics'); d.add_argument('--reset',action='store_true')
     a=parser.parse_args()
     try:
+        if a.command=='add-song':
+            image=combine(Path(a.bank).read_bytes(),build(a.song,(),a.codec,a.bitrate,a.rate))
+            Path(a.out).write_bytes(image)
+            print('Two-song bank created; first song, kit and existing metadata retained')
+            return
         if a.command=='build':
-            image=build(a.song,a.drums,a.codec,a.bitrate,a.rate,a.name); Path(a.out).write_bytes(image)
+            image=build(a.song,a.drums,a.codec,a.bitrate,a.rate,a.name,a.song2); Path(a.out).write_bytes(image)
             f=validate(image)
             print(json.dumps(dict(seconds=round(f[6]/f[5],3),codec=a.codec,song_bytes=f[8],kit_bytes=f[10],
                                   pads=f[11],used=f[2],capacity=SIZE,free=SIZE-f[2]),indent=2)); return
+        if a.command=='preview': preview(Path(a.file).read_bytes()); return
         image=Path(a.file).read_bytes() if a.command=='upload' else None
-        if image is not None: validate(image) # before opening MIDI
+        if image is not None: preview(image) # validate and show storage before opening MIDI
         link=Link()
-        if a.command=='upload': upload(link,image); print('KO bank uploaded')
+        if a.command=='diagnostics':
+            r=link.req(97,[1] if a.reset else [])
+            if len(r)!=52 or r[:2]!=[0,1]: raise ValueError('firmware does not support diagnostics v1')
+            names=('missing_sample_reads','decoder_errors','reused_buffers','decode_calls',
+                   'decode_total_us','decode_max_us','poll_gap_max_us','draw_max_us',
+                   'ready_attacks','attack_max_us')
+            values=[sum(r[2+i*5+j]<<(j*7) for j in range(5)) for i in range(10)]
+            print(json.dumps(dict(zip(names,values)),indent=2))
+        elif a.command=='upload': upload(link,image); print('KO bank uploaded')
         elif a.command=='export': Path(a.file).write_bytes(export(link)); print('KO bank and edits exported')
         elif a.command=='erase': negotiate(link); request_ok(link,96,[]); print('KO bank headers erased')
         else: print(negotiate(link))

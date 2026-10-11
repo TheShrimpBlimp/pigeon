@@ -222,6 +222,14 @@ static void sample_note_on(track_t *t, voice_t *v)
         }
         v->s[4] = (int32_t)(zi == 0xFFFFu ? 0 : zi);
     }
+#if FELUCCA_KO
+    if(ko_kit(t) && v->note>=60 && v->note<76) {
+        ko_pad_params_t *pad=&ko_kit_params[v->note-60];
+        if(pad->choke) for(uint32_t j=0;j<NVOICE;j++) {voice_t *other=&t->v[j];
+            if(other!=v && other->active && other->note>=60 && other->note<76 && ko_kit_params[other->note-60].choke==pad->choke) {other->stage=4;other->gate=0;}}
+        ko_kit_drop[v-t->v]=pad->decay ? (1u<<24)/(pad->decay*4u) : 0;v->env=1<<24;
+    }
+#endif
     v->ph[0] = 0;
     v->ph[1] = 0;
     v->s[0] = 0;
@@ -244,7 +252,7 @@ static void sample_note_on(track_t *t, voice_t *v)
 static int32_t sample_ko_keys(const track_t *t, uint32_t k)
 {
     int32_t pad = ko_pad(k);
-    return ko_kit(t) ? (pad < 0 ? 255 : 60 + pad) : -1;
+    return ko_kit(t) ? (pad < 0 || pad >= 16 ? 255 : 60 + pad) : -1;
 }
 static int32_t sample_ko_amp(track_t *t, voice_t *v, int32_t adsr)
 {
@@ -252,9 +260,13 @@ static int32_t sample_ko_amp(track_t *t, voice_t *v, int32_t adsr)
         return adsr;
     if (!v->active) return adsr;                    /* budget/overload fades must still finish */
     if (v->s[6]) { v->active = 0; return 0; }
+    if(v->stage==4) return adsr;
     v->stage = 2;
-    v->env = 1 << 24;
-    return 32767;
+    if(v->note<60 || v->note>=76) return 0;
+    uint32_t drop=ko_kit_drop[v-t->v];
+    if(drop) {if(v->env<=(int32_t)drop) {v->active=0;return 0;}v->env-=(int32_t)drop;}
+    else v->env=1<<24;
+    return (int32_t)((((v->env-1)>>9)*ko_kit_params[v->note-60].level)/127);
 }
 #endif
 
@@ -264,6 +276,9 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
     const smp_zone_t *z = smp_zone((uint32_t)v->s[4]);
     uint32_t i, frac = v->ph[1];
     int32_t d16 = clamp(m->pitch16 + p[P_E1] * 16 - z->root16, -1536, 576);   /* <= 3 octaves up: bounded decode load */
+#if FELUCCA_KO
+    if(ko_kit(t) && v->note>=60 && v->note<76) d16=clamp(d16+ko_kit_params[v->note-60].pitch*16,-1536,576);
+#endif
     uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);   /* Q16 samples per output */
     int32_t bits = p[P_E2], lp = 4000 + ((clamp((p[P_E4] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15);
     int32_t drv = p[P_E6], sh = bits / 10;

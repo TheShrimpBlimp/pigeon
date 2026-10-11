@@ -1,9 +1,11 @@
-# KO Mode v0.1
+# Pigeon sampler interface (v0.1)
 
 For the optional shared bank and minute-long songs, see [Expanded KO storage](KO_STORAGE.md).
 The slot capacities below describe `FELUCCA_KO=1` without `FELUCCA_KO_STORAGE`.
 
-An optional interface for one transient-chopped song sample and sixteen separate drum one-shots.
+Pigeon uses this interface for one transient-chopped song sample and sixteen separate drum one-shots.
+Build the standalone product with `./build-sampler.sh`; the inherited menu still calls this interface KO MODE.
+The following also documents the legacy sampler build for compatibility.
 Standard Felucca remains the default build; its engines, track count, parameter IDs, and FUNA project
 format stay in place. The source now supports a longer song across two existing slots; flash partitions
 and synth engines remain in place. Both firmware profiles build; KO host, encoder-capacity,
@@ -16,12 +18,12 @@ Enable **MENU > SYSTEM > KO MODE** and return HOME. **OCT+ SET UP T1 + T2 SOUNDS
 configures T1 as SLICE / USR1 and T2 as SAMPLE / USR2 / KIT. It replaces those two sounds, keeps
 their notes, and sets empty patterns to sixteen steps at 1/16. Existing nonempty pattern lengths
 are preserved. It leaves T3/T4 intact; they can still play an existing project's patterns.
-ALGORITHM selects SONG or DRUM while KO is enabled. Disable KO MODE to access all four tracks.
+ALGORITHM selects SONG 1, DRUM KIT, or SONG 2 (tracks 1, 2, 3). The standalone build is sampler only: KO MODE stays on, synth engines are unavailable, and only three tracks render. The legacy Felucca build can disable KO MODE to access four tracks.
 
 ## Samples
 
-- USR1: one mono song sample. Transient detection produces up to 32 initial chops. Sixteen white
-  keys trigger the current bank; PRESETS selects a chop and switches banks as necessary.
+- USR1: one mono song sample. Transient detection produces up to 32 initial chops. All 27 keyboard
+  keys trigger song chops (the existing white keys retain chops 1..16, black keys add 17..27); PRESETS selects a chop and switches banks as necessary.
 - USR2: up to sixteen independent drum files, each on one exact note, 60..75. Empty pads are silent.
   Release does not cut a hit short. Eight voices are shared across tracks; stealing fades old hits.
 - USR3: continuation of a longer song. Internal resampling is not implemented in v0.1.
@@ -62,7 +64,13 @@ available; the `SMP_INFO` response gains a trailing `K, 1` capability marker in 
 | K2 | Selected chop end | Kit pitch |
 | K3 | Scroll waveform without changing selected chop | Bit reduction |
 | K4 | Horizontal zoom, 1x..64x | Low-pass tone |
-| White keys | Trigger and select chops in current bank | Trigger pads 1..16 |
+
+KO knobs accelerate during sustained fast turns: continuous controls move up to
+eight times farther per detent, while slow turns and direction changes retain
+fine control. Zoom acceleration is capped at twice the normal movement. Loop,
+latch, split/join and other small discrete choices stay unaccelerated. This is
+enabled in KO regardless of the standard UI's KNOB ACCEL preference.
+| Keyboard | White keys: chops 1..16, black keys: chops 17..27 | White keys: pads 1..16 |
 | PRESETS | Select chop, including second bank | No preset replacement |
 | OCT+ / OCT- | Selected chop pitch up/down one semitone, -24..+24 | Reserved |
 | EDIT | Toggle waveform / chop options | Return to kit controls |
@@ -138,3 +146,224 @@ Both run in `tests/run_tests.sh`. The ordinary build's existing tests must also 
 Physical FM1 latency, worst-case CPU load with both compressors and reverse/FX/USB active, and
 listening tests still require hardware. Host checks and compiled instruction budgets do not measure
 the physical deadline.
+
+## Independent second song
+
+The standalone build enables `FELUCCA_KO_DUAL=1`. Track 3 uses SLICE / USR3 for
+a separate imported song. Existing Song 1 and drum assignments remain tracks
+1 and 2; track 4 is reserved and silent. Existing one-song banks load normally
+with Song 2 empty. Select track 3 with ALGORITHM; if upgrading an old project,
+OCT+ on its setup prompt initializes only Song 2, keeping the other two sounds
+and patterns. Both song tracks use the same K1–K4 and OCT controls, with
+independent chop tables, waveform positions, zoom, loop/latch flags, pitch and
+compression. Sequencer patterns and locks use the existing third project slot.
+All three tracks share eight sounding voices and the existing FX buses.
+
+### Performance shortcuts and edit undo
+
+Tap **ARP** twice on sampler HOME to reach the mute/solo page. K1/K2/K3 set mute for
+Song 1 / Drum Kit / Song 2 (right mutes, left unmutes). K4 selects solo: 0 off,
+1 Song 1, 2 Drum Kit, 3 Song 2. Further ARP taps cycle the send pages and return to the waveform. In the song's EDIT page,
+K4 undoes/redoes the last chop edit. Black keys now play additional song chops;
+they no longer perform mute, solo or undo.
+
+Solo is temporary, preserves stored mutes, and clears on project load. A muted
+track receives no new triggers and contributes no dry signal or new sends;
+shared FX tails can ring out. Existing voices advance so unmuting resumes in time.
+
+The song header shows the imported eight-character sample name and chop number,
+with MUTE/SOLO status. The drum header uses the legacy kit name when available,
+otherwise DRUM KIT. The small strip beneath the waveform follows the most recently
+triggered voice on that song. Updating it does not redraw or decode the waveform.
+
+Each song has its own single edit undo/redo slot covering chop bounds, pitch,
+loop/latch, split and join. Scrolling, zoom and selecting pads do not consume undo.
+Undo is RAM-only and clears when new audio replaces the song; edited results still
+use the existing chop metadata persistence format.
+
+### Sampler sequencer
+
+Tap **SEQ** on sampler HOME while stopped to enable the selected track's sequencer.
+The existing sequence length is preserved; K4 selects 1–64 steps. Tap SEQ again or HOME to return to samples;
+playback timing remains active. Each of Song 1, Drum Kit and Song 2 can be enabled
+independently. Existing sequencer pages and held-button layers remain available.
+
+- K1: tempo (BPM).
+- K2 left: TEMPO, using the existing division, swing, gate and lock behavior.
+- K2 right: SAMPLE END. Each step plays its chops once to completion, at their
+  pitches; multi-note steps wait for the longest voice. Loop/latch settings are
+  bypassed for these sequenced triggers without changing the stored chop flags.
+- K3: choose a step while stopped.
+- K4: sequence length while stopped. EDIT: clear the selected step and advance.
+- REC: arm/disarm. While stopped, sample keys write one chop/hit per step and
+  advance, wrapping at the chosen sequence length. PLAY leaves stopped step entry, disarms the
+  enabled sampler tracks, and plays the pattern. Press REC while playing to
+  enable live recording again.
+
+When armed, a white-key LED indicates the current recording step (1..16). During
+unarmed playback, song keys light for sounding chops, including black keys; drum
+keys light for sounding hits. Chops 28..32 are in the second bank, reached using
+PRESETS; its first five white keys play those chops.
+
+SAMPLE END follows actual voice completion, including decoder startup and pitch.
+Rests, empty/chance-skipped/muted steps, and ties without a voice use one tempo
+step. Ratchets/nudges are not applied in SAMPLE END; use TEMPO for those features.
+Song-chain playback retains its existing tempo timing. Timing changes require the
+transport stopped. Timing preferences save with the sample-bank metadata using
+previously reserved bytes (record size stays 544 bytes); old records default to
+TEMPO. Projects keep their existing pattern format. Loading a project disables
+sampler sequencing mode until SEQ is tapped again, retaining the timing preference.
+
+### Zoom-scaled waveform knobs
+
+K1 moves the start by about 1/128 of the visible waveform per slow click;
+K2 moves the end by about 1/256.
+K3 scrolls by about 1/24 of the visible waveform per slow click, including at
+full zoom-out (about five seconds on the 119-second Don't Cry song). Existing
+fast-turn acceleration multiplies these movements. Zooming in reduces movement
+for precise edits; scrolling never changes the selected chop. After a K1 or K2
+edit, the scroll cursor jumps to that updated start or end, including an end
+boundary exactly at the sample's length.
+
+## Pigeon display and sequencer timing
+
+Knob edits update changed text and waveform columns through the existing buffered
+canvas, without clearing the page. The waveform follows the newest playing song
+voice when it leaves the visible window; manual editing or scrolling pauses
+following for one second. Following moves the view without changing the selected
+chop or edit cursor. K1 start adjustments now move twice as far per detent and
+retain zoom scaling, acceleration, and valid start/end limits.
+
+On the 16-step sequencer page, K1 sets BPM and OCT−/OCT+ select the step
+length: 1/4, 1/8, 1/16, 1/32, triplets, or longer divisions. These are the existing
+project-compatible per-track divisions, with swing retained. SAMPLE END still
+waits for the complete chop; its rests use the chosen division. OCT keys continue
+to control pitch on the waveform/edit pages. The existing three-second photo
+splash remains until the replacement Pigeon logo is supplied.
+
+Each song chop has independent positions: K1 can cross neighboring chops, but
+stops before its own end. Extend the end with K2 to move the start farther. Pad
+assignments stay fixed while positions change; saving retains this order. Split
+inserts a new pad after the selected one, and join merges the selected pad into
+the previous pad using the earliest start and latest end.
+
+## Patterns, arrangement and mixer
+
+This workflow takes inspiration from Pocket Operator for Pixel's direct phrase
+selection, duplication and track mixing. Four phrase slots **A–D** reuse the
+existing saved project slots. A slot holds all three tracks' sequences, timing,
+parameter locks and automation. Sample/chop data stays in the shared sample bank;
+selecting a phrase keeps the current instruments, levels, mutes and FX.
+
+Tap **SCL** to cycle **Patterns → Arrangement → Waveform**. In Patterns:
+
+- The first four white keys select A–D. During playback a saved selection queues
+  for the next 4/4 bar, with a blinking pending-pattern LED. The last selection wins.
+- K1 or PRESETS selects the target slot. An empty target keeps the current working
+  phrase, ready to save. Save edits before selecting another occupied slot.
+- K4 left copies the current working phrase, including unsaved edits; right pastes
+  the clipboard into the selected target and saves it. OCT−/OCT+ also copy/paste.
+- K2 copies a saved source A–D into the clipboard without changing the working phrase.
+- K3 right appends the selected pattern to the arrangement; left removes its last section.
+- REC saves the working phrase and arrangement to the selected slot. PLAY loops its
+  saved phrase. EDIT returns to the waveform.
+
+In Arrangement, the first four white keys append A–D. K1/PRESETS selects a section;
+K2 sets its pattern for all tracks; K3 sets 1–16 repeats; K4 right inserts a section
+following the selection, and left deletes it. PLAY runs the sections in order and
+stops after the final repeat. There are at most 16 sections. Existing arrangements
+with different patterns per track remain playable; the display marks them LANES.
+REC saves the arrangement with the selected pattern slot. The existing SAVE project
+page also remains available.
+
+Copy, paste, save, and arrangement edits require stopped transport. Saving/pasting
+also requires releasing sounding pads to avoid a flash erase during audio. Live
+launches read sources cached before PLAY and never load projects from flash in the
+ISR. On stopping live pattern playback, the last playing phrase becomes editable.
+Pattern launches and arrangements use TEMPO timing; standalone SAMPLE END sequencing
+remains available on the 16-step page. Queued launches use a 4/4 bar even when a
+phrase uses a different step division or length.
+
+Tap **ARP** to cycle **Levels → Mute/Solo → Delay → Chorus → Reverb → Waveform**.
+K1 controls Song 1, K2 the drum kit and K3 Song 2. K4 sets the selected track's pan
+on levels/send pages, and selects solo on the mute page (0 off). These controls
+work during playback and retain the existing buffered partial screen updates.
+
+Workflow references: [Pocket Operator for Pixel announcement](https://teenage.engineering/_img/629b0b5bd9a5e7000404f5d0_original.pdf)
+and [PO-33 pattern copy/chaining guide](https://teenage.engineering/guides/po-33/en).
+
+### Sequence grid and length
+
+The sampler sequencer supports **1–64 steps per track**, saved with the project.
+Tap SEQ to open it without changing the existing length. K1 controls BPM,
+K2 selects tempo or sample-end timing while stopped, K3 selects the step,
+and **K4 sets sequence length while stopped**. OCT keys select the step division.
+EDIT clears the selected step and its locks, then advances (use this for rests).
+REC arms step entry; PLAY starts playback.
+
+The grid shows 16 steps per page and follows the selected or playing step.
+A dot marks a note, a bottom line marks a step outside the chosen length,
+and the highlighted cell marks the current step. During recording the key LEDs
+show the step within its 16-step page; during playback they show sounding chops.
+Shortening a sequence preserves later notes so expanding it restores them.
+
+### Direct beat editing and performance controls
+
+On the stopped, unarmed sequencer grid, K3 selects a step and a sample key assigns
+its chop without advancing or sounding. REC retains the existing preview and
+advance workflow. EDIT clears the step and its locks and advances. Hold SAVE to
+undo/redo the last assignment, clear, or step-detail gesture.
+
+Each grid cell shows its step number above its chop/pad number. ENV switches
+between the grid and step details: K1 velocity, K2 gate (a per-step parameter
+lock), K3 probability, K4 repeats (1–4). PRESETS selects a step on the detail page.
+LFO opens timing controls: K1 swing, K2 track gate, K3 BPM. Gate and repeats use
+TEMPO playback; SAMPLE END continues to wait for complete samples. Kit one-shots
+retain full playback by default; an explicit per-step gate lock cuts the hit with
+a short fade. Per-pad decay offers independent envelope shaping.
+
+On the drum waveform/home page, ENV opens pad settings. A white key selects and
+plays a pad. K1 pitch (±24 semitones), K2 level (0–127), K3 decay (0 full length,
+1–127 approximately 12 ms–1.5 s), K4 choke group (0 off, 1–4). Pads sharing a
+nonzero group fade the previous pad when triggered. Settings save in the sample
+metadata, bound to that kit's audio CRC; replacing a kit resets its pad settings.
+
+On FX pages, hold LFO while adjusting a knob to make a temporary effect change;
+releasing LFO restores its prior value. EDIT resets filter, distortion, delay,
+chorus and reverb sends on the selected track. Compression remains separate.
+
+On Patterns or Arrangement, ENV opens arrangement tools: K1 chooses NEXT BAR or
+PATTERN END launch timing; K2 moves the selected section; K3 right duplicates it,
+including repeats and per-track pattern assignments. ENV returns to Arrangement;
+REC saves the chain and launch preference with the selected project. Pattern-end
+launches use the arrangement clock track's loop (Song 1 before a pattern launch);
+tracks with different sequence lengths may therefore restart midway. Sources
+remain cached before playback; switching does no flash writes or decoding.
+
+### Local library and complete backups
+
+Use `.venv/bin/python tools/pigeon_library.py`. All sample edits are prepared
+locally; only `upload` or `restore` writes to the instrument. Stop playback and
+release pads before device transfers.
+
+```
+# Capture patterns, current music, settings, presets, songs, kit and chop metadata.
+.venv/bin/python tools/pigeon_library.py backup build/session.pigeon
+# Replace just Song 2 in an exported .kob (Song 1 and kit retain encoded bytes).
+.venv/bin/python tools/pigeon_library.py replace-song build/new.kob build/current.kob song.mp3 --slot 2 --start 0 --seconds 30 --bitrate 64
+# Replace kit only; provide 1–16 files in white-key pad order.
+.venv/bin/python tools/pigeon_library.py replace-kit build/new.kob build/current.kob kick.wav snare.wav hat.wav
+# Preview the actual encoded song locally, before upload.
+.venv/bin/python tools/pigeon_library.py preview build/new.kob build/preview.wav --slot 2 --play
+.venv/bin/python tools/pigeon_library.py info build/new.kob
+.venv/bin/python tools/pigeon_library.py upload build/new.kob
+.venv/bin/python tools/pigeon_library.py restore build/session.pigeon
+```
+
+Imports accept formats supported by ffmpeg, convert to mono 22.05 kHz, and report
+remaining shared capacity. Untouched songs, kit audio and metadata are retained;
+replaced songs receive fresh transient chops. The tool refuses an oversized bank
+before writing. Complete archives validate every object's CRC before restore and
+save an automatic recovery archive first. Restore commits objects individually:
+a disconnect can leave a partial restore; reconnect and restore again. Sample
+uploads also make a recovery bank and verify the encoded payload after writing.

@@ -36,6 +36,10 @@ FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_re
 OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_custom": 558,
             "uac_tap48": 504,
             "ko_compress": 44}        # absent with FELUCCA_KO=0; block detector + two sample loops
+# The explicit sampler profile removes these engines; shared audio/FX checks remain mandatory.
+if os.environ.get("FELUCCA_SAMPLER_ONLY") == "1":
+    FUNCS = FUNCS[FUNCS.index("slice_render"):]
+    FUNCS.insert(0, "sample_render")
 TOL = 0.10                      # exact (no noise): small edits pass, a grown render loop does not
 DIV_W = 8                       # a divide weighs 1 + 8 instructions
 NEST = 4                        # an instruction in a loop inside a loop weighs 4, two deep 16, ...

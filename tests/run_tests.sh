@@ -170,7 +170,18 @@ run() { echo "== $1"; shift; "$@" || fail=1; }
 
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_test" tests/ko_test.c -lm
 run "KO: pads, independent chops, one shots, compression, metadata and unchanged project format" "$OUT/ko_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_sequence_test" tests/ko_sequence_test.c -lm
+run "KO: 16 steps, sample-end timing, recording LEDs and all-key chops" "$OUT/ko_sequence_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_ui_test" tests/pigeon_ui_test.c -lm
+run "Pigeon: partial drawing, playback follow, step divisions and K1 response" "$OUT/pigeon_ui_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_test.c -lm
+run "Pigeon: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
+run "Pigeon: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
+run "Pigeon: independent imports and complete archive integrity" python3 tests/pigeon_library_test.py
 run "KO kit upload: exact zones and pad order" python3 tests/ko_upload_test.py
+$CC -w -o "$OUT/lcd_audio_test" tests/lcd_audio_test.c
+run "LCD: DMA pixel order and bounded sample refill gaps during redraw" "$OUT/lcd_audio_test"
 
 $CC -o "$OUT/storage_test" tests/storage_test.c
 run "flash storage (A/B, torn writes)" "$OUT/storage_test"

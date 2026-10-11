@@ -96,13 +96,14 @@ def generate():
     for old in ("felucca_font.h", "felucca_icons.h"):     # headers of the bitmap font and icon atlas
         (GEN / old).unlink(missing_ok=True)
     tools = SRC / "tools"
-    cmds = [[tools / "gen_aa_font.py", GEN / "ui_fonts.h", "--preset", "inter-tight"],
+    cmds = [[tools / "gen_aa_font.py", GEN / "ui_fonts.h", "--preset", "little-character"],
             [tools / "gen_aa_icons.py", GEN / "ui_icons.h"],
             [tools / "gen_aa_keycaps.py", GEN / "ui_keycaps.h"],
             [tools / "gen_ui_palettes.py", GEN / "ui_palettes.h"],
             [tools / "gen_tables.py", GEN / "felucca_tables.h"],
             [tools / "gen_fm6_patches.py", GEN / "felucca_fm6.h"],
-            [tools / "gen_samples.py", GEN / "felucca_samples.h"]]
+            [tools / "gen_samples.py", GEN / "felucca_samples.h"],
+            [tools / "gen_brand_splash.py", GEN / "brand_splash.h"]]
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
     failed = []
@@ -191,7 +192,7 @@ def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
-                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST", "FELUCCA_KO", "FELUCCA_KO_STORAGE"):
+                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST", "FELUCCA_KO", "FELUCCA_KO_STORAGE", "FELUCCA_SAMPLER_ONLY", "FELUCCA_KO_DUAL"):
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
@@ -222,10 +223,14 @@ def build_app():
         vendor = FW / "vendor" / "libmad"
         sources = ["bit", "fixed", "frame", "huffman", "layer12", "layer3", "stream", "synth", "timer"]
         extra = [OUT / f"mad_{s}.o" for s in sources] + [OUT / "ko_mp3.o"]
-        vf = [*CFLAGS, "-fwrapv", "-DFPM_64BIT", "-DNDEBUG", "-DHAVE_LIMITS_H", "-DSIZEOF_INT=4",
+        # Decoder throughput is a playback deadline, unlike most UI code.
+        vf = [*[f for f in CFLAGS if f != "-Os"], "-O2", "-fwrapv", "-DFPM_64BIT", "-DNDEBUG", "-DHAVE_LIMITS_H", "-DSIZEOF_INT=4",
               "-DSIZEOF_LONG=4", "-DSIZEOF_LONG_LONG=8", "-Dmalloc=ko_mad_malloc", "-Dcalloc=ko_mad_calloc",
               "-Dfree=ko_mad_free", "-Ifirmware/vendor/libmad/felucca_std"]
-        tc_all(*[("cc", *vf, "-c", vendor / f"{s}.c", "-o", extra[i]) for i,s in enumerate(sources)],
+        # layer3 -O2 embeds a signed DSP coefficient in the ROM-address range;
+        # retain -Os there so the strict ROM-reference guard remains intact.
+        tc_all(*[("cc", *["-Os" if s == "layer3" and f == "-O2" else f for f in vf],
+                   "-c", vendor / f"{s}.c", "-o", extra[i]) for i,s in enumerate(sources)],
                ("cc", *vf, "-c", FW / "src" / "ko_mp3.c", "-o", extra[-1]))
         linker = OUT / "app_ko.ld"
         linker.write_text((FW / "app.ld").read_text().replace("LENGTH = 0x8DFBC",f"LENGTH = {fm1pkg_make.KO_APP_SLOT:#x}")

@@ -78,7 +78,7 @@ static void fm1_fault(const fm1_crash_t *c)
     fm1_audio_stop();
     scr_wake_now();                                   /* (MENU > SCREEN OFF: the panel on first) */
     lcd_fill(0, 0, 240, 240, UI_CRASH_BG);            /* fixed, outside the palettes */
-    draw_text_line(0, 8, 240, &AF_M, "FELUCCA CRASH", UI_CRASH_INK, UI_CRASH_BG, 1);
+    draw_text_line(0, 8, 240, &AF_M, FW_DISPLAY_TITLE " CRASH", UI_CRASH_INK, UI_CRASH_BG, 1);
     hexs(b, c->vec);
     draw_text_line(10, 40, 220, &AF_M, b, UI_CRASH_INK, UI_CRASH_BG, 0);
     hexs(b, c->pc);
@@ -125,8 +125,9 @@ static void felucca_init(void)
 }
 
 /* The power-on LED sweep (1.1, hal/fm1_led_anim.h: a soft light over the keys left to right, then the buttons swell
- * and settle on the glow; ~0.70 s), started before the scan and run by it: nothing waits for it, the splash's 430 ms
- * and the first ~0.27 s of the UI go by under it (the UI's LEDs from its end, or at once on a key or a button down).
+ * and settle on the glow; ~0.70 s), started before the scan and run by it: nothing waits for it.
+ * The sampler's three-second splash covers the sweep (the UI's LEDs from its end,
+ * or at once on a key or a button down).
  * Every LEDS setting: it is no idle glow; with DIM HI / DIM LO it ends on that glow (and is drawn over that glow
  * level), with OFF / INV dark. Not with MENU > ANIM OFF (no motion: the LEDs as the UI has them at once), not after a crash (a crash record newer than the last boot saw: the crash screen's
  * reset), a hang (a WDT reset) or a failed boot (bootguard: the last one died within its first 30 s): straight to the
@@ -191,11 +192,12 @@ static void fm1_main(void)
     }
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
 #if FELUCCA_KO
-    ko.on = (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    ko.on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
     ko_palette_on = ko.on; palette_set(settings.palette);
     if (ko.on) ko_prepare();
 #endif
-    for (ms = 0; ms < 400u; ms += 10u) {      /* the splash; the pot followed (MIDI IN plays under it) */
+    for (ms = fm1_ms; fm1_ms - ms < (FELUCCA_KO ? 3000u : 400u); ) { /* sampler splash: three seconds */
+        fm1_wdt_feed();                     /* keep the watchdog alive throughout the longer splash */
         fm1_delay_ms(10);
         master_poll();
 #if FELUCCA_KO_STORAGE
@@ -288,10 +290,26 @@ static void fm1_main(void)
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
         felucca_dbg.stage = 2;
         ui_leds();
+#if FELUCCA_KO_STORAGE
+        uint32_t draw_begin=KO_DIAG_NOW();
+        lcd_audio_last=draw_begin;
+        lcd_audio_enabled=1;
+        ko_pcm_poll();
+#endif
         ui_draw();
+#if FELUCCA_KO_STORAGE
+        lcd_audio_enabled=0;
+        ko_pcm_poll();
+        ko_diag_max(&ko_diag.draw_max_us,KO_DIAG_US(KO_DIAG_NOW()-draw_begin));
+#endif
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             ui_input();
+#if FELUCCA_KO_STORAGE
+            /* PCM deadlines follow the audio clock, not the display clock.
+             * Keep refilling voices throughout the UI frame wait. */
+            ko_pcm_poll();
+#endif
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
 #endif

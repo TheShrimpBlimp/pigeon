@@ -1,0 +1,17 @@
+{
+  "name": "Pigeon FM1 Sampler",
+  "short_name": "Pigeon",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#131710",
+  "theme_color": "#b9ef77",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

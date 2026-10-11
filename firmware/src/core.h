@@ -15,6 +15,20 @@
 #ifndef FELUCCA_KO
 #define FELUCCA_KO 0             /* optional sampler interface; ordinary Felucca is unchanged */
 #endif
+#ifndef FELUCCA_SAMPLER_ONLY
+#define FELUCCA_SAMPLER_ONLY 0
+#endif
+#if FELUCCA_SAMPLER_ONLY && !FELUCCA_KO
+#error "Sampler-only profile requires KO"
+#endif
+#ifndef FELUCCA_KO_DUAL
+#define FELUCCA_KO_DUAL 0
+#endif
+#if FELUCCA_KO_DUAL && !FELUCCA_KO
+#error "Two-song profile requires KO"
+#endif
+#define SAMPLER_PARTS (FELUCCA_KO_DUAL ? 3u : 2u)
+#include "project_identity.h"
 #include "../hal/ko_layout.h"
 #if FELUCCA_KO_STORAGE && !FELUCCA_KO
 #error "KO storage requires FELUCCA_KO=1"
@@ -35,7 +49,7 @@
 #endif
 #define NENGINES (13 + FELUCCA_SLICE)   /* SLICE (13) comes last: the other engines keep their numbers */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
-#define NENG_SHOWN (NENGINES - !FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
+#define NENG_SHOWN (FELUCCA_SAMPLER_ONLY ? 2 : NENGINES - !FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
                                                 * in the display order of engines.c ENGINE_ORDER */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))

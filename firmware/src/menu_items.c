@@ -170,6 +170,9 @@ static uint32_t menu_n(uint32_t row)
 }
 static uint32_t menu_get(uint32_t row)
 {
+#if FELUCCA_SAMPLER_ONLY
+    if (row==MI_KO) return 1;
+#endif
     const menu_flag_t *f = menu_flag(row);
     uint32_t i = 0;
     if (f)
@@ -227,6 +230,9 @@ static const char *menu_vname(uint32_t row, uint32_t v)
  * kept with the project (PROJECT SAVE, the autosave), not by settings_save */
 static void menu_put(uint32_t row, uint32_t v)
 {
+#if FELUCCA_SAMPLER_ONLY
+    if (row==MI_KO) return;
+#endif
     const menu_flag_t *f = menu_flag(row);
     if (f) {
         if (f->bit & PREF_X)

@@ -13,6 +13,19 @@
 
 static uint8_t lcd_small[64];
 static uint8_t lcd_busy;           /* a lcd_data DMA may still run; CS is low */
+#if FELUCCA_KO_STORAGE
+static void ko_pcm_poll(void);
+static uint8_t lcd_audio_enabled; /* main loop enables only around UI drawing */
+static uint32_t lcd_audio_last;
+static void lcd_audio_service(void)
+{
+    uint32_t now=fm1_ticks();
+    if (!lcd_audio_enabled || (uint32_t)(now-lcd_audio_last)<1000u*FM1_TICKS_PER_US) return;
+    lcd_audio_last=now;
+    ko_pcm_poll(); /* never draws, handles input, or changes the LCD DMA source */
+}
+#endif
+
 
 static void lcd_spin(uint32_t n)
 {
@@ -44,6 +57,9 @@ static void lcd_data(const void *p, uint32_t n)
     lcd_sync();
     fm1_lcd_send_data(p, n);
     lcd_busy = 1;                  /* completed by lcd_sync */
+#if FELUCCA_KO_STORAGE
+    lcd_audio_service();
+#endif
 }
 
 static void lcd_window(uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
@@ -92,7 +108,15 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
     if (!w || !h)
         return;
     lcd_window(x, y, x + w - 1u, y + h - 1u);
+#if FELUCCA_KO_STORAGE
+    /* Keep individual DMA waits bounded, including large canvas blits. */
+    for (uint32_t left=w*h;left;) {
+        uint32_t n=left>240u ? 240u : left;
+        lcd_data(px,n*2u);px+=n;left-=n;
+    }
+#else
     lcd_data(px, w * h * 2u);
+#endif
 }
 
 /* ST7789V init: reset, then 16-bit colour, scan direction and IPS inversion;

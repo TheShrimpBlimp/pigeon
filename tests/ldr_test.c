@@ -154,6 +154,16 @@ int main(int argc, char **argv)
     memset(nor, 0xFF, sizeof nor);
     memcpy(nor, old + ofo, 0x93000);
     memcpy(head, nor, sizeof head);
+    /* The general host suite exercises whichever package was built. Detect
+     * its declared layout so preserved sample extents are not mistaken for
+     * application bytes. An explicit argument still requires that profile. */
+    if (argc <= 3) {
+        uint32_t key; uint8_t descriptor[32];
+        ldr_chip_key(&key);
+        memcpy(descriptor,logical+nfo+LDR_APP_LO+KO_LAYOUT_ENTRY,32);
+        ldr_sfc(descriptor,32,KO_LAYOUT_ENTRY,key);
+        expanded = ota_memeq(descriptor+16,(const uint8_t *)KO_LAYOUT_NAME,8);
+    }
     {
         uint8_t r[112] = {0};
         r[2] = 0x0D; r[3] = 0x5A; r[4] = 0x01; r[5] = 0x5A; r[6] = 0x41; r[7] = 0x54;

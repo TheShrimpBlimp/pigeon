@@ -94,10 +94,19 @@ MP3 uses a fixed-point libmad decoder with preallocated state and no heap. One
 decoder runs in the main loop; the audio interrupt reads two 576-sample PCM
 buffers per song voice plus a 192-sample bridge at each loop start. Samples remain in flash. Eight voices remain shared
 across all tracks. Seek jobs decode up to three frames to recover synthesis
-history, or up to four for a bridge spanning two frames; cache misses output
+history, or up to four for a bridge spanning two frames. Jobs yield between
+frames so each service call decodes at most one MP3 frame; an incomplete buffer
+is not published, and voice/bank changes cancel pending work. Cache misses output
 silence and increment a counter. Initial attacks wait for current and prefetched
 PCM. The bridge occupies spare engine memory and handles frame crossings at loop
 boundaries. Waveform drawing never decodes audio.
+
+Running-voice refills take priority over cold attacks and optional loop bridges.
+Overlapping triggers reuse another voice's published PCM when the requested
+source frame matches. Flash refill reads copy contiguous extents in bulk.
+Most decoder modules use speed optimization; Layer III retains size optimization
+to keep the strict ROM-address build check intact. These reduce refill work but
+do not establish a hardware guarantee of eight simultaneous MP3 voices.
 
 The profile reallocates the existing 432 KiB SRAM budget to 64 KiB static RAM
 and 368 KiB pool; build checks require 4 KiB and 8 KiB minimum headroom,
@@ -121,3 +130,69 @@ its reference renders use factory audio. Static render instruction checks do
 not bound MP3 decode time. FM1 listening, boot/update behavior and real audio
 deadlines with eight pitched voices and stacked effects still require hardware
 validation. The source/build/test work does not flash or access the device.
+
+## Playback diagnostics
+
+`tools/ko_bank.py diagnostics --reset` clears RAM counters; play a short passage,
+then run `tools/ko_bank.py diagnostics` to read them. Command 97, schema 1,
+returns status 0, version 1, then ten unsigned 32-bit values encoded as five
+7-bit bytes each (least significant first). It never writes flash or stops playback.
+
+Fields: missing sample reads (not audio blocks), decoder errors, reused buffers,
+decode calls, total decode microseconds, maximum decode microseconds, maximum
+refill-poll gap during active song voices, maximum draw microseconds, ready
+attacks, and maximum trigger-to-ready microseconds. Timing on FM1 uses TIMER4
+and includes interrupt time; it measures elapsed time, not isolated CPU cost.
+The draw maximum includes idle screens. Reset immediately before each short
+trial; 32-bit totals may wrap during long sessions. Host tests use a synthetic
+clock and do not validate hardware timing. No logging occurs in the audio IRQ.
+
+UI drawing in the KO storage build services sample refills between bounded LCD
+transfers (at most 240 pixels per canvas transfer), checking the refill deadline
+approximately every millisecond. The hook is enabled only around main-loop UI
+drawing, never during boot or firmware update screens. It does not process UI
+input or mutate drawing buffers. Full redraw elapsed time may increase because
+refill work runs inside it; `poll_gap_max_us` and missing sample reads are the
+important playback measurements. Repeated selection of the same chop at the same
+waveform position no longer requests a complete waveform redraw.
+
+## Two independent songs (bank version 3)
+
+Both songs and up to sixteen drum hits share the same 408 KiB payload pool.
+The duration estimates above are combined song duration, not duration per
+song; the second song also has its own seek index and waveform. The default
+32 kbps encoding can hold roughly 90 seconds combined without drums, or
+roughly 73 seconds with sixteen 0.6-second drum hits. Actual importer size
+checks are authoritative. Encoding options apply to both songs in `build`.
+
+```sh
+.venv/bin/python tools/ko_bank.py build dual.kob song1.wav kick.wav snare.wav --song2 song2.wav
+# Alternatively retain an exported one-song bank, drum kit and chop edits:
+.venv/bin/python tools/ko_bank.py add-song dual.kob backup.kob song2.wav
+.venv/bin/python tools/ko_bank.py upload dual.kob
+```
+
+Version 3 keeps the physical flash layout and first descriptor unchanged in
+size; it adds a second 668-byte descriptor inside the existing header sector.
+Two-song uploads require capability version 3 before any erase. Version 2
+banks remain supported. The secondary descriptor is programmed before the
+primary commit header; corrupt or overlapping secondary ranges fail closed.
+Song 2 metadata uses offset 1024 in the existing metadata sector; the original
+Song 1/kit record stays at offset 256. Exports include both records.
+Older one-song firmware cannot play version 3 banks; retain a version 2 backup
+if reverting firmware. `add-song` accepts version 2 bases only; rebuild a
+version 3 bank from the source files to replace its audio.
+
+### Preview shared storage before uploading
+
+`tools/ko_bank.py preview BANK.kob` validates a bank locally and shows both songs'
+names, durations and codecs, kit usage, combined consumption of the **408 KiB**
+audio payload, and free space. The `upload` command prints the same preview before
+opening MIDI or writing flash. Preview requires no connected synth.
+
+In `web/editor.html`, connect a sampler firmware and open Samples. Choose a `.kob`
+bank to see the combined storage bar and song/kit breakdown before clicking Upload
+sample bank. Banks are created with the Python build/add-song commands; the browser
+does not transcode audio. CRC, descriptor and frame checks run before upload, and
+the firmware capability is checked again before erase. Two-song banks cannot upload
+to one-song firmware. The browser retains the legacy slot editor for other firmware.

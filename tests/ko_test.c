@@ -48,9 +48,23 @@ static void render_blocks(uint32_t blocks)
     int32_t out[CTL * 2];
     for (uint32_t j = 0; j < blocks; j++) mix_block(out, CTL);
 }
-int main(void)
+#ifndef KO_TEST_MAIN
+#define KO_TEST_MAIN main
+#endif
+int KO_TEST_MAIN(void)
 {
     int bad = 0; ui_power_on(); memset(&ko, 0, sizeof ko); memset(ko_flash, 255, sizeof ko_flash);
+    bad += check("sampler profile identifies itself as Pigeon",
+                 !strcmp(FW_DISPLAY_NAME, "Pigeon") && !strcmp(SPLASH_LINES[0], "Pigeon"));
+#if BRAND_SPLASH_AVAILABLE
+    draw_splash();
+    int photo_ok = BRAND_SPLASH_W <= 208 && BRAND_SPLASH_H <= 192;
+    for (uint32_t y = 0; y < BRAND_SPLASH_H; y++)
+        for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
+            photo_ok &= host_screen[(26u+y)*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
+                        swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
+    bad += check("photo splash preserves every indexed pixel and LCD byte order", photo_ok);
+#endif
     slc_store_boot(); fixture(0, 0); fixture(1, 1);
     step_t saved[NSTEP]; memcpy(saved, trk[0].step, sizeof saved);
     menu_put(MI_KO, 1); frame();
@@ -62,18 +76,79 @@ int main(void)
     ko_table_t tab = {0}; tab.n = 16;
     for (uint32_t j = 0; j < tab.n; j++) { tab.chop[j].a = j * 2048; tab.chop[j].b = (j + 1) * 2048; }
     bad += check("manual table with independent ends restores", ko_restore(&tab));
+    ko_select(2);ko_chop_turn(0,-1000);
+    bad+=check("chop start can move before previous pad start",ko_table()->chop[2].a==0 && ko_table()->chop[1].a>0);
+    ko_restore(&tab);ko_select(1);ko_chop_turn(1,1000);ko_chop_turn(0,1000);
+    bad+=check("chop start can cross later pads but stays before own end",ko_table()->chop[1].a>ko_table()->chop[2].a && ko_table()->chop[1].a==ko_table()->chop[1].b-SLC_MIN);
+    ko_table_t free_chops=*ko_table();
+    bad+=check("independent edit does not move neighboring pads",!memcmp(&free_chops.chop[0],&tab.chop[0],8) && !memcmp(&free_chops.chop[2],&tab.chop[2],8));
+    bad+=check("out-of-order chop positions restore without reassigning pads",ko_restore(&free_chops) && ko_table()->chop[1].a==free_chops.chop[1].a);
+    bad+=check("independent chop positions save in existing metadata record",ko_store_sector(1)==3);
+    ko_auto();ko_store_load();bad+=check("independent chop positions reload exactly",!memcmp(&free_chops,ko_table(),sizeof free_chops));
+    free_chops.chop[1].a=10000;free_chops.chop[1].b=20000;ko_restore(&free_chops);ko_select(1);ko.cursor=15000;
+    bad+=check("split works beyond the next pad start",ko_split() && ko_table()->chop[2].a==15000 && ko_table()->chop[3].a==tab.chop[2].a);
+    bad+=check("joining split chops restores their full region",ko_join() && ko_table()->chop[1].a==10000 && ko_table()->chop[1].b==20000);
+    ko_select(2);bad+=check("join includes an earlier-positioned adjacent pad",ko_join() && ko_table()->chop[1].a==tab.chop[2].a && ko_table()->chop[1].b==20000 && ko_table()->chop[1].st==slc_state_at(slc_get(1),tab.chop[2].a));
+    uint32_t bound_a,bound_b,bound_st;slc_bounds(slc_get(1),SLC_DIV_MAN,1,&bound_a,&bound_b,&bound_st);
+    bad+=check("playback reads independent bounds by pad index",bound_a==tab.chop[2].a && bound_b==20000);
+    ko_restore(&tab);
+    ko_select(1); ko_table_t undo_before=*ko_table();
+    ko_pitch_turn(1); ko_table_t undo_after=*ko_table();
+    bad += check("chop undo restores full table and redo republishes edit",ko_undo() && !memcmp(ko_table(),&undo_before,sizeof undo_before) && ko_undo() && !memcmp(ko_table(),&undo_after,sizeof undo_after));
+    ko_pitch_turn(-1);
+    trk[0].p[P_MUTE]=0;trk[1].p[P_MUTE]=1;
+    ko_performance_turn(3,1);
+    bad += check("solo excludes other tracks without overwriting stored mutes",ko_solo==0 && ko_muted(&trk[1]) && !ko_muted(&trk[0]) && trk[1].p[P_MUTE]==1);
+    ko_performance_turn(3,-1);
+    bad += check("solo toggle restores prior mute mix",ko_solo==-1 && !ko_muted(&trk[0]) && ko_muted(&trk[1]));
+    ko_performance_turn(1,-1);
+    bad += check("performance page unmutes kit",!trk[1].p[P_MUTE]);
+    ko_performance_turn(0,1); uint32_t live=0;
+    trk_note_on(&trk[0],60,100); for(uint32_t i=0;i<NVOICE;i++) live+=trk[0].v[i].active!=0;
+    bad += check("muted track refuses new voices",ko_muted(&trk[0]) && !live);
+    ko_performance_turn(0,-1);
+    ko_wave_a=0;ko_wave_span=32768;ko_play_x=-1;ko.view=0;
+    voice_t play_saved=trk[0].v[0];
+    trk[0].v[0].active=1;trk[0].v[0].s[6]=1;trk[0].v[0].ph[0]=8192;
+    uint16_t waveform_before[240*72];memcpy(waveform_before,host_screen+98*240,sizeof waveform_before);
+    ko_playhead();int first_x=ko_play_x;trk[0].v[0].ph[0]=16384;ko_playhead();
+    bad += check("playhead moves without modifying waveform pixels or voice position",first_x>=12 && ko_play_x>first_x && !memcmp(waveform_before,host_screen+98*240,sizeof waveform_before) && trk[0].v[0].ph[0]==16384);
+    trk[0].v[0].active=0;ko_playhead();
+    bad += check("playhead disappears when playback stops",ko_play_x==-1);
+    trk[0].v[0]=play_saved;
+    ko_select(1);ko.zoom=0;ko.cursor=0;uint32_t selected_before=ko.selected;
+    ko_move_cursor(1);uint32_t coarse_scroll=ko.cursor;
+    ko.zoom=4;ko.cursor=0;ko_move_cursor(1);uint32_t fine_scroll=ko.cursor;
+    bad += check("unzoomed scrolling is faster and follows visible zoom span",coarse_scroll==slc_get(1)->len/24 && fine_scroll==ko_wave_span_for(slc_get(1))/24 && coarse_scroll>fine_scroll*10 && ko.selected==selected_before);
+    ko.zoom=0;ko_chop_turn(0,1);uint32_t coarse_start=ko_table()->chop[1].a;
+    bad += check("start edit moves scroll cursor exactly to updated boundary",ko.cursor==coarse_start);
+    ko_undo();ko.zoom=4;ko_chop_turn(0,1);
+    bad += check("zoomed boundary movement is finer without consuming scroll selection",ko_table()->chop[1].a-2048<coarse_start-2048 && ko.cursor==ko_table()->chop[1].a && ko.selected==1);
+    ko_undo();ko_chop_turn(1,1);
+    bad += check("end edit moves cursor to updated end",ko.cursor==ko_table()->chop[1].b);
+    ko_undo();ko_select(15);ko.zoom=0;ko_chop_turn(1,1000);
+    bad += check("end boundary at sample length is a valid visible scroll position",ko.cursor==slc_get(1)->len && ko_table()->chop[15].b==slc_get(1)->len);
+    ko_move_cursor(1000);bad += check("scrolling clamps at exact sample end",ko.cursor==slc_get(1)->len);
+    ko_move_cursor(-1000);bad += check("scrolling clamps at sample start",ko.cursor==0);
+    (void)ko_restore(&tab);ko.zoom=0;ko_select(0);
     int mapping = 1;
     for (uint32_t k = 0; k < 27; k++) {
         int32_t pad = ko_pad(k);
-        uint32_t note = pad < 0 ? KB_SILENT : 60 + pad;
+        uint32_t note = pad < 0 || pad >= 16 ? KB_SILENT : 60 + pad;
         mapping &= kb_map(&trk[0], k) == note && kb_map(&trk[1], k) == note;
     }
-    bad += check("both parts map sixteen white keys and silence black keys", mapping);
+    bad += check("legacy sixteen-chop banks and kit retain white-key assignments", mapping);
     static const uint8_t white[16] = {0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26};
     for (uint32_t j = 0; j < 16; j++) mapping &= ko_pad(white[j]) == (int32_t)j;
-    bad += check("physical B keys trigger chops four and eleven; A sharp stays silent",
-                 mapping && ko_pad(6) == 3 && ko_pad(18) == 10 && ko_pad(5) == -1 && ko_pad(17) == -1);
-    ko_select(1); uint32_t prior_end = ko_table()->chop[0].b;
+    bad += check("white chops four and eleven stay fixed while black keys add chops",
+                 mapping && ko_pad(6) == 3 && ko_pad(18) == 10 && ko_pad(5) == 18 && ko_pad(17) == 23);
+    ko_select(1);
+    uint32_t unchanged_revision=ko.revision;
+    ko_select(1);
+    bad += check("repeated chop selection avoids redundant waveform redraw",ko.revision==unchanged_revision);
+    ko_move_cursor(1);ko_select(1);
+    bad += check("retrigger still recenters a scrolled waveform",ko.cursor==ko_table()->chop[1].a);
+    uint32_t prior_end = ko_table()->chop[0].b;
     ko_chop_turn(0, 1); ko_chop_turn(1, 1); ko_pitch_turn(12);
     bad += check("independent start/end and per-chop pitch keep neighbor intact", ko_table()->chop[0].b == prior_end &&
                  ko_table()->chop[1].a > 2048 && ko_table()->chop[1].b > 4096 && ko_table()->chop[1].pitch == 12);
@@ -88,6 +163,20 @@ int main(void)
     uint32_t selection = ko.selected;
     ko_move_cursor(100);
     bad += check("K3 scrolls without changing selected chop", ko.selected == selection && ko.cursor > ko_table()->chop[selection].b);
+    uint32_t prefs = ui_prefs, cursor = ko.cursor;
+    ui_prefs &= ~PREF_ACCEL; memset(ui.enc_t, 0, sizeof ui.enc_t);
+    ko.cursor = 0; fm1_ms = 1000; ko_knob(2, 1);
+    uint32_t fine = ko.cursor;
+    fm1_ms += 10; ko_knob(2, 1);
+    uint32_t previous = ko.cursor;
+    fm1_ms += 10; ko_knob(2, 1);
+    bad += check("KO fast scrolling accelerates with standard preference off",
+                 ko.cursor - previous == fine * 5 && ko.selected == selection);
+    previous = ko.cursor; fm1_ms += 10; ko_knob(2, -1);
+    bad += check("KO reversing a knob immediately restores fine control", previous - ko.cursor == fine);
+    previous = ko.cursor; fm1_ms += 100; ko_knob(2, -1);
+    bad += check("KO slow turns retain single-detent precision", previous - ko.cursor == fine);
+    ko.cursor = cursor; ui_prefs = prefs; memset(ui.enc_t, 0, sizeof ui.enc_t);
     press(B_OCTDN);
     bad += check("OCT changes selected chop pitch", ko_table()->chop[selection].pitch == 11);
     press(B_EDIT);
@@ -198,6 +287,39 @@ int main(void)
         ko.view = 3; screen_save(screens, "compression"); ko.view = 4; screen_save(screens, "makeup");
     }
     menu_put(MI_KO, 0); frame();
+#if FELUCCA_SAMPLER_ONLY
+    bad += check("sampler profile stays enabled",ko.on&&menu_get(MI_KO)==1);
+    trk[2].eng_req = 0; trk[2].preset = 3; trk[2].p[P_E0] = 71;
+    project_capture(&project);
+    int preserved = proj_pack(&wire, &project) && proj_import(&proj_scratch, &wire, sizeof wire);
+    preserved &= project_restore_runtime(&proj_scratch) == 0;
+    bad += check("unavailable synth parameters survive project round trip",
+                 preserved && trk[2].eng_req == 0 && trk[2].preset == 3 && trk[2].p[P_E0] == 71);
+
+#if FELUCCA_KO_DUAL
+    song.sel=2;ko_setup_second();
+    bad += check("second song setup preserves first song and kit assignments",ko_song(&trk[2]) && ko_song(&trk[0]) && ko_kit(&trk[1]));
+    host_enc[panel.enc[EN_ALGO]]=-1;frame();
+    bad += check("track selector reaches drum track from song two",song.sel==1);
+    host_enc[panel.enc[EN_ALGO]]=1;frame();
+    bad += check("track selector reaches second song",song.sel==2);
+    fixture(2,0);ko_prepare();
+    ko_auto();ko_select(0);ko_pitch_turn(3); ko_table_t second_edit=*ko_table();
+    song.sel=0;ko_table_t first_edit=*ko_table();ko_pitch_turn(1);
+    song.sel=2;
+    bad += check("song two undo is independent of song one",ko_undo() && ko_table()->chop[0].pitch==0 && ko_undo() && !memcmp(ko_table(),&second_edit,sizeof second_edit));
+    song.sel=0;
+    bad += check("song one undo retains its own history",ko_undo() && !memcmp(ko_table(),&first_edit,sizeof first_edit));
+#endif
+    int only=1;
+    for(uint32_t j=0;j<NENGINES;j++)only &= eng_ok(j)==(j==4||j==13);
+    bad += check("only SAMPLE and SLICE can be selected",only&&NENG_SHOWN==2);
+    if (!FELUCCA_KO_DUAL) trk_note_on(&trk[2],60,100);trk_note_on(&trk[3],60,100);
+    uint32_t extra=0;
+    for(uint32_t p=SAMPLER_PARTS;p<NPART;p++)for(uint32_t j=0;j<NVOICE;j++)extra+=trk[p].v[j].active!=0;
+    bad += check("reserved project tracks cannot consume audio voices",!extra&&ENG_MEM_PARTS==SAMPLER_PARTS);
+#else
     bad += check("KO can be disabled without changing project parameters", !ko.on && trk[1].p[P_E7] == 1);
+#endif
     printf("KO: %s\n", bad ? "FAILED" : "PASSED"); return bad != 0;
 }

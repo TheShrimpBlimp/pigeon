@@ -1,6 +1,12 @@
-# Building Felucca
+# Building Pigeon
 
-The build makes three files in `build/`:
+The standalone Pigeon development profile is built with `./build-sampler.sh`.
+It enables the sampler interface and expanded sample storage, producing
+`build/pigeon.fwsc` and `build/pigeon.bin`. The underlying build also produces
+the compatibility filenames below. `./build.sh` alone builds the inherited
+Felucca baseline for regression work.
+
+The underlying build makes three files in `build/`:
 
 | File | What |
 | --- | --- |
@@ -34,11 +40,14 @@ The build makes three files in `build/`:
 
 On Linux x86-64 the toolchain runs natively and Docker is not needed.
 
-## Build
+## Build Pigeon
 
+```sh
+PYTHON=.venv/bin/python ./build-sampler.sh
 ```
-./build.sh
-```
+
+This produces `build/pigeon.fwsc` and `build/pigeon.bin`.
+`./build.sh` remains the baseline compatibility build.
 
 `JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations
 (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`).
@@ -49,8 +58,9 @@ and the version string `v1.0`; the package is `build/felucca-1.0.fwsc`, and
 (`felucca-1.0-app.bin`), `SHA256SUMS`, the sample attribution, `LICENSE`, `LICENSING.md` and
 `LICENSES/` (the package contains Apache-2.0 SDK files, so the licence texts travel with it).
 
-The optional sampler profiles use `FELUCCA_KO=1`; add `FELUCCA_KO_STORAGE=1`
-for the shared song/drum flash bank and MP3 decoder. The latter replaces factory
+The Pigeon script selects `FELUCCA_KO=1`, `FELUCCA_KO_STORAGE=1`,
+`FELUCCA_SAMPLER_ONLY=1`, and `FELUCCA_KO_DUAL=1` for two songs and the drum kit.
+The shared flash bank and MP3 decoder replace factory
 sample audio and changes the application reservation; see
 [Expanded KO storage](docs/KO_STORAGE.md) for migration and validation details.
 It requires flash storage, the editor upload protocol and the SLICE engine.
@@ -141,3 +151,20 @@ cd /tmp/felucca-site && python3 -m http.server 8000
 
 Installing firmware is at your own risk. If an install fails and the FM-1 no longer
 starts, recovery needs [FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter).
+
+The standalone profile sets `FELUCCA_SAMPLER_ONLY=1`: only SONG 1 (SLICE), DRUM KIT (SAMPLE),
+and SONG 2 (SLICE) render. Synth engines, extra track processing, continuous
+oscilloscope capture, and the USB serial console are excluded. USB audio, MIDI,
+sample transfer, updates, sequencer and effects remain. Four serialized track
+slots and original engine IDs are retained; unavailable tracks stay silent.
+The ordinary `build.sh` Felucca profile remains available.
+
+`build-sampler.sh` also sets `FELUCCA_KO_DUAL=1` for independent Song 2.
+
+## Pigeon sample GUI
+
+Run `python3 tools/pigeon_gui.py` (Windows: `py tools/pigeon_gui.py`) and open
+<http://127.0.0.1:8765/pigeon/> in Chrome or Edge. The same GUI is included at
+`webapp/pigeon/` by `web/make_site.py` for HTTPS hosting. Wait for **Offline ready**
+before disconnecting the network. See [the GUI guide](web/pigeon/README.md) for
+imports, device transfers, recovery backups, offline caching, and browser tests.

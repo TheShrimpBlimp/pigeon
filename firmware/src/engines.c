@@ -13,10 +13,11 @@
  * Sized by the largest, PHYS (3 x SYMP's slot); an engine that needs more than ENG_MEM_PART grows it for
  * every part (x NPART of the pool). Zero-initialised pool section: main.c fm1_cstart clears it. */
 #define ENG_MEM_PART 12888u
+#define ENG_MEM_PARTS (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NPART)
 static union {
     uint64_t align;
     uint8_t b[ENG_MEM_PART];
-} eng_mem[NPART] __attribute__((section(".pool")));
+} eng_mem[ENG_MEM_PARTS] __attribute__((section(".pool")));
 static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in the region, 0 = none (zeros) */
 #define ENG_MEM(p) ((void *)eng_mem[p].b)  /* part p's region (p < NPART) */
 #define ENG_MEM_FITS(name, size) _Static_assert((size) <= ENG_MEM_PART, name " state over ENG_MEM_PART")
@@ -45,6 +46,24 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #endif
 
 /* the editor protocol, user presets and projects store these indices: append, never reorder */
+#if FELUCCA_SAMPLER_ONLY
+static void sampler_unavailable_note(struct track *t, voice_t *v) { (void)t; v->active=0; }
+static void sampler_unavailable_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{ (void)t; (void)out; (void)n; (void)m; v->active=0; }
+/* Retain serialized engine slots, but neither synth DSP nor factory presets. */
+static const engine_t ENG_SAMPLER_UNAVAILABLE = {
+    .name="UNAVAIL", .page_title={"UNAVAILABLE","UNAVAILABLE"},
+    .note_on=sampler_unavailable_note, .render=sampler_unavailable_render,
+    .knob={P_E0,P_E1,P_E2,P_E3},
+};
+static const engine_t *const ENGINES[NENGINES] = {
+    &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE,
+    &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLE, &ENG_SAMPLER_UNAVAILABLE,
+    &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE,
+    &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE, &ENG_SAMPLER_UNAVAILABLE,
+    &ENG_SAMPLER_UNAVAILABLE, &ENG_SLICE,
+};
+#else
 static const engine_t *const ENGINES[NENGINES] = {
     &ENG_ANALOG,                 /* 0 */
 #if FELUCCA_FM4
@@ -67,6 +86,7 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_SLICE,                  /* 13 (FELUCCA_SLICE=0 builds without it) */
 #endif
 };
+#endif
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
 static inline uint32_t eng_idx(uint32_t e) { return e < NENGINES ? e : 0u; }
@@ -78,7 +98,7 @@ static void eng_mem_claim(const track_t *t)
 {
     uint32_t p = (uint32_t)(t - trk), e, k, n;
     uint32_t *w;
-    if (p >= NPART)
+    if (p >= ENG_MEM_PARTS)
         return;
     e = eng_idx(t->engine);
     n = ENGINES[e]->mem;
@@ -115,6 +135,9 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
  * engine indices, never DIGITAL's reserved 1 (with FELUCCA_FM4 it follows FM6). The indices stay as they are (the
  * stores and the protocol hold them); only this table orders them */
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
+#if FELUCCA_SAMPLER_ONLY
+    13, 4,
+#else
     0,                           /* ANALOG */
     12,                          /* FM6 */
 #if FELUCCA_FM4
@@ -126,11 +149,12 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     13,                          /* SLICE */
 #endif
     10,                          /* DRUM */
+#endif
 };
 
 /* the engines one can pick (engine 1 only with FELUCCA_FM4), in ENGINE_ORDER: eng_ok(e), the n-th of them
  * eng_vis(n), e's place among them eng_rank(e), the next / previous one eng_step(e, dir) (wraps) */
-static int eng_ok(uint32_t e) { return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL); }
+static int eng_ok(uint32_t e) { return FELUCCA_SAMPLER_ONLY ? e==4u || e==13u : e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL); }
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)
 {

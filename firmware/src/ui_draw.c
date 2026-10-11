@@ -1230,7 +1230,12 @@ static void draw_columns(void)
 #define SPL_X0 ((240u - SPL_SQ) / 2u)               /* its top-left on the screen (x and y) */
 #define SPL_PAD 16                                  /* the text's inset: left (its ink), top and bottom (the capitals) */
 #define SPL_PITCH 20                                /* line to line */
-static const char *const SPLASH_LINES[] = {"Felucca", FELUCCA_VERSION, "H\xFCgelton Instruments", "with community"};
+#if FELUCCA_KO
+#include "brand_splash.h"
+static const char *const SPLASH_LINES[] = {FW_DISPLAY_NAME, FW_DISPLAY_VERSION, "Based on Felucca", "Performance sampler"};
+#else
+static const char *const SPLASH_LINES[] = {FW_DISPLAY_NAME, FW_DISPLAY_VERSION, "H\xFCgelton Instruments", "with community"};
+#endif
 /* a band of two lines, h tall, at y on the screen: the first line's top at ly; the two lines' capitals declared
  * against al0..al1 (mode: AL_V the band centred there, AL_B the last baseline on al1) */
 static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l, uint32_t mode, int32_t al0,
@@ -1244,6 +1249,19 @@ static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l
 }
 static void draw_splash(void)
 {
+#if FELUCCA_KO && BRAND_SPLASH_AVAILABLE
+    lcd_fill(0, 0, 240, 240, T_BG);
+    draw_text_box(0, 2, 240, &AF_M, FW_DISPLAY_NAME, T_THEME, 1);
+    /* Reuse the existing canvas one row at a time; no extra RAM buffer. */
+    for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
+        cv_begin(BRAND_SPLASH_W, 1, T_BG);
+        for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
+            cv_px[x] = swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
+        cv_blit((240u-BRAND_SPLASH_W)/2u, 26u+y);
+    }
+    draw_text_box(0, 220, 240, &AF_S, FW_DISPLAY_VERSION, T_MID, 1);
+    lcd_sync();
+#else
     int32_t h = SPL_PAD - AF_M_CAP_Y + SPL_PITCH + AF_M.h;     /* a band: its two lines, the descenders in */
     int32_t lb = h - SPL_PAD - AF_M_CAP_H - AF_M_CAP_Y;         /* the bottom band's last line: its top */
     lcd_fill(0, 0, 240, 240, T_BG);
@@ -1253,6 +1271,7 @@ static void draw_splash(void)
     splash_band(SPL_X0 + SPL_SQ - (uint32_t)h, (uint32_t)h, lb - SPL_PITCH, SPLASH_LINES + 2, AL_B, 0, h - SPL_PAD,
                 "splash maker's baseline SPL_PAD from the bottom");
     lcd_sync();
+#endif
 }
 
 /* UPDATE MODE countdown (main.c: OCT- + OCT+ held): over everything, the menu and the dialogs too */
@@ -1455,6 +1474,9 @@ static void ui_draw(void)
 }
 static void ui_draw_page(uint32_t counting)
 {
+#if FELUCCA_KO
+    if (!ko_home() || ui.uboot || counting) ko_ui_invalidate();
+#endif
     if (ui.uboot) {
         draw_uboot();
         draw_head();
@@ -1501,6 +1523,7 @@ static void ui_draw_page(uint32_t counting)
     }
 #if FELUCCA_KO
     if (ko_home()) { ko_draw(); return; }
+    ko_ui_invalidate();
 #endif
     if (!ui.home && !page_visible(ui.page)) {          /* an OP page of a track that is not DIGITAL (without
                                                          * FELUCCA_FM4: any track): EDIT 1 */

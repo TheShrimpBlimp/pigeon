@@ -172,8 +172,9 @@ static uint32_t slc_man_end(const slc_src_t *s, const slc_man_t *m) { return m->
 static uint32_t slc_count(const slc_src_t *s, uint32_t div)
 {
 #if FELUCCA_KO
-    if (ko.on && s == &slc_usr[0] && div == SLC_DIV_MAN && ko.table[ko.current].n)
-        return ko.table[ko.current].n;
+    ko_state_t *ks=&ko_states[FELUCCA_KO_DUAL && s==&slc_usr[2]];
+    if (ko_states[0].on && (s==&slc_usr[0] || (FELUCCA_KO_DUAL && s==&slc_usr[2])) && div==SLC_DIV_MAN && ks->table[ks->current].n)
+        return ks->table[ks->current].n;
 #endif
     const slc_man_t *m = div == SLC_DIV_MAN ? slc_man_of(s) : 0;
     return div < SLC_DIV_AUTO ? 4u << div : m ? m->n : s->nauto;
@@ -189,8 +190,9 @@ static uint32_t slc_note_slice(const int16_t *p, uint32_t note, uint32_t n)
 static void slc_bounds(const slc_src_t *s, uint32_t div, uint32_t j, uint32_t *a, uint32_t *b, uint32_t *st)
 {
 #if FELUCCA_KO
-    const ko_table_t *kt = &ko.table[ko.current];
-    if (ko.on && s == &slc_usr[0] && div == SLC_DIV_MAN && j < kt->n) {
+    ko_state_t *ks=&ko_states[FELUCCA_KO_DUAL && s==&slc_usr[2]];
+    const ko_table_t *kt = &ks->table[ks->current];
+    if (ko_states[0].on && (s == &slc_usr[0] || (FELUCCA_KO_DUAL && s==&slc_usr[2])) && div == SLC_DIV_MAN && j < kt->n) {
         *a = kt->chop[j].a; *b = kt->chop[j].b; *st = kt->chop[j].st;
         return;
     }
@@ -286,16 +288,17 @@ static void slc_user_scan_one(uint32_t k, int valid)
     if (!valid)
         return;
 #if FELUCCA_KO_STORAGE
-    if (!k && ko_bank_active) {
+    if (ko_bank_active && (!k || (FELUCCA_KO_DUAL && k==2 && ko_bank.version==3))) {
+        const ko_bank_hdr_t *bank=k==2 ? &ko_bank_second : &ko_bank;
         ko_pcm_reset();
-        s->rate = usr_zone[0][0].rate;
-        s->nseg = 1; s->seg[0] = (slc_seg_t){usr_zone[0][0].off,0,ko_bank.samples};
-        if (ko_bank.codec == KO_CODEC_IMA) slc_scan(s,ko_bank.samples);
+        s->rate = usr_zone[k][0].rate;
+        s->nseg = 1; s->seg[0] = (slc_seg_t){usr_zone[k][0].off,0,bank->samples};
+        if (bank->codec == KO_CODEC_IMA) slc_scan(s,bank->samples);
         else {
             memset(s->grid,0,sizeof s->grid); memset(s->ast,0,sizeof s->ast);
-            s->nauto = ko_bank.auto_n; memcpy(s->apos,ko_bank.apos,sizeof s->apos);
+            s->nauto = bank->auto_n; memcpy(s->apos,bank->apos,sizeof s->apos);
         }
-        RING_PUBLISH(); s->len = ko_bank.samples;
+        RING_PUBLISH(); s->len = bank->samples;
         if (slc_man_load) slc_man_load(k);
         return;
     }
@@ -499,7 +502,7 @@ static void slice_note_on(track_t *t, voice_t *v)
     if (s && ko_compressed(s)) {
         if (!ko_song(t)) { v->active = 0; return; }
         rev = 0; /* compressed reverse deliberately unsupported */
-        uint32_t vi = (uint32_t)(v-t->v);
+        uint32_t vi = (uint32_t)(v-t->v)+(FELUCCA_KO_DUAL && t==trk+2 ? NVOICE : 0);
         ko_pcm[vi].epoch++;
         ko_pcm[vi].want = ~0u;
     }
@@ -526,7 +529,8 @@ static void slice_note_on(track_t *t, voice_t *v)
     v->s[4] = (int32_t)(src | (st >> 24) << 3 | rev << 7 | j << 8 | div << 16);
 #if FELUCCA_KO
     if (ko_song(t)) {
-        const ko_chop_t *c = &ko.table[ko.current].chop[j];
+        ko_state_t *ks=ko_track_state(t);
+        const ko_chop_t *c = &ks->table[ks->current].chop[j];
         v->s[4] |= (int32_t)(KO_VOICE | (uint32_t)(c->pitch + 24) << 24 |
             (c->rsv & KO_NO_LOOP ? KO_V_NO_LOOP : 0u) | (c->rsv & KO_LATCH ? KO_V_LATCH : 0u));
     }
@@ -544,9 +548,10 @@ static void slice_note_on(track_t *t, voice_t *v)
     }
 #if FELUCCA_KO_STORAGE
     if (ko_compressed(s)) {
-        uint32_t vi = (uint32_t)(v-t->v);
+        uint32_t vi = (uint32_t)(v-t->v)+(FELUCCA_KO_DUAL && t==trk+2 ? NVOICE : 0);
         v->s[4] = (v->s[4] & ~(15u<<3)) | (vi<<3);
-        ko_pcm[vi].want = (a+ko_bank.skip)/KO_PCM_N;
+        ko_pcm[vi].want = (a+ko_pcm_bank(vi)->skip)/KO_PCM_N;
+        ko_diag_attack_tick[vi]=KO_DIAG_NOW();
     }
 #endif
 }
@@ -669,19 +674,26 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     d.seg = (pk >> 3) & 15u;
 #if FELUCCA_KO_STORAGE
     if (ko_compressed(s) && !v->s[6]) {
-        uint32_t frame=(d.pos+ko_bank.skip)/KO_PCM_N;
+        const ko_bank_hdr_t *bank=ko_pcm_bank(d.seg);
+        uint32_t frame=(d.pos+bank->skip)/KO_PCM_N;
         uint32_t next=frame+1u;
-        if (loop && next*KO_PCM_N >= v->ph[2]+ko_bank.skip)
-            next=(ko.table[ko.current].chop[(pk>>8)&63u].a+ko_bank.skip)/KO_PCM_N;
+        if (loop && next*KO_PCM_N >= v->ph[2]+bank->skip)
+            next=((*ko_pcm_table(d.seg)).chop[(pk>>8)&63u].a+bank->skip)/KO_PCM_N;
         int ready=(ko_pcm[d.seg].frame[0]==frame || ko_pcm[d.seg].frame[1]==frame);
         /* A pitched attack near a frame boundary can consume the next cache
          * in its first audio block. Keep its clock at the chop start until
          * both current and prefetched PCM are available. */
-        if (next<ko_bank.frames && (loop || next*KO_PCM_N<v->ph[2]+ko_bank.skip))
+        if (next<bank->frames && (loop || next*KO_PCM_N<v->ph[2]+bank->skip))
             ready &= ko_pcm[d.seg].frame[0]==next || ko_pcm[d.seg].frame[1]==next;
         if (!ready) {
             ko_pcm[d.seg].want=frame; v->env_out=0; return;
         }
+    }
+#endif
+#if FELUCCA_KO_STORAGE
+    if (ko_compressed(s) && !v->s[6]) {
+        ko_diag.attacks++;
+        ko_diag_max(&ko_diag.attack_max_us,KO_DIAG_US(KO_DIAG_NOW()-ko_diag_attack_tick[d.seg]));
     }
 #endif
     if (!v->s[6]) {                                     /* prime the interpolator */
@@ -735,9 +747,10 @@ static int32_t slice_keys(const track_t *t, uint32_t k)
 {
 #if FELUCCA_KO
     if (ko_song(t)) {
+        ko_state_t *ks=ko_track_state(t);
         int32_t pad = ko_pad(k);
-        return pad < 0 || (uint32_t)pad + ko.bank * KO_PADS >= ko.table[ko.current].n ?
-            255 : SLC_BASE + t->p[P_ROOT] + pad + ko.bank * KO_PADS;
+        return pad < 0 || (uint32_t)pad + ks->bank * KO_PADS >= ks->table[ks->current].n ?
+            255 : SLC_BASE + t->p[P_ROOT] + pad + ks->bank * KO_PADS;
     }
 #endif
     return clamp(SLC_BASE + t->p[P_ROOT] + 12 * song.octave + (int32_t)k, 0, 127);

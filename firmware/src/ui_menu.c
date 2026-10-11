@@ -60,10 +60,10 @@ static const menu_credit_t MENU_CREDITS[] = {
     {"Emilie Gillet / MIT", MC_TEXT},
     {"https://github.com/pichenettes/eurorack", MC_URL},
     {"", MC_TEXT},
-    {"INTER TIGHT", MC_TITLE},
-    {"The Inter Project Authors", MC_TEXT},
+    {"LITTLE CHARACTER", MC_TITLE},
+    {"S M Astrid Bin", MC_TEXT},
     {"SIL Open Font License 1.1", MC_TEXT},
-    {"https://github.com/rsms/inter-tight", MC_URL},
+    {"https://github.com/disastrid/LittleCharacter", MC_URL},
     {"", MC_TEXT},
     {"VSCO-2 CE + VCSL", MC_TITLE},
     {"Versilian Studios / CC0 1.0", MC_TEXT},
@@ -111,17 +111,23 @@ static int32_t menu_document(int32_t y, int draw)
 {
     uint32_t i;
     if (draw) {
-        cv_text(6, y + 2, &AF_L, "FELUCCA", T_THEME);
-        cv_text(6, y + 38, &AF_S, "Multi-engine synthesizer", T_TEXT);
-        cv_text(6, y + 58, &AF_M, FELUCCA_VERSION, T_THEME);
+        cv_text(6, y + 2, &AF_L, FW_DISPLAY_TITLE, T_THEME);
+        cv_text(6, y + 38, &AF_S, FW_DISPLAY_DESCRIPTION, T_TEXT);
+        cv_text(6, y + 58, &AF_M, FW_DISPLAY_VERSION, T_THEME);
         cv_text_r(232, y + 61, &AF_S, __DATE__, T_MID, T_BG);
         cv_text(6, y + 82, &AF_S, "(C) 2026 Leo Kuroshita", T_TEXT);
         cv_text(6, y + 100, &AF_S, "H\xFCgelton Instruments", T_TEXT);
         cv_text(6, y + 118, &AF_S, "GPL-3.0-only", T_TEXT);
+#if FELUCCA_KO
+        cv_text(6, y + 138, &AF_S, "Based on Felucca 1.5.1", T_MID);
+        cv_text(6, y + 156, &AF_S, "TheShrimpBlimp", T_MID);
+        cv_text(6, y + 180, &AF_S, "fm1-ko-sampler", T_MID);
+#else
         cv_text(6, y + 138, &AF_S, "hugelton.github.io", T_MID);
         cv_text(6, y + 156, &AF_S, "/Felucca", T_MID);
         cv_text(6, y + 180, &AF_S, "hugelton.com", T_MID);
         draw_about_qr(158, y + 122);
+#endif
     }
     y = menu_text("CREDITS", y + 216, T_THEME, draw) + 8;
     for (i = 0; i < NELEM(MENU_CREDITS); i++) {
@@ -138,6 +144,9 @@ static int32_t menu_document(int32_t y, int draw)
     y = menu_text("Fonts and icons: their licences travel with the source and the release files.", y, T_TEXT, draw);
     y = menu_text("NO WARRANTY", y, T_TEXT, draw);
     y = menu_text("Full notices in source:", y + 8, T_TEXT, draw);
+#if FELUCCA_KO
+    y = menu_text("github.com/TheShrimpBlimp/fm1-ko-sampler", y, T_MID, draw);
+#endif
     y = menu_text("github.com/hugelton/Felucca", y, T_MID, draw);
     return y + 4;
 }
@@ -387,7 +396,7 @@ static void info_rows(void)                            /* (in screen rows: cv_oy
             GFX_HOOK_ALIGN(0, 0, 0, vy + AF_M.asc, AL_B, "info row unit on its value's baseline");
             cv_text_r(cv_text_r(MR_VR, vy + AF_M.asc - AF_S.asc, &AF_S, "%", T_MID, T_SURF) - 3, vy, &AF_M, cpu, T_THEME, T_SURF);
         } else {
-            cv_text_r(MR_VR, vy, &AF_M, k ? USB_N[info_usb()] : FELUCCA_VERSION, T_THEME, T_SURF);
+            cv_text_r(MR_VR, vy, &AF_M, k ? USB_N[info_usb()] : FW_DISPLAY_VERSION, T_THEME, T_SURF);
         }
     }
 }

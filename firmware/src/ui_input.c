@@ -334,11 +334,41 @@ static int idle_leds(void)
 /* the key LEDs, bit k = key k: NAME's keys, the layer's map, the DRUM grid, else the keys held and the notes
  * the selected track's sequencer, ARP and MIDI IN play, on STEP while stopped the cursor step's notes (#89; and
  * on SLICES the keys of the selected slice; on SONG the key of the cell's slot, 1.2) */
+#if FELUCCA_KO
+static uint32_t ko_key_leds(void)
+{
+    if(ko.view==8 || ko.view==9) {
+        static const uint8_t keys[4]={0,2,4,6};uint32_t led=0;
+        uint32_t active=chain.running ? chain.lane[0] : ko_pattern_sel;
+        if(active<4u) led|=1u<<keys[active];
+        if(ko_launch_pending<4u && (ui.frame&8u)) led|=1u<<keys[ko_launch_pending];
+        return led;
+    }
+
+    static const uint8_t white[16]={0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26};
+    if(ko_seq_on(TSEL) && ((song.rec>>song.sel)&1u)) {
+        uint32_t step=song.playing ? TSEL->seq_idx&15u : ko_seq[song.sel].cursor;
+        return 1u<<white[step];
+    }
+    uint32_t mask=0;
+    for(uint32_t k=0;k<27;k++) {
+        uint32_t note=kb_map(TSEL,k);if(note>127) continue;
+        for(uint32_t i=0;i<NVOICE;i++) {
+            const voice_t *v=&TSEL->v[i];
+            if(v->active && v->note==note && (!ko_song(TSEL) || v->s[6]==1)) {mask|=1u<<k;break;}
+        }
+    }
+    return mask;
+}
+#endif
 static uint32_t key_leds(uint32_t *br)                 /* (*br: a layer's keys that breathe, layer_leds) */
 {
     uint32_t c;
     if (br)
         *br = 0;
+#if FELUCCA_KO
+    if(ko_home()) return ko_key_leds();
+#endif
     c = name_on() && !ui.menu ? name_leds() : ui.layer ? layer_leds(br) : grid_on() ? grid_leds() :
                  (fm1_in.notes & ~kb_layer) | play_leds() | step_leds() | (song_keys_on() ? song_leds() : 0u);
 #if FELUCCA_SLICE
@@ -451,10 +481,10 @@ static void ui_leds(void)
  * ui.enc_t[role]: bits 0..23 the ms of its last read, bit 24 its direction (+1), 25..31 its ms per detent (127 slow) */
 #define ACC_GAP 40u
 #define ACC_RATE 50u
-static int32_t accel(uint32_t role, int32_t s, int32_t range)
+static int32_t accel_speed(uint32_t role, int32_t s, int32_t range)
 {
     uint32_t now = fm1_ms & 0xFFFFFFu, st = ui.enc_t[role], up = s > 0, pi = st >> 25, a, i, m = 1;
-    if (!(ui_prefs & PREF_ACCEL) || range <= 32 || !s)
+    if (range <= 32 || !s)
         return s;
     a = (uint32_t)(s < 0 ? -s : s);
     i = ((now - st) & 0xFFFFFFu) / a;                   /* ms per detent of this read */
@@ -467,6 +497,10 @@ static int32_t accel(uint32_t role, int32_t s, int32_t range)
     }
     ui.enc_t[role] = now | up << 24 | (i ? i : 1u) << 25;
     return s * (int32_t)m;
+}
+static int32_t accel(uint32_t role, int32_t s, int32_t range)
+{
+    return ui_prefs & PREF_ACCEL ? accel_speed(role, s, range) : s;
 }
 
 /* MIXER page: KNOB 1 LEVEL, 2 PAN, 3 REV send, 4 MUTE of the selected track (right = ON, left = OFF: the
@@ -556,6 +590,9 @@ static uint32_t song_leds(void)
 static int rec_tap(void)                                /* 1: the arming changed */
 {
     uint8_t bit = (uint8_t)(1u << song.sel);
+#if FELUCCA_KO
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) {ko_pattern_save();return 1;}
+#endif
     if (chain_busy()) {
         ui_message("STOP TO RECORD");
         return 0;
@@ -565,6 +602,9 @@ static int rec_tap(void)                                /* 1: the arming changed
         return 0;
     }
     song.rec ^= bit;
+#if FELUCCA_KO
+    if(ko_home() && ko.view==7 && !song.playing && !seq_counting()) {ui.force=1;ui_message(song.rec&bit ? "KEYS WRITE STEPS" : "RECORD OFF");return 1;}
+#endif
     ui.force = 1;                                     /* also refresh the status on MENU / ABOUT */
     if ((song.rec & bit) && !song.playing && !seq_counting() && roll_on()) {
         ui_message(ui_prefs2 & (PREF_CHORD_ADD >> 16) ? "KEYS ADD TO STEP" : "KEYS WRITE STEPS");   /* step recording:
@@ -1286,9 +1326,37 @@ static int page_tap(uint32_t b)
 {
     uint32_t f;
 #if FELUCCA_KO
-    if (ko.on && song.sel < 2u && (b == B_FX || b == B_ENV || b == B_LFO || (b == B_EDIT && ui.home))) {
+    if(ko_home() && b==B_SEQ) {
+        if(!ko_ready()) {ui_message("SET UP SAMPLER FIRST");return 1;}
+        if(!ko_seq[song.sel].enabled && transport_busy()) {ui_message("STOP TO ENABLE SEQUENCER");return 1;}
+        ko_seq[song.sel].enabled=1;
+        ko.view=ko.view==7?0:7;go_home();ui.force=1;return 1;
+    }
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18) && b==B_ENV) {ko.view=ko.view==18?9:18;ui.force=1;return 1;}
+    if(ko_home() && (ko.view==1 || ko.view==2) && b==B_EDIT) {
+        mom_restore();TSEL->p[P_DLY]=TSEL->p[P_CHOR]=TSEL->p[P_REV]=TSEL->p[P_DIST]=0;
+        if(song.sel==1)TSEL->p[P_E4]=127;else TSEL->p[P_E7]=127;
+        ui.force=1;ui_message("FX RESET");return 1;
+    }
+    if(ko_home() && song.sel==1 && b==B_ENV && (ko.view==0 || ko.view==16)) {ko.view=ko.view==16?0:16;ui.force=1;return 1;}
+    if(ko_home() && (ko.view==7 || ko.view==14 || ko.view==15) && (b==B_ENV || b==B_LFO)) {
+        ko.view=b==B_ENV ? (ko.view==14?7:14) : (ko.view==15?7:15);ui.force=1;return 1;
+    }
+    if(ko_home() && ko.view==7 && b==B_EDIT) {
+        if(transport_busy()) ui_message("STOP TO EDIT STEP");
+        else { step_undo_take(TSEL,0);fm1_irq_off();step_clear(&TSEL->step[ko_seq[song.sel].cursor]);
+            (void)motion_clear_locks(TSEL,ko_seq[song.sel].cursor);
+            ko_seq[song.sel].cursor=(uint8_t)((ko_seq[song.sel].cursor+1u)%(uint32_t)TSEL->p[P_SLEN]);fm1_irq_on(); }
+        ui.force=1;return 1;
+    }
+    if(ko_home() && b==B_SCL) {
+        ko.view=ko.view==8?9:ko.view==9?0:8;
+        if(!transport_busy()) ko_pattern_refresh();go_home();ui.force=1;return 1;
+    }
+    if(ko_home() && b==B_ARP) {ko.view=ko.view==10?6:ko.view==6?11:ko.view==11?12:ko.view==12?13:ko.view==13?0:10;go_home();ui.force=1;return 1;}
+    if (ko.on && song.sel < SAMPLER_PARTS && (b == B_FX || b == B_ENV || b == B_LFO || (b == B_EDIT && ui.home))) {
         ko.view = b == B_FX ? (ko.view == 1 ? 2 : 1) : b == B_ENV ? 3 : b == B_LFO ? 4 :
-            (!song.sel && ko.view == 0 ? 5 : 0);
+            (song.sel!=1 && ko.view == 0 ? 5 : 0);
         go_home(); ui.force = 1; return 1;
     }
 #endif
@@ -1382,19 +1450,21 @@ static void ui_input(void)
     midi_pc_poll();                                     /* MIDI Program Change (before fm6_poll: a bank voice) */
 #if FELUCCA_KO
     uint8_t ko_was_on = ko.on;
-    ko.on = (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    ko.on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
     if (ko_was_on != ko.on) {
         ko_palette_on = ko.on; palette_set(settings.palette);
-        if (!ko.on) trk_all_off(&trk[0]);
+        if (!ko.on) { trk_all_off(&trk[0]); ko_solo=-1; }
         ui.force = 1; ko.revision++;
     }
-    if (ko.on) ko_prepare();
+    if (ko.on) {ko_prepare();ko_pattern_poll();}
 #endif
+#if !FELUCCA_SAMPLER_ONLY
     fm6_poll();                                         /* FM6: PTCH turned -> its patch */
 #if !FELUCCA_FM4
     for (k = 0; k < NTRK; k++)                          /* a DIGITAL sound any other way (the paths convert it */
         if (trk[k].eng_req == ENGI_DIGITAL)             /* already): FM6 (fm4_convert.c) */
             fm4_track(&trk[k]);
+#endif
 #endif
     perf_latch_on = fx_latch & 1u;                      /* (MENU > FX LATCH; a settings load sets it too) */
     fx_map_sync();                                      /* (the FX layer's key map: ui_layer.c, a settings load too) */
@@ -1478,7 +1548,12 @@ static void ui_input(void)
             ui.hot_col = (uint8_t)k;
             ui.hot_t = 40;
         }
-    song.grid = (uint8_t)keys_mode();                 /* (the menu, a dialog: the keys play again; NAME: silent) */
+    song.grid = (uint8_t)keys_mode();
+#if FELUCCA_KO
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) song.grid=4;
+    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14)) song.grid=5;
+#endif
+    /* The menu/dialog keys play again; NAME and pattern selection stay silent. */
     if (home == BT_TAP && ui.menu) {                    /* HOME (pressed, or held) closes the menu, from ABOUT too; */
         menu_close();                                   /* the release of the hold that opened it is no tap */
         home = BT_NONE;                                 /* (menu_close went HOME already) */
@@ -1582,14 +1657,29 @@ static void ui_input(void)
         b = panel_btn_of(id);
         switch (b) {
         case B_PLAY:
+#if FELUCCA_KO
+            if(ko_home() && !transport_busy() && (ko.view==8 || ko.view==9)) {
+                ko_pattern_start(ko.view==9);break;
+            }
+            if(ko_home() && !transport_busy()) ko_pattern_preload();
+#endif
             if (layer_play())                           /* (GLO held: RESTART) */
                 break;
             if (song.playing || chain_busy() || seq_counting())   /* (a count-in: PLAY stops it) */
                 transport_req = 2;
             else if (!ui.home && cur_page()->graph == GR_SONG)
                 chain_play_ui();
-            else
+            else {
+#if FELUCCA_KO
+                /* PLAY after stopped step entry auditions the pattern; REC during
+                 * running playback explicitly enables live recording again. */
+                if(ko_home() && ko_seq_on(TSEL)) {
+                    for(uint32_t p=0;p<SAMPLER_PARTS;p++) if(ko_seq[p].enabled) song.rec&=(uint8_t)~(1u<<p);
+                    ui.force=1;
+                }
+#endif
                 transport_req = 1;
+            }
             break;
         case B_SEQ:
         case B_REC:                                     /* tap: above; held, its layer (ui_layer.c) */
@@ -1604,8 +1694,13 @@ static void ui_input(void)
         case B_OCTUP: {
 #if FELUCCA_KO
             if (ko_home()) {
-                if (!ko_ready()) { if (b == B_OCTUP) ko_setup(); }
-                else if (!song.sel) {
+                if (!ko_ready()) { if (b == B_OCTUP) { if (FELUCCA_KO_DUAL && song.sel==2) ko_setup_second(); else ko_setup(); } }
+                else if(ko.view==8) {if(b==B_OCTUP) ko_pattern_paste();else ko_pattern_copy();}
+                else if (ko.view==7) {
+                    TSEL->p[P_SDIV]=(int16_t)param_turn(track_desc(TSEL,P_SDIV),TSEL->p[P_SDIV],b==B_OCTUP?1:-1);
+                    ui.force=1;
+                }
+                else if (song.sel!=1 && ko.view<8) {
                     ko_pitch_turn(b == B_OCTUP ? 1 : -1); ui.force = 1;
                 }
                 break;
@@ -1641,13 +1736,18 @@ static void ui_input(void)
     } else if (ui.ml.on && oct) {                          /* MIDI LEARN: OCT- clears the picked CC, OCT+ done */
         ml_oct(oct);
     }
-    song.grid = (uint8_t)keys_mode();                 /* (seq.c: the keys are the grid's) */
+    song.grid = (uint8_t)keys_mode();
 #if FELUCCA_KO
-    if (ko_home() && !song.sel && notes && !lay) {
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) song.grid=4;
+    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14)) song.grid=5;
+#endif
+    /* seq.c sees the new keyboard role before the next audio block. */
+#if FELUCCA_KO
+    if (ko_home() && ko.view!=8 && ko.view!=9 && song.sel!=1 && notes && !lay) {
         for (uint32_t key = 0; key < 27u; key++)
             if ((notes >> key) & 1u) {
                 int32_t pad = ko_pad(key);
-                if (pad >= 0) ko_select((uint32_t)pad + ko.bank * KO_PADS);
+                if (pad >= 0 && (uint32_t)pad + ko.bank * KO_PADS < ko_table()->n) ko_select((uint32_t)pad + ko.bank * KO_PADS);
             }
     }
 #endif
@@ -1656,6 +1756,20 @@ static void ui_input(void)
         slice_keys_pick(notes);
 #endif
     lock_keys();                                        /* (a grid key on a hit let go: the hit goes) */
+#if FELUCCA_KO
+    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14)) {
+        for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {
+            int32_t pad=ko_pad(key);if(pad<0 || (song.sel==1 && pad>=16)) continue;
+            uint32_t step=ko_seq[song.sel].cursor;step_undo_take(TSEL,0);
+            fm1_irq_off();step_t *n=&TSEL->step[step];if(n->time!=ST_NOTE || !n->n)n->vel=100;n->time=ST_NOTE;n->n=1;
+            n->note[0]=(uint8_t)(60+pad+(song.sel==1?0:ko.bank*KO_PADS));fm1_irq_on();motion_undo_done(TSEL);ui.force=1;
+        }
+    }
+    if(ko_home() && song.sel==1 && notes) for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {int32_t pad=ko_pad(key);if(pad>=0 && pad<16) {ko_kit_pad=(uint8_t)pad;ui.force=1;}}
+    if(song.grid==5u || (song.grid==4u && ko.view==18)) {}
+    else if(song.grid==4u) {ko_pattern_keys(notes);}
+    else
+#endif
     if (song.grid == 3u) {
         song_keys(notes);
     } else if (song.grid) {
@@ -1678,7 +1792,9 @@ static void ui_input(void)
     if (!lay && (s = panel_enc(EN_PRESET)) != 0) {
 #if FELUCCA_KO
         if (ko_home()) {
-            if (!song.sel) ko_select((uint32_t)clamp((int32_t)ko.selected + s, 0, KO_CHOPS - 1));
+            if(ko.view==14) {ko_seq[song.sel].cursor=(uint8_t)clamp((int32_t)ko_seq[song.sel].cursor+s,0,TSEL->p[P_SLEN]-1);ui.force=1;}
+            else if(ko.view==8 || ko.view==9) ko_arrange_turn(0,s);
+            else if (song.sel!=1) ko_select((uint32_t)clamp((int32_t)ko.selected + s, 0, KO_CHOPS - 1));
         } else
 #endif
         presets_turn(s);
@@ -1686,7 +1802,7 @@ static void ui_input(void)
     if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
         track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0,
 #if FELUCCA_KO
-            ko.on ? 1 :
+            ko.on ? SAMPLER_PARTS-1 :
 #endif
             NTRK - 1));
     if ((s = glo ? sel : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
@@ -1707,7 +1823,18 @@ static void ui_input(void)
         if ((s = panel_enc(EN_K1 + k)) == 0)
             continue;
 #if FELUCCA_KO
-        if (ko_home()) { ko_knob(k, s); continue; }
+        if (ko_home()) {
+            if(mom_down() && (ko.view==1 || ko.view==2)) {
+                static const uint8_t ids[2][4]={{P_E7,P_DLY,P_CHOR,P_REV},{P_DIST,G_DTIME,G_DFDBK,P_LEVEL}};
+                uint32_t id=ids[ko.view-1][k];int global=ko.view==2 && (k==1 || k==2);
+                if(ko.view==1 && !k && song.sel==1)id=P_E4;
+                int16_t *vp=global?&song.g[id]:&TSEL->p[id];uint32_t i=0;
+                while(i<mom.n && mom.vp[i]!=vp)i++;
+                if(i==mom.n) {if(mom.n>=MOM_N){ui_message("MOMENTARY FULL");continue;}mom.vp[mom.n]=vp;mom.v[mom.n++]=*vp;}
+                ui.pg_down&=(uint16_t)~(1u<<panel.btn[B_LFO]);
+            }
+            ko_knob(k,s);continue;
+        }
 #endif
         if (mom_down())                                 /* (LFO + a knob, MOMENTARY or not: LFO's release opens no page) */
             ui.pg_down &= (uint16_t)~(1u << panel.btn[B_LFO]);

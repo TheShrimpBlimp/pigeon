@@ -1,17 +1,41 @@
-# Felucca licensing
+# Pigeon licensing
 
-Felucca is free software, licensed under the GNU General Public License, version 3 only
-(`GPL-3.0-only`, full text in `LICENSE`). That covers the code and its own assets. A few
+The owner-supplied splash photograph in `assets/branding/splash.png` is not an
+inherited Felucca asset. Its provenance and redistribution status are documented
+in `assets/branding/README.md`; the software license does not establish a license
+for that photograph.
+
+Pigeon is a derivative of Felucca 1.5.1, developed as an independent FM1
+performance sampler. Original copyright and license notices remain intact.
+
+Pigeon is free software, licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`, full text in `LICENSE`). That covers Pigeon source contributions and inherited GPL code. Creative assets
+retain their documented licenses; the supplied photograph is addressed separately
+above. A few
 bundled or ported parts keep their own licences; they are listed below, and their licence
 texts are in `LICENSES/`.
 
-The optional expanded KO storage profile also bundles libmad under
+The Pigeon sampler profile bundles libmad under
 GPL-2.0-or-later. Its original notices and license are retained in
 `firmware/vendor/libmad/COPYRIGHT` and `firmware/vendor/libmad/COPYING`; provenance
 and the local bounds fix are documented in `firmware/vendor/libmad/FELUCCA_ORIGIN.md`.
 The combined firmware remains GPL-3.0-only.
 
 Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+
+## Pigeon authorship and AI-use disclosure
+
+Pigeon is directed and maintained by its human project creator, TheShrimpBlimp,
+and human contributors. Original Felucca and third-party authors retain their
+copyrights. Pigeon-specific contributions are distributed under GPL-3.0-only;
+this does not transfer ownership of inherited work or separately licensed assets.
+
+**AI was used for menial coding. All assets, direction, conceptualization, and
+thought are human.** This is the project creator's authorship statement. Creative
+assets are human-created or human-sourced and credited to their respective
+creators; AI assistance was used for routine code implementation, conversion,
+testing, and maintenance. This disclosure adds no terms to the GPL or the
+third-party licenses.
 
 ## What is GPL-3.0-only
 
@@ -27,13 +51,13 @@ Three source files are ports and keep the licence of their originals:
 `firmware/src/fm6_core.c` (msfa, Apache-2.0). The firmware built with them is GPL-3.0-only as
 a whole.
 
-You may use, study, change and share Felucca under the GPL. If you distribute Felucca, or
+You may use, study, change and share Pigeon under the GPL. If you distribute Pigeon, or
 firmware derived from it, you must also give your recipients its complete corresponding
-source under the same licence. That includes devices that ship with modified Felucca inside.
+source under the same licence. That includes devices that ship with modified Pigeon inside.
 
-## Hügelton Instruments' own work
+## Inherited Hügelton Instruments work
 
-All by Hügelton Instruments (Leo Kuroshita), in this tree:
+The following foundation material remains credited to Hügelton Instruments (Leo Kuroshita):
 
 | What | Licence | Where |
 | --- | --- | --- |
@@ -48,7 +72,7 @@ All by Hügelton Instruments (Leo Kuroshita), in this tree:
 
 | What | Licence | Where |
 | --- | --- | --- |
-| Inter Tight font by The Inter Project Authors: the UI text, rasterised into the firmware at build time (`tools/gen_aa_font.py`; the generated tables are not offered as a font, and the font declares no Reserved Font Name) | SIL OFL 1.1 | `assets/fonts/InterTight[wght].ttf`, `LICENSES/OFL-InterTight.txt` (also `assets/fonts/OFL.txt`) |
+| Inter Tight font by The Inter Project Authors: retained source asset used by the legacy panel-diagram generator (`tools/gen_aa_font.py`; the generated tables are not offered as a font, and the font declares no Reserved Font Name) | SIL OFL 1.1 | `assets/fonts/InterTight[wght].ttf`, `LICENSES/OFL-InterTight.txt` (also `assets/fonts/OFL.txt`) |
 | Instrument samples (Versilian Studios VSCO-2 Community Edition, VCSL): the SAMPLE sets, also the SLICE engine's PIANO (the PIANO set's middle C) | CC0 1.0 | `assets/samples-cc0/`, provenance in `ATTRIBUTION.txt` there |
 | DaisySP by Electrosmith, Corp and Emilie Gillet (<https://github.com/electro-smith/DaisySP>): the PHYS engine's modal and string models and the resonator, ported to fixed point | MIT | `firmware/src/phys_dsp.c`, `LICENSES/MIT-DaisySP.txt` |
 | Rings by Emilie Gillet (<https://github.com/pichenettes/eurorack>): the PHYS engine's sympathetic strings, ported to fixed point | MIT | `firmware/src/phys_symp.c`, `LICENSES/MIT-Rings.txt` |
@@ -105,3 +129,21 @@ by those owners.
 ## Radio
 
 Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
+
+## Little Character display font
+
+Pigeon uses Little Character Regular by S M Astrid Bin, copyright May 2025,
+under the SIL Open Font License 1.1. The unmodified font is vendored at
+`assets/fonts/LittleCharacterRegular.ttf`; its original license is in
+`assets/fonts/LittleCharacter-OFL.txt` and `LICENSES/LittleCharacter-OFL.txt`.
+Source: https://github.com/disastrid/LittleCharacter . The firmware embeds
+rasterized glyphs generated from this font.
+
+## Browser sample encoder
+
+The Pigeon sample GUI bundles lamejs 1.2.1, Alex Zhukov's JavaScript port of
+LAME, under LGPL-3.0. Its readable runtime at `web/pigeon/vendor/lame.js` is
+modified only to set the output sample rate explicitly. Original corresponding
+source, attribution, and LGPL/GPL texts are shipped in that directory and with
+the generated website. See [encoder provenance](web/pigeon/vendor/README.md).
+This browser dependency is separate from the firmware image.

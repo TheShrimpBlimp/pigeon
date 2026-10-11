@@ -1569,7 +1569,16 @@ static void track_select(uint32_t i)
 {
     if (i >= NTRK || i == song.sel)
         return;
+#if FELUCCA_KO
+    int sampler_seq_page=ko.on && ui.home && (ko.view==7 || ko.view==14 || ko.view==15);
+    uint8_t sampler_page=ko.view;
+    int sampler_global_page=ko.on && ui.home && (sampler_page==6 || (sampler_page>=8 && sampler_page<=13) || sampler_page==18);
+#endif
     song.sel = (uint8_t)i;
+#if FELUCCA_KO
+    if(sampler_seq_page && i<SAMPLER_PARTS) ko.view=ko_seq[i].enabled?7:0;
+    if(sampler_global_page && i<SAMPLER_PARTS) ko.view=sampler_page;
+#endif
     ui.entry_open = 0;
     ui.hot_t = 0;
     ui.ev_keep = 0;                              /* (AUTOMATION: a row kept at its default was the other track's) */

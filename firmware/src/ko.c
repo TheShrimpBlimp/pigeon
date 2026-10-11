@@ -9,13 +9,16 @@ static ko_table_t *ko_edit(void)
 }
 static void ko_publish(int dirty)
 {
+    if (dirty && memcmp(ko_table(), &ko.table[ko.current ^ 1u], sizeof(ko_table_t))) {
+        ko.undo = *ko_table(); ko.undo_selected = ko.selected; ko.undo_valid = 1;
+    }
     __asm__ volatile("" ::: "memory");
     ko.current ^= 1u; ko.revision++;
     if (dirty) ko.dirty = 1;
 }
 static void ko_auto(void)
 {
-    const slc_src_t *s = slc_get(1);
+    const slc_src_t *s = slc_get(ko_src());
     ko_table_t *d = ko_edit(); memset(d, 0, sizeof *d);
     if (s) {
         d->n = s->nauto < KO_CHOPS ? s->nauto : KO_CHOPS;
@@ -25,61 +28,85 @@ static void ko_auto(void)
             d->chop[j].st = s->ast[j];
         }
     }
-    ko.selected = ko.bank = 0; ko.cursor = 0; ko_publish(0);
+    ko.selected = ko.bank = 0; ko.cursor = 0; ko.undo_valid = 0; ko_publish(0);
 }
 static int ko_restore(const ko_table_t *in)
 {
-    const slc_src_t *s = slc_get(1);
+    const slc_src_t *s = slc_get(ko_src());
     if (!s || !in->n || in->n > KO_CHOPS) return 0;
     for (uint32_t j = 0; j < in->n; j++) {
         const ko_chop_t *c = &in->chop[j];
         if (c->a >= c->b || c->b > s->len || c->b - c->a < SLC_MIN || c->pitch < -24 || c->pitch > 24 ||
-            (c->rsv & ~(KO_NO_LOOP | KO_LATCH)) || (j && c->a < in->chop[j - 1u].a)) return 0;
+            (c->rsv & ~(KO_NO_LOOP | KO_LATCH))) return 0;
     }
     ko_table_t *d = ko_edit(); *d = *in;
     for (uint32_t j = 0; j < d->n; j++) d->chop[j].st = slc_state_at(s, d->chop[j].a);
     ko_publish(0); return 1;
 }
-static void ko_prepare(void)
+static void ko_prepare_one(void)
 {
-    uint32_t sc = usr_nz[0] ? ((const smp_user_hdr_t *)smp_user_xip(0))->crc : 0;
-    if (smp_ko_pair_requested()) {
+    uint32_t sc = usr_nz[ko_id()?2:0] ? ((const smp_user_hdr_t *)smp_user_xip(ko_id()?2:0))->crc : 0;
+    if (!ko_id() && smp_ko_pair_requested()) {
         const smp_user_hdr_t *b = (const smp_user_hdr_t *)smp_user_xip(2);
         sc ^= smp_ko_pair_valid() ? b->crc * 16777619u ^ b->rsv2[1] : 0xFFFFFFFFu;
     }
     uint32_t kc = usr_nz[1] ? ((const smp_user_hdr_t *)smp_user_xip(1))->crc : 0;
 #if FELUCCA_KO_STORAGE
     if (ko_bank_active) {
-        sc = ko_bank_song_crc; kc = ko_bank_kit_crc;
+        sc = ko_id() ? ko_bank_second_crc : ko_bank_song_crc; kc = ko_bank_kit_crc;
     }
 #endif
     if (ko.loaded && ko.generation == smp_user_gen) return;
-    if (!ko.loaded || ko.song_crc != sc || (!usr_nz[0] && ko_table()->n)) {
+    if (!ko.loaded || ko.song_crc != sc || (!usr_nz[ko_id()?2:0] && ko_table()->n)) {
         ko_auto(); ko.comp[0] = KO_COMP_DEFAULT; ko.dirty = 0;
+        memset(&ko_seq[ko_id()?2:0],0,sizeof ko_seq[0]);
     }
-    if (!ko.loaded || ko.kit_crc != kc) ko.comp[1] = KO_COMP_DEFAULT;
+    if (!ko.loaded || ko.kit_crc != kc) {if(!ko_id()) ko_kit_defaults();ko.comp[1] = KO_COMP_DEFAULT;if(!ko_id()) memset(&ko_seq[1],0,sizeof ko_seq[1]);}
     ko.song_crc = sc; ko.kit_crc = kc; ko.generation = smp_user_gen; ko.loaded = 1;
     if (ko_load_hook && !ko.dirty) ko_load_hook();
+}
+static void ko_prepare(void)
+{
+    for (uint32_t i=0;i<1u+FELUCCA_KO_DUAL;i++) {
+        ko_context=i;ko.on=ko_states[0].on;ko_prepare_one();
+    }
+    ko_context=~0u;
 }
 static void ko_select(uint32_t j)
 {
     uint32_t n = ko_table()->n;
-    ko.selected = (uint8_t)(n ? (j < n ? j : n - 1u) : 0);
+    uint32_t selected=n ? (j<n ? j : n-1u) : 0;
+    uint32_t cursor=n ? ko_table()->chop[selected].a : 0;
+    if (ko.selected==selected && ko.cursor==cursor && ko.bank==selected/KO_PADS) return;
+    ko.selected = (uint8_t)selected;
     ko.bank = ko.selected / KO_PADS; ko.cursor = n ? ko_table()->chop[ko.selected].a : 0;
     ko.revision++;
 }
+/* Keep movement proportional to the waveform window, including unzoomed songs. */
+#define KO_WAVE_COLS 216u
+static uint32_t ko_wave_span_for(const slc_src_t *s)
+{
+    uint32_t span=s->len>>ko.zoom;
+    if(span<KO_WAVE_COLS) span=KO_WAVE_COLS;
+    return span>s->len?s->len:span;
+}
+static uint32_t ko_wave_quantum(const slc_src_t *s,uint32_t divisions)
+{
+    uint32_t step=ko_wave_span_for(s)/divisions;
+    return step?step:1u;
+}
 static void ko_move_cursor(int32_t clicks)
 {
-    const slc_src_t *s = slc_get(1);
+    const slc_src_t *s = slc_get(ko_src());
     if (!s || !ko_table()->n) return;
-    uint32_t quantum = (((s->rate >> 8) * 44100u) >> 8) / 100u;
+    uint32_t quantum = ko_wave_quantum(s,24);
     ko.cursor = (uint32_t)clamp((int32_t)ko.cursor + clamp(clicks, -1000, 1000) * (int32_t)(quantum ? quantum : 1),
-                              0, (int32_t)s->len - 1);
+                              0, (int32_t)s->len);
     ko.revision++;                                  /* scrolling never selects a different chop */
 }
 static void ko_chop_turn(uint32_t knob, int32_t clicks)
 {
-    const slc_src_t *s = slc_get(1);
+    const slc_src_t *s = slc_get(ko_src());
     if (!s || !ko_table()->n) return;
     if (knob == 2) { ko_move_cursor(clicks); return; }
     if (knob == 3) {
@@ -87,14 +114,17 @@ static void ko_chop_turn(uint32_t knob, int32_t clicks)
         ko.revision++; return;
     }
     ko_table_t *d = ko_edit(); uint32_t j = ko.selected; ko_chop_t *c = &d->chop[j];
-    int32_t quantum = (int32_t)((((s->rate >> 8) * 44100u) >> 8) / 100u);
+    int32_t quantum = (int32_t)ko_wave_quantum(s,256);
     int32_t delta = clamp(clicks, -1000, 1000) * (quantum ? quantum : 1);
     if (knob == 0) {
-        int32_t lo = j ? (int32_t)d->chop[j - 1u].a : 0, hi = (int32_t)c->b - SLC_MIN;
-        if (j + 1u < d->n && hi > (int32_t)d->chop[j + 1u].a) hi = (int32_t)d->chop[j + 1u].a;
-        c->a = (uint32_t)clamp((int32_t)c->a + delta, lo, hi); c->st = slc_state_at(s, c->a);
-    } else if (knob == 1)
+        int32_t lo = 0, hi = (int32_t)c->b - SLC_MIN;
+        uint32_t next=(uint32_t)clamp((int32_t)c->a + delta * 2, lo, hi);
+        if(next!=c->a) {c->a=next; c->st=slc_state_at(s,c->a); }
+        ko.cursor=c->a;
+    } else if (knob == 1) {
         c->b = (uint32_t)clamp((int32_t)c->b + delta, (int32_t)c->a + SLC_MIN, (int32_t)s->len);
+        ko.cursor=c->b;
+    }
     ko_publish(1);
 }
 static void ko_pitch_turn(int32_t steps)
@@ -121,10 +151,9 @@ static int ko_split(void)
     ko_table_t *d = ko_edit(); uint32_t j = ko.selected; ko_chop_t *c = &d->chop[j]; uint32_t at = ko.cursor;
     if (c->b - c->a < 2u * SLC_MIN) return 0;
     if (at < c->a + SLC_MIN || at > c->b - SLC_MIN) at = c->a + (c->b - c->a) / 2u;
-    if (j + 1u < d->n && at > d->chop[j + 1u].a) return 0; /* retain start order across overlaps */
     for (uint32_t k = d->n; k > j + 1u; k--) d->chop[k] = d->chop[k - 1u];
     d->chop[j + 1u] = *c; d->chop[j + 1u].a = at;
-    d->chop[j + 1u].st = slc_state_at(slc_get(1), at); c->b = at; d->n++;
+    d->chop[j + 1u].st = slc_state_at(slc_get(ko_src()), at); c->b = at; d->n++;
     ko_publish(1); ko_select(j + 1u); return 1;
 }
 static int ko_join(void)
@@ -132,16 +161,30 @@ static int ko_join(void)
     uint32_t j = ko.selected;
     if (!j || !ko_table()->n) return 0;
     ko_table_t *d = ko_edit();
+    /* Join adjacent pad assignments, taking the complete range of both. */
+    if (d->chop[j].a < d->chop[j - 1u].a) {
+        d->chop[j - 1u].a=d->chop[j].a;
+        d->chop[j - 1u].st=slc_state_at(slc_get(ko_src()),d->chop[j - 1u].a);
+    }
     if (d->chop[j - 1u].b < d->chop[j].b) d->chop[j - 1u].b = d->chop[j].b;
     for (uint32_t k = j; k + 1u < d->n; k++) d->chop[k] = d->chop[k + 1u];
     d->n--; ko_publish(1); ko_select(j - 1u); return 1;
+}
+/* One independent undo/redo slot per song, published like every other edit. */
+static int ko_undo(void)
+{
+    if (!ko.undo_valid) return 0;
+    ko_table_t *d = ko_edit(); *d = ko.undo;
+    ko.undo = *ko_table();
+    uint32_t selected = ko.undo_selected; ko.undo_selected = ko.selected;
+    ko_publish(0); ko.dirty = 1; ko_select(selected); return 1;
 }
 static int ko_comp_valid(const ko_comp_t *c)
 {
     return c->threshold <= 48 && c->ratio >= 1 && c->ratio <= 8 && c->attack >= 1 && c->attack <= 100 &&
            c->release >= 1 && c->release <= 50 && c->makeup <= 12;
 }
-static struct { int32_t envelope, gain; } ko_cr[2];
+static struct { int32_t envelope, gain; } ko_cr[2+FELUCCA_KO_DUAL];
 /* log2(x), Q8, x is a positive Q8 ratio >= 1. Interpolate sixteen mantissa intervals. */
 static uint32_t ko_log2(uint32_t x)
 {
@@ -155,9 +198,9 @@ static uint32_t ko_log2(uint32_t x)
 static __attribute__((noinline)) void ko_compress(track_t *t, int32_t *b, int32_t *side, uint32_t n)
 {
     if (!n) return;
-    uint32_t part = t == &trk[0] ? 0u : 1u;
+    uint32_t part = (uint32_t)(t-trk);
     if (!ko_song(t) && !ko_kit(t)) return;
-    ko_comp_t c = ko.comp[part];
+    ko_comp_t c = ko_track_state(t)->comp[part==1];
     if (!ko_comp_valid(&c) || (c.ratio == 1 && !c.makeup)) {
         ko_cr[part].gain = 32768; ko_cr[part].envelope = 0; return;
     }

@@ -308,6 +308,14 @@
   <section class="panel" id="p-samples" data-tab="samples" data-dev hidden>
     <h2 data-t="samples" data-ic="symbol_waves"></h2>
     <p class="dim" data-t="smpHelp"></p>
+    <div id="ko-import" hidden>
+      <h3>Pigeon — shared sample storage</h3>
+      <p>Select a .kob bank made with tools/ko_bank.py. Upload replaces both songs and the drum kit.</p>
+      <input id="ko-file" type="file" accept=".kob">
+      <pre id="ko-preview">Choose a bank to preview its storage usage.</pre>
+      <progress id="ko-storage" max="417792" value="0"></progress>
+      <button id="ko-upload" disabled>Upload sample bank</button>
+    </div>
     <div id="smpslots"></div>
   </section>
 
@@ -347,6 +355,7 @@
     <span data-t="foot"></span> M-VAVE and FM-1 are trademarks of their respective owners.<br>
     <a href="FUKIAI-LICENSE.txt" data-t="iconsCredit"></a></footer>
 </main>
+<script src="ko_bank.js"></script>
 <script>
 "use strict";
 /*PROTO-BEGIN*/
@@ -2982,6 +2991,10 @@ async function load(d) {
     d.keys = paramKeys(d.pdesc, d.info.pe0, d.info.pcount);
     await libAdopt(d);
     assertSession(d);
+    try {
+      const r=await sessionRequest(d,[90,[]],{timeout:500,retries:0});
+      if(r.length===10 && r[0]===75 && [2,3].includes(r[1]) && (r[2]|r[3]<<7|r[4]<<14)===KOBank.SIZE && (r[5]|r[6]<<7|r[7]<<14)===KOBank.HEAD && r[9]===3) d.koBankVersion=r[1];
+    } catch(e) { /* Legacy devices keep their normal sample editor. */ }
     if (d.info.ntrk) d.sel = parse[CMD.TRACK](await sessionRequest(d, req.track())).sel;   /* v3: the selected track */
     d.dump = await getDump(d);
     if (d.info.chainRows) d.song = parse[CMD.SONG](await sessionRequest(d, req.song()));
@@ -3895,8 +3908,55 @@ function recRow(k) {
     on ? el("span", { class: "rectime dim" }) : "");
 }
 
+let koImportBytes=null, koImportInfo=null;
+function koImportRefresh() {
+  $("ko-upload").disabled=!dev || !dev.koBankVersion || !koImportInfo || koImportInfo.version>dev.koBankVersion || smpBusy || recActive();
+}
+$("ko-file").addEventListener("change",async()=>{
+  koImportBytes=null;koImportInfo=null;koImportRefresh();$("ko-storage").value=0;
+  const file=$("ko-file").files[0]; if(!file) return;
+  try {
+    const bytes=new Uint8Array(await file.arrayBuffer()), info=KOBank.inspect(bytes);
+    if($("ko-file").files[0]!==file) return;
+    koImportBytes=bytes;koImportInfo=info;
+    const lines=info.songs.map((s,i)=>`Song ${i+1}: ${s.name} / ${s.seconds.toFixed(2)}s / ${s.codec} / ${(s.bytes/1024).toFixed(1)} KiB`);
+    lines.push(`Drum kit: ${info.pads} pads / ${(info.kitBytes/1024).toFixed(1)} KiB`, `Combined: ${(info.payloadUsed/1024).toFixed(1)} / ${info.capacity/1024} KiB (${(info.payloadUsed*100/info.capacity).toFixed(1)}%)`, `Free: ${(info.free/1024).toFixed(1)} KiB`);
+    if(dev && info.version>dev.koBankVersion) lines.push('Update firmware for two-song banks before uploading.');
+    $("ko-preview").textContent=lines.join('\n');$("ko-storage").max=info.capacity;$("ko-storage").value=info.payloadUsed;
+  } catch(e) { $("ko-preview").textContent=e.message; }
+  koImportRefresh();
+});
+$("ko-upload").addEventListener("click",async()=>{
+  if($("ko-upload").disabled) return;
+  const session=dev, bytes=koImportBytes, info=koImportInfo, releaseBusy=beginBusy();
+  smpBusy=true;$("ko-file").disabled=true;koImportRefresh();
+  const u21=n=>[n&127,(n>>>7)&127,(n>>>14)&127];
+  async function ok(cmd,args,timeout=5000) {
+    const r=await sessionRequest(session,[cmd,args],{timeout,retries:0});
+    if(r.length!==1 || r[0]!==0) throw Error(`Sample bank command ${cmd} failed: ${r}`);
+  }
+  try {
+    const cap=await sessionRequest(session,[90,[]],{timeout:1000,retries:0});
+    if(cap.length!==10 || cap[0]!==75 || cap[1]<info.version || (cap[2]|cap[3]<<7|cap[4]<<14)!==KOBank.SIZE || (cap[5]|cap[6]<<7|cap[7]<<14)!==KOBank.HEAD || cap[9]!==3) throw Error('Unsupported storage layout; nothing written');
+    await ok(91,u21(info.used));
+    for(let off=KOBank.HEAD;off<info.used;off+=256) {
+      await ok(92,[...u21(off),...pack7(bytes.subarray(off,Math.min(off+256,info.used)))]);
+      sayK("",`Uploading sample bank: ${Math.floor(off*100/info.used)}%`);
+    }
+    for(let off=0;off<info.headerBytes;off+=256) await ok(92,[...u21(off),...pack7(bytes.subarray(off,Math.min(off+256,info.headerBytes)))]);
+    await ok(93,[],30000);
+    if(bytes.length>info.used) for(let off=0;off<4096;off+=256) await ok(95,[...u21(off),...pack7(bytes.subarray(info.used+off,info.used+off+256))]);
+    sayK('', 'Sample bank uploaded.');
+  } catch(e) { if(e.message!=='closed') sayK("",e.message); }
+  finally { smpBusy=false;$("ko-file").disabled=false;releaseBusy();koImportRefresh(); }
+});
+
 function renderSamples() {
   const box = $("smpslots");                        /* the tab says when there are no slots (renderPanels) */
+  $("ko-import").hidden=!(dev && dev.koBankVersion);
+  box.hidden=!!(dev && dev.koBankVersion);
+  koImportRefresh();
+  if (box.hidden) { box.replaceChildren(); return; }
   if (!dev || !dev.smp) { box.replaceChildren(); return; }
   const max = SMP.MAX_DATA;
   box.replaceChildren(...dev.smp.slots.map((u, k) => {

@@ -786,6 +786,7 @@ static void proj_bound(project_t *q)
             if (s->probability > 101u) s->probability = 0;
         }
         for (i = 0; i < P_COUNT; i++) {
+            if (FELUCCA_SAMPLER_ONLY && !eng_ok(q->t[t].engine % NENGINES)) continue;
             const param_desc_t *d = param_desc_of(q->t[t].engine % NENGINES, i);
             q->t[t].p[i] = (int16_t)param_fit(d, q->t[t].p[i]);   /* (a retired KIT: the kit it plays) */
         }
@@ -970,6 +971,10 @@ static int project_restore_runtime(const project_t *input)
     uint32_t i, k;
     if (!proj_ok(input) || !proj_engines_ok(input)) return 1;
     mom_back(0);                                  /* (ui_input.c MOMENTARY: the values as they were, then the load) */
+    #if FELUCCA_KO
+    ko_solo=-1;ko_seq_firing=0;
+    for(uint32_t p=0;p<SAMPLER_PARTS;p++) {ko_seq[p].enabled=ko_seq[p].cursor=0;memset(ko_seq[p].age,0,sizeof ko_seq[p].age);}
+    #endif
     memset(drum_mute, 0, sizeof drum_mute);       /* (1.4.1: the DRUM lanes' mutes, performance state) */
     if (p != input) memcpy(p, input, sizeof *p);
     proj_drums_to_part(p);                              /* a RAM slot of firmware before 1.0 */
@@ -980,6 +985,9 @@ static int project_restore_runtime(const project_t *input)
     panic_req = (1u << NTRK) - 1u;
     fm1_irq_off();                                      /* the audio ISR must not see half a project */
     seq_stop();
+#if FELUCCA_KO
+    ko_pattern_commit=255;
+#endif
     transport_req = 0;
     chain_config = p->chain;
     motion = p->motion;
@@ -997,9 +1005,9 @@ static int project_restore_runtime(const project_t *input)
         t->user = 0;                                    /* (no user preset slot is saved) */
         for (i = 0; i < P_COUNT; i++) {                 /* every value back inside its range (param_fit) */
             const param_desc_t *d = param_desc_of(e, i);
-            t->p[i] = (int16_t)param_fit(d, s->p[i]);
+            t->p[i] = FELUCCA_SAMPLER_ONLY && !eng_ok(e) ? s->p[i] : (int16_t)param_fit(d, s->p[i]);
         }
-        t->preset = (uint8_t)(ENGINES[e]->npresets ? (s->preset >= PROJ_DEF_KEEP ? 0u : s->preset) % ENGINES[e]->npresets : 0u);
+        t->preset = FELUCCA_SAMPLER_ONLY && !eng_ok(e) ? s->preset : (uint8_t)(ENGINES[e]->npresets ? (s->preset >= PROJ_DEF_KEEP ? 0u : s->preset) % ENGINES[e]->npresets : 0u);
         memcpy(t->step, s->step, sizeof t->step);
         proj_steps(t->step);
         {   /* the project's own FM6 patch, never reloaded from SLOT: F n if it is that factory patch, else OWN */
@@ -1019,10 +1027,10 @@ static int project_restore_runtime(const project_t *input)
     for (k = 0; k < NTRK; k++) {                        /* the power-on sounds: format 1 (tracks 2..4), old drums */
         track_t *t = &trk[k];
         int16_t keep[P_COUNT];
-        if (p->t[k].preset == PROJ_DEF_SOUND) {
+        if ((!FELUCCA_SAMPLER_ONLY || eng_ok(t->eng_req)) && p->t[k].preset == PROJ_DEF_SOUND) {
             apply_preset_to(t, TRK_DEF[k][1]);
             track_defaults_steps(t);
-        } else if (p->t[k].preset == PROJ_DEF_KEEP) {   /* the steps, LEVEL PAN MUTE, LEN DIV SWING GATE kept */
+        } else if ((!FELUCCA_SAMPLER_ONLY || eng_ok(t->eng_req)) && p->t[k].preset == PROJ_DEF_KEEP) {   /* the steps, LEVEL PAN MUTE, LEN DIV SWING GATE kept */
             memcpy(keep, t->p, sizeof keep);
             fm1_irq_off();                           /* publish the legacy sound as one bounded parameter batch */
             proj_legacy_drums(t);                     /* (keeps the SLICER: param_kept) */
@@ -1101,10 +1109,37 @@ static void persist_boot(void)                    /* before settings_init / pane
 
 static int project_used(uint32_t slot) { return proj_import(&proj_scratch, &proj_slot[slot & 3u], sizeof(project_store_t)); }
 
+static int chain_copy_source(uint32_t i)
+{
+    uint32_t k,j;project_t *p=&proj_scratch;
+    if(!proj_import(p,&proj_slot[i],sizeof(project_store_t))) return 0;
+    chain.source[i].motion = p->motion;
+    /* A song keeps its current instruments. Engine-specific motion from
+     * another instrument would change a kit/wave/algorithm unexpectedly. */
+    {
+        motion_store_t *m = &chain.source[i].motion; uint32_t n = 0;
+        for (uint32_t e = 0; e < m->count; e++) {
+            const motion_event_t *v = &m->event[e]; uint32_t owner = v->place >> 6;
+            if (MOTION_ID(v) >= P_FM1_ATK && p->t[owner].engine != trk[owner].eng_req) continue;
+            m->event[n++] = *v;
+        }
+        m->count = (uint8_t)n;
+    }
+    for (k = 0; k < NTRK; k++) {
+        memcpy(chain.source[i].step[k], p->t[k].step, sizeof p->t[k].step);
+        proj_steps(chain.source[i].step[k]);
+        chain.source[i].qnt[k] = p->t[k].p[P_SQNT] != 0;
+        for (j = 0; j < 4u; j++)
+            chain.source[i].timing[k][j] = (int16_t)clamp(p->t[k].p[P_SLEN + j],
+                TP[P_SLEN + j].min, TP[P_SLEN + j].max);
+    }
+    return 1;
+}
+
 /* Main loop only: no flash access or copies when the ISR changes rows. */
 static uint32_t chain_prepare(void)
 {
-    uint32_t i, k, j, used = 0;
+    uint32_t i, k, used = 0;
     if (transport_busy())
         return 2;
     if (!chain_valid(&chain_config) || !chain_config.count)
@@ -1121,34 +1156,17 @@ static uint32_t chain_prepare(void)
     chain.config = chain_config;
     for (i = 0; i < 4u; i++)
         if ((used >> i) & 1u) {
-            project_t *p = &proj_scratch;
-            if (!proj_import(p, &proj_slot[i], sizeof(project_store_t))) return 3u + i;
-            chain.source[i].motion = p->motion;
-            /* A song keeps its current instruments. Engine-specific motion from
-             * another instrument would change a kit/wave/algorithm unexpectedly. */
-            {
-                motion_store_t *m = &chain.source[i].motion; uint32_t n = 0;
-                for (uint32_t e = 0; e < m->count; e++) {
-                    const motion_event_t *v = &m->event[e]; uint32_t owner = v->place >> 6;
-                    if (MOTION_ID(v) >= P_FM1_ATK && p->t[owner].engine != trk[owner].eng_req) continue;
-                    m->event[n++] = *v;
-                }
-                m->count = (uint8_t)n;
-            }
-            for (k = 0; k < NTRK; k++) {
-                memcpy(chain.source[i].step[k], p->t[k].step, sizeof p->t[k].step);
-                proj_steps(chain.source[i].step[k]);
-                chain.source[i].qnt[k] = p->t[k].p[P_SQNT] != 0;
-                for (j = 0; j < 4u; j++)
-                    chain.source[i].timing[k][j] = (int16_t)clamp(p->t[k].p[P_SLEN + j],
-                        TP[P_SLEN + j].min, TP[P_SLEN + j].max);
-            }
+            if(!chain_copy_source(i)) return 3u+i;
         }
     RING_PUBLISH();
     chain.armed = 1;
     transport_req = 1;
     return 0;
 }
+
+#if FELUCCA_KO
+#include "ko_arrange.c"
+#endif
 
 static void settings_poll(void)
 {

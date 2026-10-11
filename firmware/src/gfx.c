@@ -821,18 +821,18 @@ static int32_t cv_free_hint(int32_t x, int32_t y, const char *s, uint16_t fg, ui
         uint32_t j;
         for (j = 0; j < i; j++)
             w[j] = s[j];
-        GFX_HOOK_ALIGN(0, y + 1, 0, y + 1 + KC_H, AL_V | AL_PASS, "free hint words on the keycap's line");
+        GFX_HOOK_ALIGN(0, y + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H), 0, y + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H) + KC_H, AL_V | AL_PASS, "free hint words on the keycap's line");
         x = cv_text_on(x, y, &AF_S, w, fg, bg) + KH_GAP;
         s += i + 1u;
     }
     if (id >= 0 && kc_w((uint32_t)id) + KH_GAP < maxw - (x - x0)) {
-        x = cv_keycap(x, y + 1, (uint32_t)id, T_KEY, T_INK, bg) + KH_GAP;
+        x = cv_keycap(x, y + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H), (uint32_t)id, T_KEY, T_INK, bg) + KH_GAP;
         s += n;
         while (*s == ' ')
             s++;
         if (!*s)
             return x - KH_GAP;
-        GFX_HOOK_ALIGN(0, y + 1, 0, y + 1 + KC_H, AL_V | AL_PASS, "free hint words on the keycap's line");
+        GFX_HOOK_ALIGN(0, y + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H), 0, y + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H) + KC_H, AL_V | AL_PASS, "free hint words on the keycap's line");
     }
     return cv_free_text(x, y, &AF_S, s, fg, bg, maxw - (x - x0));
 }

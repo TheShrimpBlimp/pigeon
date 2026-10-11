@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#b9ef77" />
+    <title>Pigeon • FM1 Sampler</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="./">PIGEON<span>FM1 sampler firmware</span></a>
+      <div class="badges">
+        <span id="offline">Preparing offline cache…</span
+        ><span id="connection">Device disconnected</span>
+      </div>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">PIGEON FOR M-VAVE FM1</p>
+          <h1>Sampler firmware<br />for the FM1.</h1>
+          <p>
+            Manage two song samples and a 16-pad drum kit.<br />Import audio,
+            transfer samples, and back up sessions. Processing runs locally and
+            works offline once ready.
+          </p>
+        </div>
+        <div class="device">
+          <label
+            >MIDI input
+            <select id="input">
+              <option>Connect first</option>
+            </select></label
+          ><label
+            >MIDI output
+            <select id="output">
+              <option>Connect first</option>
+            </select></label
+          ><button id="connect">Connect FM1</button>
+        </div>
+      </section>
+      <section class="toolbar">
+        <label class="button secondary"
+          >Open bank or session<input
+            id="open"
+            type="file"
+            accept=".kob,.pigeon" /></label
+        ><button id="read" data-device>Read device bank</button
+        ><button id="save" data-bank>Save bank</button
+        ><button id="upload" data-device data-bank>Send bank to FM1</button
+        ><button id="backup" data-device>Back up full session</button
+        ><button id="restore" data-device>Restore session</button
+        ><button id="recovery" disabled>Save recovery backup</button>
+      </section>
+      <section class="storage">
+        <div>
+          <strong id="used">No bank loaded</strong
+          ><span id="free">Import Song 1 to start, or open a bank.</span>
+        </div>
+        <progress
+          id="capacity"
+          max="417792"
+          value="0"
+          aria-label="Sample storage usage"
+        ></progress>
+        <p>
+          408 KiB shared between both songs and the kit. Replacing one component
+          preserves the others.
+        </p>
+      </section>
+      <section class="songs" id="songs"></section>
+      <section class="kit">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">DRUM KIT</p>
+            <h2>16 one-shot pads</h2>
+          </div>
+          <label class="button secondary"
+            >Choose one-shots<input
+              id="kit-files"
+              type="file"
+              accept="audio/*"
+              multiple /></label
+          ><button id="apply-kit" data-bank>Replace kit</button
+          ><button id="clear-kit" data-bank>Clear kit</button>
+        </div>
+        <p>
+          Choose up to 16 files. Assign them in pad order below; click a pad to
+          preview. Empty gaps become silent pads.
+        </p>
+        <div id="pads" class="pads"></div>
+      </section>
+      <section class="status-box" aria-live="polite">
+        <strong id="status"
+          >Ready. Open a bank or import your first song.</strong
+        ><progress
+          id="job"
+          max="1"
+          value="0"
+          aria-label="Operation progress"
+        ></progress>
+      </section>
+      <details>
+        <summary>Local use, offline operation, and device transfers</summary>
+        <p>
+          Use Chrome or Edge on macOS, Windows, or Linux for USB MIDI transfers.
+          Grant MIDI/SysEx access when connecting. Select matching FM1 input and
+          output ports. Stop playback and release keys before a transfer.
+        </p>
+        <p>
+          Wait for “Offline ready” before disconnecting Wi-Fi. Every runtime
+          dependency is bundled here. The open page keeps working without a
+          server; its cached address can also reopen offline while the browser
+          retains site data. Browser storage can be cleared or evicted, so
+          download your banks and backups.
+        </p>
+        <p>
+          A recovery backup is saved locally before sending or restoring.
+          Transfers write device flash; keep USB connected until verification
+          finishes. Session restore commits objects separately and is not
+          atomic. Sample replacement resets settings belonging to the changed
+          audio.
+        </p>
+        <p>
+          Supported imports include WAV and MP3, plus formats your browser can
+          decode. Songs become indexed mono MP3 at 22.05 kHz; drums become IMA
+          ADPCM. Normalization follows the command-line tool. No audio or
+          session data is sent to a server.
+        </p>
+        <p>
+          This tool manages sample banks and sessions; it does not flash
+          firmware. <a href="vendor/README.md">Encoder source and licenses</a>.
+        </p>
+      </details>
+    </main>
+    <footer>
+      Pigeon — sampler firmware for M-VAVE FM1.<span
+        >AI was used for menial coding. All assets, direction,
+        conceptualization, and thought are human.</span
+      >
+    </footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

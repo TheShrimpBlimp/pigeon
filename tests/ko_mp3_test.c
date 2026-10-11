@@ -29,6 +29,13 @@ int main(int argc,char **argv)
         uint32_t first=i>1?i-2:0,a=rd(bank+off+first*4),b=rd(bank+off+(i+1)*4);
         memcpy(input,bank+off+a,b-a);memset(input+(b-a),0,8);
         if(ko_mp3_decode(input,b-a+8,i-first+1,pcm)){printf("seek error %u\n",i);return 1;}
+        int16_t stepped[576];
+        if(ko_mp3_begin(input,b-a+8,i-first+1,0,576,stepped))return 1;
+        for(uint32_t k=0;k<i-first+1;k++) {
+            int rc=ko_mp3_step();
+            if(rc!=(k==i-first ? 0 : 1))return 1;
+        }
+        if(memcmp(stepped,pcm,sizeof pcm)||ko_mp3_step()!=-1)return 1;
         for(uint32_t j=0;j<576;j++){
             int32_t x=synth.pcm.samples[0][j]>>13;x=x<-32768?-32768:x>32767?32767:x;
             if(pcm[j]!=x)mismatches++;

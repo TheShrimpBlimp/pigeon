@@ -1,33 +1,21 @@
-# Contributing to Felucca
+# Contributing to Pigeon
 
-Thanks for helping! To keep things easy to follow, please use the right place:
+Pigeon is a sampler firmware for the M-VAVE FM1, maintained by TheShrimpBlimp.
+Keep changes focused on samples, drums, sequencing, performance, and reliability.
 
-| What | Where |
-|---|---|
-| A bug you can reproduce | [Issues](https://github.com/hugelton/Felucca/issues/new/choose): one issue per bug |
-| A feature idea or request | [Discussions › Ideas](https://github.com/hugelton/Felucca/discussions/categories/ideas) (no promise it will be added) |
-| How to use it, or how something works | [Discussions › Q&A](https://github.com/hugelton/Felucca/discussions/categories/q-a) |
-| Forks, mods, music, demos | [Discussions › Show and tell](https://github.com/hugelton/Felucca/discussions/categories/show-and-tell) |
-| Anything else | [Discussions › General](https://github.com/hugelton/Felucca/discussions/categories/general) |
+Describe the problem, the resulting behavior, and how it was verified. Include
+hardware details and reproducible steps for bugs. Build the sampler profile and
+run the relevant host tests before proposing firmware changes. Hardware flashing
+is a separate action; a successful host test is not a hardware play test.
 
-Feature requests posted as issues will be moved to Discussions or closed.
+Preserve project layouts, serialized IDs, update protocols, and upstream notices.
+Document any change that affects existing projects or sample banks. The baseline
+Felucca sources and fixtures support compatibility checks; do not remove them
+without checking their build, parser, and test dependencies.
 
-## Reporting a bug
+Contributions to the software are GPL-3.0-only. Creative assets must have explicit
+provenance and suitable permission; do not commit imported commercial recordings,
+private sample banks, or credentials. See [LICENSING.md](LICENSING.md).
 
-Please include the Felucca version (hold HOME > ABOUT), your computer's OS and browser if the editor or
-installer is involved, the steps to reproduce it, what you expected and what happened. A photo or a short
-video helps.
-
-## Pull requests
-
-Pull requests are welcome, including AI-assisted ones, with the same bar for all:
-
-- keep it small and focused on one thing;
-- make sure you understand the change and can explain it;
-- test it on a real FM-1;
-- run `tests/run_tests.sh` (see [BUILDING.md](BUILDING.md));
-- new files carry the GPL-3.0-only SPDX header.
-
-By contributing you agree that your contribution is licensed under GPL-3.0-only.
-
-The web editor and installer live in [Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp).
+AI may assist menial coding. Pigeon's assets, direction, conceptualization, and
+thought are human. Disclose assistance and review generated code and test results.

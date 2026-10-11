@@ -365,11 +365,17 @@ static void mono_remove(track_t *t, uint32_t note)
 
 static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 {
+#if FELUCCA_SAMPLER_ONLY
+    if (t>=trk+SAMPLER_PARTS || !eng_ok(t->eng_req)) return;
+#endif
     uint32_t any = 0, i, mode = trk_vmode(t);
-    if (t->p[P_MUTE])
-        return;
 #if FELUCCA_KO
-    if (ko_song(t)) {
+    if (ko_muted(t)) return;
+#else
+    if (t->p[P_MUTE]) return;
+#endif
+#if FELUCCA_KO
+    if (ko_song(t) && !(ko_seq_firing & (1u<<(t-trk)))) {
         int stopped = 0;
         for (i = 0; i < NVOICE; i++) {
             voice_t *v = &t->v[i];
