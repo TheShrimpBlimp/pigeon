@@ -63,7 +63,7 @@ def main(pkg, version, out):
         strip_module((HERE / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
         strip_module((HERE / "fm1backup.js").read_text(encoding="utf-8"))
     name = f"pigeon-{re.sub(r'[^A-Za-z0-9.-]', '-', version)}.fwsc"
-    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest()})
+    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "Beta candidate: hardware verification pending." if "beta" in version else "Development package: review validation notes before installing."})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
@@ -104,10 +104,10 @@ def main(pkg, version, out):
     shutil.copy(HERE / "site" / "site.css",out / "site.css")
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
     guide=out / "guide";guide.mkdir(exist_ok=True)
-    for doc in ("KO_MODE.md","KO_STORAGE.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
+    for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
     # Matching working source, excluding user audio, build artifacts, and hosting state.
     root=HERE.parent
-    tracked=subprocess.check_output(["git","ls-files","-z"],cwd=root).decode().split("\0")
+    tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")
     extra=["web/pigeon/install-count.js","web/pigeon-installer.html","tools/pigeon_site_ui.c","tests/pigeon_expansion_test.c","tests/pigeon_performance_test.c","docs/NEXT_WORK.md","web/pigeon/editing.js","web/pigeon/editors.js","web/pigeon/wave-editor.js","web/pigeon/test-editing.mjs","web/site/index.html","web/site/site.css"]
     with tarfile.open(fw / f"pigeon-source-{safe_version}.tar.gz","w:gz") as archive:
         for relative in sorted(set(tracked+extra)):

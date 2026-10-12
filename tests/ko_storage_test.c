@@ -308,6 +308,27 @@ int main(int argc,char **argv)
     for (uint32_t i=0;i<12;i++) { trk_note_on(&trk[0],60+i,100);trk_note_on(&trk[2],60+i,100);trk_note_on(&trk[1],60+i,100); }
     pump(64);bad+=check("three tracks retain the shared eight voice limit",voices_busy()<=NVOICE);
     trk_all_off(&trk[0]);trk_all_off(&trk[1]);trk_all_off(&trk[2]);pump(200);
+    /* Sustained mixed sampler load after cold attacks have been serviced.
+     * Host polling verifies scheduling/data integrity, not hardware deadlines. */
+    ko_comp_t saved_comp[3]={ko_states[0].comp[0],ko_states[0].comp[1],ko_states[1].comp[0]};
+    int16_t saved_filter[3];
+    ko_states[0].comp[0]=ko_states[0].comp[1]=ko_states[1].comp[0]=(ko_comp_t){12,4,10,10,0};
+    for(uint32_t part=0;part<SAMPLER_PARTS;part++) {
+        uint32_t filter=part==1?P_E4:P_E7;saved_filter[part]=trk[part].p[filter];trk[part].p[filter]=80;
+        trk[part].p[P_DLY]=64;trk[part].p[P_CHOR]=64;
+        trk[part].p[P_REV]=64;trk[part].p[P_DIST]=32;
+    }
+    for(uint32_t i=0;i<3;i++) {trk_note_on(&trk[0],60+i,100);trk_note_on(&trk[2],60+i,100);}
+    trk_note_on(&trk[1],60,100);trk_note_on(&trk[1],61,100);pump(64);
+    uint32_t stress_errors=ko_pcm_errors,stress_misses=ko_pcm_underruns;
+    pump(1024);
+    bad+=check("two songs plus drums and all six FX retain bounded voices and valid PCM",voices_busy()<=NVOICE && ko_pcm_errors==stress_errors && ko_pcm_underruns==stress_misses);
+    for(uint32_t part=0;part<SAMPLER_PARTS;part++) {
+        trk[part].p[part==1?P_E4:P_E7]=saved_filter[part];
+        trk_all_off(&trk[part]);trk[part].p[P_DLY]=trk[part].p[P_CHOR]=trk[part].p[P_REV]=trk[part].p[P_DIST]=0;
+    }
+    ko_states[0].comp[0]=saved_comp[0];ko_states[0].comp[1]=saved_comp[1];ko_states[1].comp[0]=saved_comp[2];
+    pump(300);
     ko_table_t second_saved=*ko_table();
     bad+=check("both song records persist",ko_store_sector(1)==3);
     ko_auto();ko_store_load();

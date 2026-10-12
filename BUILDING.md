@@ -168,3 +168,8 @@ Run `python3 tools/pigeon_gui.py` (Windows: `py tools/pigeon_gui.py`) and open
 `webapp/pigeon/` by `web/make_site.py` for HTTPS hosting. Wait for **Offline ready**
 before disconnecting the network. See [the GUI guide](web/pigeon/README.md) for
 imports, device transfers, recovery backups, offline caching, and browser tests.
+
+For a local Pigeon candidate with checksums, repeated-build comparison and host
+validation, see [Pigeon beta preparation](docs/PIGEON_BETA.md). Control reference:
+[Pigeon controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
+findings: [performance audit](docs/PIGEON_PERFORMANCE_AUDIT.md).

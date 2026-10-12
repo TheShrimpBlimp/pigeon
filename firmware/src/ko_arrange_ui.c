@@ -42,7 +42,7 @@ static void ko_arrange_draw(int force)
         str_cpy(text+str_len(text),(ko_pattern_mask&(1u<<ko_pattern_sel))?" / SAVED":" / EMPTY",sizeof text-str_len(text));
         if(ko_copy_slot<4) {str_cpy(text+str_len(text)," / CLIP ",sizeof text-str_len(text));n=str_len(text);text[n]=(char)('A'+ko_copy_slot);text[n+1]=0;}
         ko_line(52,text,T_THEME);
-        if(ko_launch_pending<4) {str_cpy(text,"NEXT BAR: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_launch_pending);text[n+1]=0;}
+        if(ko_launch_pending<4) {str_cpy(text,chain_config.rsv[0]==1?"PATTERN END: ":"NEXT BAR: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_launch_pending);text[n+1]=0;}
         else if(chain.running && ko_launch_mode) {str_cpy(text,"PLAYING: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_pattern_active);text[n+1]=0;}
         else str_cpy(text,"KEYS 1-4 SELECT A-D",sizeof text);
         ko_line(74,text,T_MID);

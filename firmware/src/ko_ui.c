@@ -330,8 +330,20 @@ static void ko_playhead(void)
     if (x>=0) lcd_fill((uint32_t)x,170,2,3,T_ACCENT);
     ko_play_x=x;
 }
+static void ko_sync_speed_draw(void)
+{
+    ko_sync_t *q=&ko_sync[ko_id()];const slc_src_t *source=slc_get(ko_src());
+    if(source) ko_value(4,"SPEED % ",q->on ? (ko_sync_step(65536,(source->rate*44100u+32768u)>>16,q->samples,q->beats,song.g[G_BPM])*100u)>>16 : 100);
+}
+static const char *ko_seq_status(void)
+{
+    if(seq_counting()) return "COUNT-IN / OCT STEP SIZE";
+    if(song.rec & (1u<<song.sel)) return song.playing ? "RECORDING / OCT STEP SIZE" : "REC ARMED / OCT STEP SIZE";
+    return song.playing ? "PLAYING / OCT STEP SIZE" : "STOPPED / REC TO ARM";
+}
 static void ko_seq_draw(int force)
 {
+    ko_line(199,ko_seq_status(),T_THEME);
     static uint32_t state[16];
     uint32_t current=song.playing ? TSEL->seq_idx : ko_seq[song.sel].cursor;
     uint32_t base=(current/16u)*16u, length=TSEL->p[P_SLEN];
@@ -384,7 +396,7 @@ static void ko_draw(void)
         }
     }
     if(ko.view==8 || ko.view==9) ui.force=1; /* runtime queued/playing slot and section */
-    if (!layout && !ui.force && revision == ko.revision && generation == smp_user_gen && part == song.sel && view == ko.view) { ko_playhead(); if(ko.view==7) ko_seq_draw(0); return; }
+    if (!layout && !ui.force && revision == ko.revision && generation == smp_user_gen && part == song.sel && view == ko.view) { ko_playhead(); if(ko.view==7) ko_seq_draw(0); if(ko.view==27) ko_sync_speed_draw(); return; }
     if(layout) {
         ko_line_n=0;ko_ui_valid=1;ko_play_x=-1;ko_wave_span=0;ko_follow_a=~0u;
         lcd_fill(0,26,240,214,T_BG);
@@ -423,7 +435,6 @@ static void ko_draw(void)
         ko_line(74,timing,T_THEME);
         ko_seq_draw(layout);
         ko_line(178,"K3 STEP / EDIT CLEAR+NEXT",T_MID);
-        ko_line(199,"OCT STEP SIZE / REC ARM",T_MID);
         ko_line(220,"ENV DETAIL / LFO SWING",T_MID);
     } else if(ko.view==23) {
         ko_value(0,"K1 BPM ",song.g[G_BPM]);ko_value(1,"K2 LOOP BEATS ",ko_loop_beats);
@@ -433,7 +444,9 @@ static void ko_draw(void)
         ko_sync_t *q=&ko_sync[ko_id()];ko_value(0,"K1 LOOP BEATS ",q->beats);
         ko_line(72,q->on?"K2 SYNC ON":"K2 SYNC OFF",T_THEME);
         ko_line(100,q->whole?"K3 WHOLE SONG":"K3 SELECTED CHOP",T_THEME);
-        ko_value(3,"K4 CHOP ",ko.selected+1);ko_line(180,"SPEED SYNC: PITCH CHANGES",T_MID);ko_line(202,"FX BACK / EDIT WAVE",T_MID);
+        ko_value(3,"K4 CHOP ",ko.selected+1);
+        ko_sync_speed_draw();
+        ko_line(180,"SPEED SYNC: PITCH CHANGES",T_MID);ko_line(202,"FX BACK / EDIT WAVE",T_MID);
     } else if(ko.view==24) {
         uint32_t step=ko_seq[song.sel].cursor;step_t *n=&TSEL->step[step];int16_t pitch=0;(void)motion_lock_get(TSEL,step,P_TRANS,&pitch);
         static const char *const condition[]={"ALWAYS","EVERY 2ND","EVERY 4TH","FIRST PASS","AFTER FIRST"};

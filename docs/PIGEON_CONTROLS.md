@@ -1,0 +1,39 @@
+# Pigeon controls
+
+Pigeon is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
+Choose the track first; edits belong to that track. Song 2 can hold drum loops.
+
+| Page | Controls |
+| --- | --- |
+| Song waveform | K1 start, K2 end, K3 scroll, K4 horizontal zoom; OCT changes pitch |
+| Chop settings (EDIT) | Held loop, latch, split/join, undo/redo; ENV opens envelopes, LFO chop operations |
+| Envelopes | K1 attack, K2 release, K3 one-shot/hold/latch, K4 loop |
+| Sequencer (SEQ) | K1 BPM, K2 tempo/sample-end timing, K3 step, K4 length (1–64); OCT step duration; REC arm |
+| Step details (ENV from sequencer) | Velocity, gate, chance and repeats; ENV advanced pitch/nudge/conditions |
+| Timing (LFO from sequencer) | Swing and timing; LFO recording preferences |
+| Recording preferences | Independent metronome/count-in, live quantization OFF/1/16/1/8, song choke |
+| Tempo tools (ENV from recording preferences) | Tap tempo (EDIT), loop beat count and loop-to-BPM; FX opens sync |
+| Speed sync | K1 reference beats, K2 enable, K3 whole-song/chop reference, K4 chop |
+| Patterns | Keys 1–4 choose A–D; K1 select, K2 copy source, K3 chain add/remove, K4 paste/copy |
+| Arrangement | Section, pattern, repeat count, insert/delete; ENV opens launch/section tools |
+
+While stopped and armed, keys write steps. While playing and armed, keys record
+live. Playback LEDs identify the chop sounding; recording LEDs identify the
+current step. The sequencer screen explicitly shows stopped, armed, recording,
+playing or count-in. Shortening a sequence keeps hidden later steps for reuse.
+
+Pattern changes during playback are queued for the next bar or pattern end,
+according to the launch preference. The pattern screen names that boundary.
+Patterns change notes and timing; they share the loaded samples and chop edits.
+
+Sync changes speed **and pitch**. Set the actual number of beats in the captured
+reference; it follows project BPM within 50–200% speed. Changing chop boundaries
+does not recapture the reference until a sync control is adjusted. SPEED % shows
+the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
+
+Both songs and the kit share 408 KiB and eight sounding voices. White song keys
+cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
+Drums have 16 one-shot pads. Held loops default on, latch defaults off.
+
+Save banks and full recovery archives in the sample tool before replacement.
+The full workflow and format details are in [KO_MODE.md](KO_MODE.md).

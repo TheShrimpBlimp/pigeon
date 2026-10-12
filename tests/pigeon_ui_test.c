@@ -3,7 +3,14 @@
 #include "ko_test.c"
 int main(void)
 {
-    int bad=0;ui_power_on();memset(ko_states,0,sizeof ko_states);
+    int bad=0;
+    song.sel=0;song.rec=0;song.playing=0;
+    bad+=check("stopped sequencer explains recording gesture",!strcmp(ko_seq_status(),"STOPPED / REC TO ARM"));
+    song.rec=1;bad+=check("armed status belongs to selected track",!strcmp(ko_seq_status(),"REC ARMED / OCT STEP SIZE"));
+    song.playing=1;bad+=check("armed playback shows recording",!strcmp(ko_seq_status(),"RECORDING / OCT STEP SIZE"));
+    song.sel=2;bad+=check("other track arm does not label Song 2 recording",!strcmp(ko_seq_status(),"PLAYING / OCT STEP SIZE"));
+    cin_left=1;bad+=check("count-in state is explicit",!strcmp(ko_seq_status(),"COUNT-IN / OCT STEP SIZE"));cin_left=0;
+    song.sel=0;song.rec=0;song.playing=0;ui_power_on();memset(ko_states,0,sizeof ko_states);
     memset(ko_flash,255,sizeof ko_flash);slc_store_boot();fixture(0,0);fixture(1,1);
     menu_put(MI_KO,1);ko_states[0].on=1;ko_setup();render_blocks(32);song.sel=0;go_home();
     ko_select(2);ko.zoom=3;ui.force=1;ko_draw();
@@ -65,6 +72,16 @@ int main(void)
     ui.menu=1;ui_draw();ui.menu=0;ui.force=1;ko_draw();bad+=check("return from menu rebuilds sampler cache",ko_ui_valid && ko_wave_span);
     ko.view=1;ui.force=1;ko_draw();host_fl_begin();ko_knob(1,1);ko_draw();flashes=host_fl_end(26,240);
     bad+=check("FX value changes redraw buffered text without intermediate blanks",!flashes);
+    ko.view=8;ko_launch_pending=2;chain_config.rsv[0]=1;ui.force=1;ko_draw();
+    int label=0;for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==74)label=!strcmp(ko_lines[i].text,"PATTERN END: C");
+    bad+=check("queued pattern label names pattern-end preference",label);
+    chain_config.rsv[0]=0;ui.force=1;ko_draw();label=0;
+    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==74)label=!strcmp(ko_lines[i].text,"NEXT BAR: C");
+    bad+=check("queued pattern label follows bar preference",label);ko_launch_pending=255;
+    ko.view=27;ko_sync[0]=(ko_sync_t){.samples=((slc_get(1)->rate*44100u+32768u)>>16)*2u,.beats=4,.on=1};song.g[G_BPM]=120;ui.force=1;ko_draw();
+    song.g[G_BPM]=180;ui.force=0;ko_draw();label=0;
+    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==140)label=!strcmp(ko_lines[i].text,"SPEED % 150");
+    bad+=check("sync speed display follows external tempo without forced redraw",label);song.g[G_BPM]=120;
     const char *screens=getenv("KO_SCREEN_DIR");if(screens) {ko_palette_on=1;palette_set(settings.palette);ko.view=7;screen_save(screens,"pigeon-sequencer");ko.view=0;screen_save(screens,"pigeon-waveform");}
     printf("Pigeon UI: %s\n",bad?"FAILED":"PASSED");return bad!=0;
 }

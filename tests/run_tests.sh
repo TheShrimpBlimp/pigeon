@@ -180,7 +180,7 @@ $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_wo
 run "Pigeon: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_expansion_test" tests/pigeon_expansion_test.c -lm
 run "Pigeon: envelopes, chop operations, quantization, choke and recording preferences" "$OUT/pigeon_expansion_test"
-$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_performance_test" tests/pigeon_performance_test.c -lm
+$CC -w -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_performance_test" tests/pigeon_performance_test.c -lm
 run "Pigeon: tap/loop tempo, pitch/nudge/conditions, rolls, chop groups and alternate layouts" "$OUT/pigeon_performance_test"
 run "Pigeon: independent imports and complete archive integrity" python3 tests/pigeon_library_test.py
 run "KO kit upload: exact zones and pad order" python3 tests/ko_upload_test.py
@@ -422,6 +422,8 @@ else
         $SCC -o "$A/$t" tests/$t.c -lm
         run "ASan/UBSan: $t" "$A/$t"
     done
+    $SCC -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -o "$A/pigeon_performance_test" tests/pigeon_performance_test.c -lm
+    run "ASan/UBSan: Pigeon sampler performance profile" "$A/pigeon_performance_test"
     $SCC -o "$A/fuzz_ed" tests/fuzz_ed.c -lm
     run "ASan/UBSan fuzz: editor SysEx and raw USB-MIDI packets (20000, seed 7)" "$A/fuzz_ed" 20000 7
     $SCC -o "$A/fuzz_proj" tests/fuzz_proj.c -lm
