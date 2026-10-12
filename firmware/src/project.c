@@ -595,7 +595,7 @@ static int proj_pack(project_store_t *out, const project_t *q)
             const step_t *s = &q->t[t].step[i];
             uint32_t r = step_ratchet(s) - 1u;          /* RATCH: bit 7 of the velocity and chance bytes (see the top) */
             uint32_t nd = (uint32_t)step_nudge(s) & 15u;   /* NUDGE (FUN10): bit j in bit 7 of note j */
-            if (s->n > 4u || s->time > ST_REST || (s->flags & ~(3u | SF_RATCH | SF_NUDGE)) || s->probability > 101u)
+            if (s->n > 4u || s->time > ST_REST || (s->flags & ~(3u | SF_RATCH | SF_NUDGE)) || s->probability > 105u)
                 return 0;
             for (uint32_t j = 0; j < 4u; j++)           /* what proj_unpack checks, so a saved project always loads: */
                 b[pos++] = (uint8_t)((s->note[j] > 127u ? 127u : s->note[j]) | (nd >> j & 1u) << 7);   /* notes and
@@ -689,7 +689,7 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
             s->vel = b[pos] & 127u; meta |= (b[pos++] & 128u) << 1;      /* (RATCH bit 0 at bit 8 of meta) */
             s->hit = b[pos++]; s->acc = b[pos++];
             s->probability = b[pos] & 127u; meta |= (b[pos++] & 128u) << 2;   /* (bit 1 at bit 9) */
-            if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability > 101u) return 0;
+            if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability > 105u) return 0;
             if (s->acc & ~s->hit) return 0;
             step_set_ratchet(s, (meta >> 8) + 1u);
             step_set_nudge(s, (int32_t)(nd ^ 8u) - 8);
@@ -783,7 +783,7 @@ static void proj_bound(project_t *q)
             step_t *s = &q->t[t].step[i];
             s->flags &= 3u | SF_RATCH | SF_NUDGE;
             s->vel &= 127u;
-            if (s->probability > 101u) s->probability = 0;
+            if (s->probability > 105u) s->probability = 0;
         }
         for (i = 0; i < P_COUNT; i++) {
             if (FELUCCA_SAMPLER_ONLY && !eng_ok(q->t[t].engine % NENGINES)) continue;

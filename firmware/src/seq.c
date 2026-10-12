@@ -617,8 +617,39 @@ static __attribute__((noinline)) void cin_keep(track_t *t, uint32_t note, uint32
     cin_up[i] &= (uint8_t)~(1u << k);
 }
 
+#if FELUCCA_KO
+typedef struct {uint32_t left;uint8_t note,vel,up,on;} ko_live_event_t;
+static ko_live_event_t ko_live[SAMPLER_PARTS][NVOICE];
+static uint8_t ko_live_firing;
+static int ko_live_enqueue(track_t *t,uint32_t note,uint32_t vel) {
+    if(t<trk || t>=trk+SAMPLER_PARTS || !ko_states[0].on || !song.playing || ko_live_firing || !ko_quantize[t-trk])return 0;
+    uint32_t part=(uint32_t)(t-trk),base=div_samples(2),q=ko_quantize[part],phase=clk_pos==CLK_START?0:clk_pos;
+    if(q==2 && (clk_step&1u))phase+=base;
+    uint32_t grid=base*(q==2?2u:1u),left=phase?grid-phase:0;
+    for(uint32_t k=0;k<NVOICE;k++)if(!ko_live[part][k].on || ko_live[part][k].note==note) {
+        ko_live[part][k]=(ko_live_event_t){left,(uint8_t)note,(uint8_t)vel,0,1};return 1;
+    }
+    return 1; /* full: drop newest input instead of sounding outside the grid */
+}
+#endif
+#if FELUCCA_KO
+static struct {uint32_t left;uint8_t note,vel,on;} ko_roll[NVOICE];
+static uint8_t ko_roll_firing;
+static uint32_t ko_pass[SAMPLER_PARTS];
+static uint8_t ko_pass_started[SAMPLER_PARTS];
+static int ko_condition_pass(const track_t *t,const step_t *s,uint32_t idx) {
+    if(!ko_seq_on(t))return 1;
+    uint32_t pass=ko_pass[t-trk]+(!idx && t->seq_idx && ko_pass_started[t-trk]),c=step_condition(s);
+    return !c || (c==1 ? (pass&1u)==1u : c==2 ? (pass&3u)==3u : c==3 ? pass==0 : pass!=0);
+}
+#endif
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
+#if FELUCCA_KO
+    if(!ko_roll_firing && ko_live_enqueue(t,note,vel))return;
+    if(ko_roll_enabled && ko_kit(t) && !ko_roll_firing)for(uint32_t k=0;k<NVOICE;k++)
+        if(!ko_roll[k].on || ko_roll[k].note==note) {ko_roll[k].left=div_samples(ko_roll_div);ko_roll[k].note=(uint8_t)note;ko_roll[k].vel=(uint8_t)vel;ko_roll[k].on=1;break;}
+#endif
 #if FELUCCA_KO
     if (ko_seq_on(t) && !song.playing && !cin_left && !chain.running && ((song.rec>>(t-trk))&1u)) {
         uint32_t index=ko_seq[t-trk].cursor % (uint32_t)t->p[P_SLEN];step_t *s=&t->step[index];
@@ -641,8 +672,15 @@ static int midi_note_held(const track_t *t, uint32_t note);
 static int midi_local_held(const track_t *t, uint32_t note);
 static void input_off(track_t *t, uint32_t note)
 {
+#if FELUCCA_KO
+    if(!ko_live_firing && t>=trk && t<trk+SAMPLER_PARTS)
+        for(uint32_t k=0;k<NVOICE;k++)if(ko_live[t-trk][k].on && ko_live[t-trk][k].note==note) {ko_live[t-trk][k].up=1;return;}
+#endif
     if (midi_note_held(t, note))
         return;
+#if FELUCCA_KO
+    if(ko_kit(t))for(uint32_t k=0;k<NVOICE;k++)if(ko_roll[k].note==note)ko_roll[k].on=0;
+#endif
     if (cin_left) {                                 /* a kept note let go before step 1: recorded, then let go */
         uint32_t i = trk_index(t), k;
         for (k = 0; k < cin_n[i]; k++)
@@ -654,6 +692,25 @@ static void input_off(track_t *t, uint32_t note)
     trk_note_off(t, note);                          /* other mode (ARP switched while held) */
 }
 
+#if FELUCCA_KO
+static void ko_roll_tick(uint32_t advance) {
+    for(uint32_t k=0;k<NVOICE;k++)if(ko_roll[k].on) {
+        if(!ko_roll_enabled || !ko_kit(&trk[1])) {ko_roll[k].on=0;continue;}
+        if(ko_roll[k].left>advance){ko_roll[k].left-=advance;continue;}
+        uint32_t over=advance-ko_roll[k].left,period=div_samples(ko_roll_div);ko_roll[k].left=period>over?period-over:1;ko_roll_firing=1;
+        trk_note_off(&trk[1],ko_roll[k].note);input_on(&trk[1],ko_roll[k].note,ko_roll[k].vel);ko_roll_firing=0;
+    }
+}
+static void ko_live_tick(uint32_t advance) {
+    for(uint32_t part=0;part<SAMPLER_PARTS;part++)for(uint32_t k=0;k<NVOICE;k++) {
+        ko_live_event_t *e=&ko_live[part][k];if(!e->on)continue;
+        if(!song.playing){e->on=0;continue;}
+        if(e->left>advance){e->left-=advance;continue;}
+        uint32_t note=e->note,vel=e->vel,up=e->up;e->on=0;ko_live_firing=1;
+        input_on(&trk[part],note,vel);if(up)input_off(&trk[part],note);ko_live_firing=0;
+    }
+}
+#endif
 /* the effect of key k in the FX layer (PF_N none): the white keys F3 .. G5 the map's (perf_map: the settings,
  * ui_layer.c; by default 1.1.5's ten, FLANGER, PHASER, REV / ECHO THROW), black keys 1..4 the track mutes */
 static uint32_t perf_key(uint32_t k)
@@ -827,6 +884,9 @@ static void seq_start(void)
 {
     uint32_t i;
     motion_begin();
+#if FELUCCA_KO
+    memset(ko_pass,0,sizeof ko_pass);memset(ko_pass_started,0,sizeof ko_pass_started);
+#endif
     chain_start();
     for (i = 0; i < NTRK; i++) {                   /* every track from its step 0, together */
         track_t *t = &trk[i];
@@ -869,6 +929,9 @@ static void seq_release(track_t *t)
 
 static void seq_stop(void)
 {
+#if FELUCCA_KO
+    memset(ko_live,0,sizeof ko_live);memset(ko_roll,0,sizeof ko_roll);
+#endif
     uint32_t i;
     song.playing = 0;
     cin_left = 0;                                  /* (a count-in: cancelled, nothing recorded) */
@@ -1043,6 +1106,10 @@ static __attribute__((noinline)) void seq_play(track_t *t, uint32_t idx, uint32_
     const step_t *s = &seq_steps(t)[idx];
     const motion_store_t *m = chain_motion(t);
     uint32_t skip = SEQ_ROLLED, i, k;
+#if FELUCCA_KO
+    if(!ko_condition_pass(t,s,idx))skip=SEQ_MISS;
+    else
+#endif
     if (step_chance(s) < 100u && rng() % 100u >= step_chance(s))
         skip = SEQ_MISS;
     if (m)
@@ -1127,6 +1194,9 @@ static void seq_tick(track_t *t, uint32_t n)
             break;
         t->seq_pos = t->seq_pos >= 0x7FFFFFFFu ? (chain.running ? chain.carry : 0u) : t->seq_pos - cur_len;
         t->seq_idx = (uint16_t)((t->seq_idx + 1u) % len);
+#if FELUCCA_KO
+        if(t<trk+SAMPLER_PARTS && !t->seq_idx) {uint32_t part=(uint32_t)(t-trk);if(ko_pass_started[part])ko_pass[part]++;ko_pass_started[part]=1;}
+#endif
         rec_hold(t, t->seq_idx, len);
         if (t->p[P_SQNT] && !t->nd_fired)
             seq_play(t, t->seq_idx, period);        /* QUANTIZE ON: every step on its start, as before 1.2 */
@@ -1171,6 +1241,7 @@ static void ko_end_tick(track_t *t, uint32_t n)
     if(ko_song(t)) for(uint32_t i=0;i<NVOICE;i++) if(ko_seq[p].age[i] && t->v[i].age==ko_seq[p].age[i]) t->v[i].s[4]&=(int32_t)~KO_V_LATCH;
     seq_release(t);t->seq_pos=0;t->seq_idx=(uint16_t)((t->seq_idx+1u) % (uint32_t)t->p[P_SLEN]);
     for(uint32_t i=0;i<NVOICE;i++) {ko_seq[p].baseline[i]=t->v[i].age;ko_seq[p].age[i]=0;}
+    if(!t->seq_idx){if(ko_pass_started[p])ko_pass[p]++;ko_pass_started[p]=1;}
     ko_seq_firing=(uint8_t)(1u<<p);seq_play(t,t->seq_idx,period);ko_seq_firing=0;
     t->rat_left=0;t->nd_late=t->nd_early=0;t->seq_hold=1;
     ko_end_capture(t);
@@ -1321,6 +1392,9 @@ static void events_block(uint32_t n)
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
         if ((pr >> i) & 1u) {
+#if FELUCCA_KO
+            if(i<SAMPLER_PARTS)memset(ko_live[i],0,sizeof ko_live[i]);if(i==1)memset(ko_roll,0,sizeof ko_roll);
+#endif
             midi_forget_track(i);
             trk_all_off(t);
             t->nheld = 0;
@@ -1368,6 +1442,9 @@ static void events_block(uint32_t n)
                 seq_n = midi_clock_advance(fm1_ms);
         }
     }
+#if FELUCCA_KO
+    ko_live_tick(seq_n);ko_roll_tick(n);
+#endif
     if (aud_req)
         seq_audition();                               /* (STEP PREVIEW: a step sounds, stopped) */
     chain_tick(seq_n);

@@ -1,6 +1,6 @@
 # Contributing to Pigeon
 
-Pigeon is a sampler firmware for the M-VAVE FM1, maintained by TheShrimpBlimp.
+Pigeon is a sampler firmware for the M-VAVE FM1, maintained by The Shrimp Blimp.
 Keep changes focused on samples, drums, sequencing, performance, and reliability.
 
 Describe the problem, the resulting behavior, and how it was verified. Include

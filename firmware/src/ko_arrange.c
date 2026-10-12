@@ -35,7 +35,7 @@ static void ko_pattern_apply(const chain_pattern_t *p)
         memcpy(trk[k].step,p->step[k],sizeof trk[k].step);
         memcpy(&trk[k].p[P_SLEN],p->timing[k],sizeof p->timing[k]);
         trk[k].p[P_SQNT]=p->qnt[k];
-        ko_seq[k].enabled=1;ko_seq[k].cursor=0;
+        ko_seq[k].enabled=1;ko_seq[k].cursor=0;ko_pass[k]=0;ko_pass_started[k]=0;
         pat_sig[k]=~steps_sig(&trk[k]);
     }
     motion=p->motion;undo.trk=0;pat_from_set(0);ui.force=1;

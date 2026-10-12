@@ -5,7 +5,7 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **TheShrimpBlimp**. Development version: **0.1-dev**.
+Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
 
 ## What it does
 
@@ -13,18 +13,22 @@ Created and directed by **TheShrimpBlimp**. Development version: **0.1-dev**.
   flash-backed sample storage. Songs use indexed mono MP3 or IMA ADPCM;
   available duration depends on encoding quality and the other samples loaded.
 - **Up to 32 editable chops per song**, with transient detection, independent
-  boundaries, pitch, held looping, and latch. All 27 keys play chops; a second
+  boundaries, pitch, attack/release, one-shot, hold, looping, and latch. All 27 keys play chops; a second
   bank reaches chops 28–32.
 - **A paged sequence grid with 1–64 steps per track**. Assign chops directly,
-  record live or step by step, edit velocity/gate/probability/repeats, and undo
-  sequence edits. Choose tempo timing or complete-sample timing.
+  record live or step by step, edit pitch/microtiming/conditions and
+  velocity/gate/probability/repeats, and undo
+  sequence edits. Choose tempo timing or complete-sample timing. Optional live
+  quantization, grouped song choke, held drum rolls, tap/loop tempo, metronome,
+  and count-in support recording. Each song has two alternate chop layouts.
 - **Patterns A–D and a 16-section arrangement**, with section repeats,
   duplication, reordering, copy/paste, and queued bar-or-pattern-end launches.
 - **A three-track mixer**, per-pad drum pitch/level/decay/choke groups, filter,
   delay, chorus, reverb, distortion, and separate compression. Temporary FX
   tweaks restore on release.
 - **Local sample-management tools** for independent song/kit replacement,
-  encoded audio previews, space reporting, and complete instrument backups.
+  waveform and chop editors, drum settings, pattern editing, encoded previews,
+  space reporting, firmware installation, and complete instrument backups.
 - A green display with **Little Character** typography, buffered updates,
   waveform zoom, and playback following.
 
@@ -95,7 +99,7 @@ for compatibility checks. Internal `FELUCCA_*` names are implementation details.
 [Archived upstream documentation](docs/FELUCCA_UPSTREAM.md) describes the
 foundation, rather than Pigeon's supported feature set.
 
-### Browser sample library
+### Browser sampler tool
 
 Run `python3 tools/pigeon_gui.py` to open the local GUI on macOS/Linux, or
 `py tools/pigeon_gui.py` on Windows. It manages both songs, 16 drum pads, previews,
@@ -103,3 +107,21 @@ storage, device transfers, and complete session backups. It also runs directly
 from an HTTPS website without installing anything and works offline after
 **Offline ready** appears. Audio processing stays on your computer.
 See [the GUI guide](web/pigeon/README.md).
+
+The hosted Pigeon site reports anonymous successful-install totals. Browser
+installers count only after the FM1 restart identity is verified; repeated
+installations count again, and offline reports wait in local browser storage.
+The counter stores a random event ID, firmware checksum, source, and day, with
+no sample data or device identity. These are client-reported events, not unique
+devices. Tracking begins with this release; earlier installs are not counted.
+
+## Project repositories
+
+- Firmware: https://github.com/TheShrimpBlimp/fm1-ko-sampler
+- Sample tool: https://github.com/TheShrimpBlimp/pigeon-tool
+- Website: https://github.com/TheShrimpBlimp/pigeon-website
+
+All three repositories are currently private. The website checkout lives at
+`web/site/`; clone it there when preparing a hosted build from this firmware
+checkout. The standalone sample tool checkout lives at `repositories/pigeon-tool/`.
+These independent checkouts are excluded from the firmware repository.

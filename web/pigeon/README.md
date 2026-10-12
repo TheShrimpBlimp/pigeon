@@ -41,7 +41,30 @@ The working bank persists in IndexedDB. Audio-file previews and staged imports
 are temporary. Download bank/session files to keep durable backups. Replacing
 song audio resets its chop settings through the firmware's existing CRC check;
 replacing kit audio resets per-pad settings. Untouched encoded components and
-metadata are preserved byte for byte. This GUI does not flash firmware.
+metadata are preserved byte for byte. Chop edits preserve encoded audio.
+
+Use **Chop editor** to load either waveform, drag boundaries, adjust pitch and
+attack/release and choke groups, choose hold/one-shot/latch and looping, or detect transients with
+adjustable sensitivity. Duplicate, split, merge, and copy settings work locally.
+Rename changes the eight-character device name; full imported filenames remain
+in local browser storage and edited session archives. Pad names are browser/session
+labels, since the device bank has no per-pad name field. Pad settings allow pitch,
+level, decay, choke groups, reordering, and removal without shifting later keys.
+
+Open a full session to use the pattern grid: choose current project or A–D, track,
+1–64-step length, chop/pad, pitch, microtiming, condition, velocity, probability,
+and repeats. Conditions replace probability for that step. Extended pitch locks
+and conditions require the updated firmware. Save full session
+exports the edits; Restore session applies them to the instrument. Local session
+edits persist across reloads.
+
+**Firmware update** accepts a local Pigeon `.fwsc`, validates package checksums
+and identity, reads the connected version, saves a full recovery session before
+installing, and verifies the returning identity. Keep USB connected during the
+update. This path uses the existing firmware update protocol; physical-device
+verification of the new GUI remains pending. Updating needs a responsive Pigeon
+device so the mandatory backup can complete. For a device already in loader
+mode, use the CLI installer recovery procedure.
 
 ## Offline and hosting
 
@@ -54,8 +77,8 @@ an incomplete cache still needs connectivity. An offline page cannot recover a
 missing dependency. Updates wait until the old app is closed, avoiding replacement
 of code during a device transfer.
 
-Host `web/pigeon/` and its two sibling modules `web/ko_bank.js` and
-`web/fm1backup.js` on the same HTTPS origin, preserving their relative paths.
+Host `web/pigeon/` and its sibling modules `web/ko_bank.js`,
+`web/fm1backup.js`, `web/fm1pkg.js`, and `web/fm1ota.js` on the same HTTPS origin, preserving their relative paths.
 `web/make_site.py` includes it at **webapp/pigeon/** in the generated site.
 Set a MIME type of `text/javascript` for `.js` files and allow Web MIDI with
 `Permissions-Policy: midi=(self)` if configuring that header. A same-origin page
@@ -75,13 +98,16 @@ The output sample rate is explicitly fixed to 22.05 kHz at every bitrate. Every
 frame is checked for firmware-compatible MPEG-2 mono, size, and zero reservoir;
 then an index and 1105-sample combined encoder/decoder skip are added.
 Drums use the same IMA ADPCM encoder and bank format as the Python tools.
-Transient detection generates up to 32 initial chops; editing those chops is
-currently performed on the FM1. This GUI manages audio and sessions for the sampler firmware.
+Transient detection generates up to 32 initial chops. Chop envelopes and explicit
+trigger modes require the corresponding updated firmware; older builds do not
+understand the new reserved flag bits.
 
 Tests:
 
 ```
 node web/pigeon/test.mjs
+# Editing tests compile the native firmware importer (requires cc and build/gen):
+node web/pigeon/test-editing.mjs
 python3 tests/pigeon_gui_codec_test.py --node node
 # Browser test requires Playwright + Chromium. Repository-local setup:
 npm install --prefix build/gui-deps/testing playwright
@@ -93,7 +119,9 @@ The core test covers all six bitrates, independent replacement, kit preservation
 archive validation before writes, protocol replies, readback, and restore order.
 The browser test imports and encodes stereo WAV, then disables network access
 and imports Song 2, imports drums, previews, exports, reloads from cache, checks
-persistence, and checks mobile layout. Device protocol tests use a simulated FM1;
+persistence, and checks mobile layout. It also edits chops, drum settings, patterns, and
+validates a firmware package offline. The editing test checks the exact FUNA
+bytes through the actual firmware importer. Device protocol tests use a simulated FM1;
 real USB transfers and Windows/Linux hardware testing remain necessary.
 
 The tool is GPL-3.0-only. The separately bundled LAME/lamejs encoder is LGPL-3.0;

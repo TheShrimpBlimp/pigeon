@@ -25,7 +25,7 @@ Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 
 ## Pigeon authorship and AI-use disclosure
 
-Pigeon is directed and maintained by its human project creator, TheShrimpBlimp,
+Pigeon is directed and maintained by its human project creator, The Shrimp Blimp,
 and human contributors. Original Felucca and third-party authors retain their
 copyrights. Pigeon-specific contributions are distributed under GPL-3.0-only;
 this does not transfer ownership of inherited work or separately licensed assets.

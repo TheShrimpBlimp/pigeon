@@ -6,6 +6,12 @@
 /* Reserved metadata bits: zero means LOOP on / LATCH off, including old FKO1 records. */
 #define KO_NO_LOOP 1u
 #define KO_LATCH 2u
+#define KO_ATTACK_SHIFT 2u
+#define KO_RELEASE_SHIFT 7u
+#define KO_ONE 8192u /* explicit one-shot, independent of stored loop preference */
+#define KO_GATE 4096u /* nonlooping hold: release follows the key */
+#define KO_CHOKE_SHIFT 14u
+#define KO_FLAGS_MASK (KO_NO_LOOP|KO_LATCH|(31u<<KO_ATTACK_SHIFT)|(31u<<KO_RELEASE_SHIFT)|KO_GATE|KO_ONE|(3u<<KO_CHOKE_SHIFT))
 #define KO_VOICE (1u << 23)
 #define KO_V_NO_LOOP (1u << 22)
 #define KO_V_LATCH (1u << 21)
@@ -66,3 +72,26 @@ static ko_pad_params_t ko_kit_params[16];
 static uint8_t ko_kit_pad;
 static uint32_t ko_kit_drop[NVOICE];
 static void ko_kit_defaults(void) {memset(ko_kit_params,0,sizeof ko_kit_params);for(uint32_t i=0;i<16;i++)ko_kit_params[i].level=127;}
+
+/* Small optional performance preferences, bound to the corresponding audio CRC. */
+static uint8_t ko_quantize[SAMPLER_PARTS],ko_choke[1+FELUCCA_KO_DUAL];
+static uint16_t ko_env_gain[1+FELUCCA_KO_DUAL][NVOICE],ko_env_flags[1+FELUCCA_KO_DUAL][NVOICE];
+static uint16_t ko_env_attack[1+FELUCCA_KO_DUAL][NVOICE],ko_env_release[1+FELUCCA_KO_DUAL][NVOICE];
+
+/* One alternate layout per song shares the encoded audio and decoder index. */
+static ko_table_t ko_alternate[1+FELUCCA_KO_DUAL];
+static uint8_t ko_layout[1+FELUCCA_KO_DUAL],ko_roll_enabled,ko_roll_div=2;
+static int8_t ko_kit_transpose[NVOICE];
+static int8_t ko_voice_transpose[1+FELUCCA_KO_DUAL][NVOICE];
+
+/* Tempo sync uses a captured loop length; chopping never changes the reference. */
+typedef struct { uint32_t samples; uint8_t beats,on,whole,rsv; } ko_sync_t;
+static ko_sync_t ko_sync[1+FELUCCA_KO_DUAL];
+static uint32_t ko_sync_step(uint32_t base,uint32_t native,uint32_t samples,uint32_t beats,uint32_t bpm) {
+    if(!native || !samples || !beats)return base;
+    uint32_t hz=(samples*bpm+30u*beats)/(60u*beats);
+    /* Bound decoder work to half/double speed; pitch controls remain additive. */
+    hz=hz<native/2?native/2:hz>native*2?native*2:hz;
+    uint32_t ratio=((hz/native)<<16)+((hz%native)<<16)/native;
+    return (uint32_t)(((uint64_t)base*ratio)>>16);
+}

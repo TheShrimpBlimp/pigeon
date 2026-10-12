@@ -11,6 +11,7 @@
   <body>
     <header>
       <a class="brand" href="./">PIGEON<span>FM1 sampler firmware</span></a>
+      <a class="home-link" href="../../">← Pigeon home</a>
       <div class="badges">
         <span id="offline">Preparing offline cache…</span
         ><span id="connection">Device disconnected</span>
@@ -53,6 +54,17 @@
         ><button id="backup" data-device>Back up full session</button
         ><button id="restore" data-device>Restore session</button
         ><button id="recovery" disabled>Save recovery backup</button>
+      </section>
+      <section class="transfer-panel" aria-live="polite">
+        <p id="send-help">Open or import a bank, then connect the FM1 to send it.</p>
+        <p id="transfer-status"></p>
+        <progress id="transfer-progress" max="1" value="0" aria-label="Bank transfer progress"></progress>
+        <div id="send-review" hidden>
+          <p id="send-summary"></p>
+          <p>Stop playback and release all keys. A recovery archive will be saved before writing. Keep USB connected until readback verification finishes.</p>
+          <button id="send-confirm" data-device data-bank>Back up and send bank</button>
+          <button id="send-cancel">Cancel</button>
+        </div>
       </section>
       <section class="storage">
         <div>

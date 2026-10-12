@@ -2,3 +2,7 @@ build/
 .DS_Store
 __pycache__/
 *.fwsc
+
+# Independently versioned Pigeon tool and website repositories.
+/repositories/
+/web/site/

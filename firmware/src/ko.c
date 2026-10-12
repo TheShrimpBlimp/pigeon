@@ -37,7 +37,7 @@ static int ko_restore(const ko_table_t *in)
     for (uint32_t j = 0; j < in->n; j++) {
         const ko_chop_t *c = &in->chop[j];
         if (c->a >= c->b || c->b > s->len || c->b - c->a < SLC_MIN || c->pitch < -24 || c->pitch > 24 ||
-            (c->rsv & ~(KO_NO_LOOP | KO_LATCH))) return 0;
+            (c->rsv & ~KO_FLAGS_MASK)) return 0;
     }
     ko_table_t *d = ko_edit(); *d = *in;
     for (uint32_t j = 0; j < d->n; j++) d->chop[j].st = slc_state_at(s, d->chop[j].a);
@@ -58,10 +58,10 @@ static void ko_prepare_one(void)
 #endif
     if (ko.loaded && ko.generation == smp_user_gen) return;
     if (!ko.loaded || ko.song_crc != sc || (!usr_nz[ko_id()?2:0] && ko_table()->n)) {
-        ko_auto(); ko.comp[0] = KO_COMP_DEFAULT; ko.dirty = 0;
+        memset(&ko_alternate[ko_id()],0,sizeof ko_alternate[0]);ko_layout[ko_id()]=0;ko_sync[ko_id()]=(ko_sync_t){.beats=4};ko_choke[ko_id()]=0;ko_quantize[ko_id()?2:0]=0;ko_auto(); ko.comp[0] = KO_COMP_DEFAULT; ko.dirty = 0;
         memset(&ko_seq[ko_id()?2:0],0,sizeof ko_seq[0]);
     }
-    if (!ko.loaded || ko.kit_crc != kc) {if(!ko_id()) ko_kit_defaults();ko.comp[1] = KO_COMP_DEFAULT;if(!ko_id()) memset(&ko_seq[1],0,sizeof ko_seq[1]);}
+    if (!ko.loaded || ko.kit_crc != kc) {if(!ko_id()) {ko_kit_defaults();ko_quantize[1]=0;}ko.comp[1] = KO_COMP_DEFAULT;if(!ko_id()) memset(&ko_seq[1],0,sizeof ko_seq[1]);}
     ko.song_crc = sc; ko.kit_crc = kc; ko.generation = smp_user_gen; ko.loaded = 1;
     if (ko_load_hook && !ko.dirty) ko_load_hook();
 }
@@ -170,6 +170,32 @@ static int ko_join(void)
     for (uint32_t k = j; k + 1u < d->n; k++) d->chop[k] = d->chop[k + 1u];
     d->n--; ko_publish(1); ko_select(j - 1u); return 1;
 }
+static int ko_duplicate(void)
+{
+    if(!ko_table()->n || ko_table()->n>=KO_CHOPS)return 0;
+    ko_table_t *d=ko_edit();uint32_t j=ko.selected;
+    for(uint32_t k=d->n;k>j+1;k--)d->chop[k]=d->chop[k-1];
+    d->chop[j+1]=d->chop[j];d->n++;ko_publish(1);ko_select(j+1);return 1;
+}
+static int ko_copy_settings(uint32_t source)
+{
+    if(source>=ko_table()->n || !ko_table()->n)return 0;
+    ko_table_t *d=ko_edit();d->chop[ko.selected].pitch=d->chop[source].pitch;
+    d->chop[ko.selected].rsv=d->chop[source].rsv;ko_publish(1);return 1;
+}
+static void ko_envelope_turn(uint32_t knob,int32_t clicks)
+{
+    if(!ko_table()->n)return;
+    ko_table_t *d=ko_edit();ko_chop_t *c=&d->chop[ko.selected];
+    if(knob<2) {uint32_t shift=knob?KO_RELEASE_SHIFT:KO_ATTACK_SHIFT;
+        uint32_t value=(uint32_t)clamp((int32_t)((c->rsv>>shift)&31u)+clicks,0,31);
+        c->rsv=(uint16_t)((c->rsv&~(31u<<shift))|(value<<shift));}
+    else if(knob==2) {int mode=c->rsv&KO_LATCH?2:((c->rsv&KO_ONE)||((c->rsv&KO_NO_LOOP)&&!(c->rsv&KO_GATE)))?1:0;
+        mode=clamp(mode+clicks,0,2);c->rsv&=~(KO_LATCH|KO_GATE|KO_ONE);
+        if(mode==1)c->rsv|=KO_ONE;else if(mode==2)c->rsv|=KO_LATCH;else c->rsv|=KO_GATE;}
+    else {if(clicks>0)c->rsv&=~KO_NO_LOOP;else c->rsv|=KO_NO_LOOP;}
+    ko_publish(1);
+}
 /* One independent undo/redo slot per song, published like every other edit. */
 static int ko_undo(void)
 {
@@ -234,4 +260,17 @@ static __attribute__((noinline)) void ko_compress(track_t *t, int32_t *b, int32_
         if (side) side[i] = ((clamp(side[i], -1048575, 1048575) >> 4) * q12) >> 8;
     }
     ko_cr[part].envelope = env; ko_cr[part].gain = next;
+}
+
+static int ko_layout_switch(void) {
+    if(!ko_table()->n)return 0;
+    ko_table_t old=*ko_table();
+    if(ko_alternate[ko_id()].n && !ko_restore(&ko_alternate[ko_id()]))return 0;
+    ko_alternate[ko_id()]=old;ko_layout[ko_id()]^=1;ko.undo_valid=0;ko.dirty=1;ko.revision++;ko_select(0);return 1;
+}
+static void ko_choke_group_turn(int32_t steps) {
+    if(!ko_table()->n)return;
+    ko_table_t *d=ko_edit();ko_chop_t *c=&d->chop[ko.selected];
+    uint32_t group=(uint32_t)clamp((int32_t)(c->rsv>>KO_CHOKE_SHIFT)+steps,0,3);
+    c->rsv=(uint16_t)((c->rsv&~(3u<<KO_CHOKE_SHIFT))|(group<<KO_CHOKE_SHIFT));ko_publish(1);
 }

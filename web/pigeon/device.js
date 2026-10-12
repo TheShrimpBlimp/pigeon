@@ -63,7 +63,8 @@ export class Device {
     this.progress = progress;
   }
   async ask(cmd, args = [], timeout = 5000) {
-    return this.request([cmd, args], { timeout });
+    try { return await this.request([cmd, args], { timeout }); }
+    catch(e) { throw Error(`FM1 command ${cmd}: ${e.message || String(e)}`); }
   }
   async negotiate() {
     const a = await this.ask(90);

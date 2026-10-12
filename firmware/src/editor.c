@@ -468,7 +468,11 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         break;
     }
     case ED_INFO:
+#if FELUCCA_KO
+        ed_str(FW_DISPLAY_NAME " " FW_DISPLAY_VERSION,24);
+#else
         ed_str("FELUCCA " FELUCCA_VERSION, 24);
+#endif
         ed_b(NENGINES);
         ed_b(P_COUNT);
         ed_b(G_COUNT);

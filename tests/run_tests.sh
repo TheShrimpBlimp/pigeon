@@ -178,6 +178,10 @@ $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_tes
 run "Pigeon: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
 run "Pigeon: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_expansion_test" tests/pigeon_expansion_test.c -lm
+run "Pigeon: envelopes, chop operations, quantization, choke and recording preferences" "$OUT/pigeon_expansion_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_performance_test" tests/pigeon_performance_test.c -lm
+run "Pigeon: tap/loop tempo, pitch/nudge/conditions, rolls, chop groups and alternate layouts" "$OUT/pigeon_performance_test"
 run "Pigeon: independent imports and complete archive integrity" python3 tests/pigeon_library_test.py
 run "KO kit upload: exact zones and pad order" python3 tests/ko_upload_test.py
 $CC -w -o "$OUT/lcd_audio_test" tests/lcd_audio_test.c

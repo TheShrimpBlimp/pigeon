@@ -224,6 +224,7 @@ static void sample_note_on(track_t *t, voice_t *v)
     }
 #if FELUCCA_KO
     if(ko_kit(t) && v->note>=60 && v->note<76) {
+        ko_kit_transpose[v-t->v]=(int8_t)clamp(t->p[P_TRANS],-24,24);
         ko_pad_params_t *pad=&ko_kit_params[v->note-60];
         if(pad->choke) for(uint32_t j=0;j<NVOICE;j++) {voice_t *other=&t->v[j];
             if(other!=v && other->active && other->note>=60 && other->note<76 && ko_kit_params[other->note-60].choke==pad->choke) {other->stage=4;other->gate=0;}}
@@ -277,7 +278,7 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
     uint32_t i, frac = v->ph[1];
     int32_t d16 = clamp(m->pitch16 + p[P_E1] * 16 - z->root16, -1536, 576);   /* <= 3 octaves up: bounded decode load */
 #if FELUCCA_KO
-    if(ko_kit(t) && v->note>=60 && v->note<76) d16=clamp(d16+ko_kit_params[v->note-60].pitch*16,-1536,576);
+    if(ko_kit(t) && v->note>=60 && v->note<76) d16=clamp(d16+(ko_kit_params[v->note-60].pitch+ko_kit_transpose[v-t->v])*16,-1536,576);
 #endif
     uint32_t r = pow2_q16(d16), stepq = (r >> 8) * (z->rate >> 8);   /* Q16 samples per output */
     int32_t bits = p[P_E2], lp = 4000 + ((clamp((p[P_E4] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15);

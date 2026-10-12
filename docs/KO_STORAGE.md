@@ -196,3 +196,28 @@ sample bank. Banks are created with the Python build/add-song commands; the brow
 does not transcode audio. CRC, descriptor and frame checks run before upload, and
 the firmware capability is checked again before erase. Two-song banks cannot upload
 to one-song firmware. The browser retains the legacy slot editor for other firmware.
+
+### Optional performance preferences
+
+New chop flags retain the 544-byte FKO1 record and FUNA project format. Bits 2–6
+store attack in 5 ms units; bits 7–11 store release in 10 ms units; bit 12 enables
+nonlooping hold release; bit 13 selects explicit one-shot. Legacy bits 0/1 keep
+loop/latch meaning. A 28-byte KPR1 record at metadata +2048 stores per-track
+quantization and per-song choke, bound to audio CRCs with its own CRC32. No
+sample flash allocation changes. Older firmware cannot interpret extended chop
+flags; retain a recovery bank before rolling back.
+
+### Alternate layouts
+
+KEX1 at metadata +2304 stores two inactive 516-byte chop tables, per-song audio
+CRCs, active A/B indices, roll mode/division, and a record CRC32. It fits within
+the existing 4096-byte metadata sector. FKO1 continues to hold each active
+layout, so no encoded audio moves when a layout changes. Chop flag bits 14–15
+encode choke groups 0–3.
+
+FUNA retains its 3840-byte layout and parameter IDs. Pitch uses P_TRANS locks
+(id 28); nudges use the existing four encoded note high bits and P_SQNT (94).
+Probability codes 102–105 encode conditional steps. These were previously
+invalid values; old projects remain readable, but old firmware cannot fully
+interpret projects using the new conditions or transpose locks. Conditions
+and probability are alternative choices for a step.

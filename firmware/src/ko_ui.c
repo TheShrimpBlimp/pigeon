@@ -54,7 +54,25 @@ static void ko_setup(void)
 }
 static int32_t accel_speed(uint32_t role, int32_t s, int32_t range);
 static void ko_performance_turn(uint32_t knob,int32_t steps);
+static uint8_t ko_copy_chop,ko_variation_slot;
 static uint32_t ko_manual_ms, ko_follow_a = ~0u;
+static uint32_t ko_tap_last,ko_tap_intervals[4],ko_tap_count;
+static uint8_t ko_loop_beats=4;
+static void ko_tap_tempo(void) {
+    uint32_t now=fm1_ms,delta=now-ko_tap_last;
+    if(!ko_tap_last || delta>2000u) {ko_tap_count=0;ko_tap_last=now?now:1;ui_message("TAP AGAIN");return;}
+    if(delta<250u)return;
+    ko_tap_last=now;
+    if(delta>1500u){ko_tap_count=0;ui_message("TAP 40-240 BPM");return;}
+    ko_tap_intervals[ko_tap_count++&3u]=delta;uint32_t n=ko_tap_count<4?ko_tap_count:4,sum=0;
+    for(uint32_t i=0;i<n;i++)sum+=ko_tap_intervals[i];
+    song.g[G_BPM]=(int16_t)clamp((int32_t)((60000u*n+sum/2)/sum),40,240);ui.force=1;
+}
+static uint32_t ko_loop_bpm(void) {
+    const slc_src_t *src=slc_get(ko_src());const ko_table_t *tab=ko_table();
+    if(!src || !tab->n)return 0;const ko_chop_t *c=&tab->chop[ko.selected];
+    uint32_t rate=(src->rate*44100u+32768u)>>16,len=c->b-c->a;return (60u*ko_loop_beats*rate+len/2u)/len;
+}
 static void ko_knob(uint32_t k, int32_t s)
 {
     if (!ko_ready()) return;
@@ -82,6 +100,62 @@ static void ko_knob(uint32_t k, int32_t s)
     s = fast;
     if (ko.view==8 || ko.view==9 || ko.view==18) ko_arrange_turn(k,s);
     else if(ko.view>=10 && ko.view<=13) ko_mixer_turn(k,s);
+    else if(ko.view==23) {
+        if(!k)song.g[G_BPM]=(int16_t)param_turn(&GP[G_BPM],song.g[G_BPM],s);
+        else if(k==1)ko_loop_beats=(uint8_t)clamp(ko_loop_beats+s,1,16);
+        else if(k==2 && song.sel!=1) {uint32_t bpm=ko_loop_bpm();if(bpm>=40 && bpm<=240)song.g[G_BPM]=(int16_t)bpm;else ui_message("CHANGE LOOP BEAT COUNT");}
+        else if(k==3 && song.sel!=1)ko_select((uint32_t)clamp((int32_t)ko.selected+s,0,(int32_t)ko_table()->n-1));
+    }
+    else if(ko.view==27 && song.sel!=1) {
+        ko_sync_t *q=&ko_sync[ko_id()];
+        if(!k)q->beats=(uint8_t)clamp((int32_t)q->beats+s,1,64);
+        else if(k==1)q->on=(uint8_t)(s>0);
+        else if(k==2)q->whole=(uint8_t)(s>0);
+        else if(k==3)ko_select((uint32_t)clamp((int32_t)ko.selected+s,0,(int32_t)ko_table()->n-1));
+        const slc_src_t *src=slc_get(ko_src());const ko_chop_t *c=&ko_table()->chop[ko.selected];
+        q->samples=q->whole && src?src->len:c->b-c->a;
+        ko.dirty=1;ko.revision++;
+    }
+    else if(ko.view==24) {
+        if(transport_busy())ui_message("STOP TO EDIT STEP");
+        else {uint32_t step=ko_seq[song.sel].cursor;step_t *n=&t->step[step];
+            if(k==3)ko_seq[song.sel].cursor=(uint8_t)clamp((int32_t)step+s,0,t->p[P_SLEN]-1);
+            else {step_undo_take(t,0x7000u|k<<6|step);
+                if(!k) {int16_t pitch=0;(void)motion_lock_get(t,step,P_TRANS,&pitch);if(motion_set_lock(t,step,P_TRANS,(int16_t)clamp(pitch+s,-24,24))==2)ui_message("LOCK STORAGE FULL");}
+                else if(k==1){step_set_nudge(n,step_nudge(n)+s);t->p[P_SQNT]=0;}
+                else step_set_condition(n,(uint32_t)clamp((int32_t)step_condition(n)+s,0,4));
+                motion_undo_done(t);}
+        }
+    }
+    else if(ko.view==25 && song.sel!=1) {
+        if(!k)ko_choke_group_turn(s);
+        else if(k==2)t->p[P_LEVEL]=(int16_t)clamp(t->p[P_LEVEL]+s,0,127);
+        else if(transport_busy() || voices_busy())ui_message("STOP / RELEASE TO EDIT");
+        else if(k==1) {if(ko_layout[ko_id()]!=(s>0)) (void)ko_layout_switch();}
+        else if(s>0) {ko_alternate[ko_id()]=*ko_table();ko.dirty=1;ko.revision++;ui_message("LAYOUT COPIED");}
+    }
+    else if(ko.view==26) {if(!k)ko_roll_div=(uint8_t)clamp((int32_t)ko_roll_div+s,0,3);else if(k==1)ko_roll_enabled=(uint8_t)(s>0);ko_states[0].dirty=1;ko_states[0].revision++;}
+    else if(ko.view==19)ko_envelope_turn(k,s);
+    else if(ko.view==20) {
+        if(!k)ko_select((uint32_t)clamp((int32_t)ko.selected+s,0,(int32_t)ko_table()->n-1));
+        else if(k==1)ko_copy_chop=(uint8_t)clamp((int32_t)ko_copy_chop+s,0,(int32_t)ko_table()->n-1);
+        else if(k==2)ui_message((s>0?ko_duplicate():ko_split())?"CHOP CREATED":"CANNOT CREATE CHOP");
+        else ui_message((s>0?ko_copy_settings(ko_copy_chop):ko_join())?"CHOP UPDATED":"CANNOT UPDATE CHOP");
+    }
+    else if(ko.view==21) {
+        if(k<2)rp_put(k?RP_COUNTIN:RP_CLICK,(uint32_t)clamp((int32_t)rp_get(k?RP_COUNTIN:RP_CLICK)+s,0,2));
+        else {if(k==2)ko_quantize[song.sel]=(uint8_t)clamp((int32_t)ko_quantize[song.sel]+s,0,2);
+            else if(song.sel!=1)ko_choke[ko_id()]=(uint8_t)(s>0);
+            ko.dirty=1;ko.revision++;}
+    }
+    else if(ko.view==22) {
+        if(transport_busy() || voices_busy())ui_message("STOP / RELEASE KEYS");
+        else if(!k)ko_variation_slot=(uint8_t)clamp((int32_t)ko_variation_slot+s,0,3);
+        else if(k<3) {step_undo_take(t,0x6800u|k);
+            for(uint32_t step=0;step<NSTEP;step++) {if(k==1)step_clear(&t->step[step]);else (void)motion_clear_locks(t,step);}
+            motion_undo_done(t);ui_message(k==1?"TRACK NOTES CLEARED":"TRACK LOCKS CLEARED");}
+        else if(s>0) {ko_pattern_copy();ko_pattern_sel=ko_variation_slot;ko_pattern_paste();}
+    }
     else if(ko.view==16) {
         ko_pad_params_t *pad=&ko_kit_params[ko_kit_pad];
         if(!k)pad->pitch=(int8_t)clamp(pad->pitch+s,-24,24);
@@ -351,25 +425,70 @@ static void ko_draw(void)
         ko_line(178,"K3 STEP / EDIT CLEAR+NEXT",T_MID);
         ko_line(199,"OCT STEP SIZE / REC ARM",T_MID);
         ko_line(220,"ENV DETAIL / LFO SWING",T_MID);
+    } else if(ko.view==23) {
+        ko_value(0,"K1 BPM ",song.g[G_BPM]);ko_value(1,"K2 LOOP BEATS ",ko_loop_beats);
+        ko_value(2,"LOOP BPM ",song.sel==1?0:ko_loop_bpm());ko_line(126,"K3 APPLY LOOP BPM",T_THEME);
+        ko_value(4,"K4 CHOP ",ko.selected+1);ko_line(180,"EDIT TAP TEMPO",T_MID);ko_line(202,"ENV BACK / FX SYNC",T_MID);
+    } else if(ko.view==27) {
+        ko_sync_t *q=&ko_sync[ko_id()];ko_value(0,"K1 LOOP BEATS ",q->beats);
+        ko_line(72,q->on?"K2 SYNC ON":"K2 SYNC OFF",T_THEME);
+        ko_line(100,q->whole?"K3 WHOLE SONG":"K3 SELECTED CHOP",T_THEME);
+        ko_value(3,"K4 CHOP ",ko.selected+1);ko_line(180,"SPEED SYNC: PITCH CHANGES",T_MID);ko_line(202,"FX BACK / EDIT WAVE",T_MID);
+    } else if(ko.view==24) {
+        uint32_t step=ko_seq[song.sel].cursor;step_t *n=&TSEL->step[step];int16_t pitch=0;(void)motion_lock_get(TSEL,step,P_TRANS,&pitch);
+        static const char *const condition[]={"ALWAYS","EVERY 2ND","EVERY 4TH","FIRST PASS","AFTER FIRST"};
+        ko_value(0,"K1 STEP PITCH ",pitch);ko_value(1,"K2 NUDGE /16 ",step_nudge(n));
+        ko_line(104,condition[step_condition(n)],T_THEME);ko_value(3,"K4 STEP ",step+1);
+        ko_line(180,"K3 CONDITION",T_MID);ko_line(202,"ENV BACK / FX SYNC",T_MID);
+    } else if(ko.view==25) {
+        const ko_table_t *tab=ko_table();ko_value(0,"K1 CHOKE GROUP ",tab->n?tab->chop[ko.selected].rsv>>KO_CHOKE_SHIFT:0);
+        ko_line(82,ko_layout[ko_id()]?"K2 LAYOUT B":"K2 LAYOUT A",T_THEME);ko_value(2,"K3 SONG GAIN ",TSEL->p[P_LEVEL]);
+        ko_line(126,"K4 COPY TO OTHER LAYOUT",T_THEME);ko_line(180,"0 GROUP: OVERLAP",T_MID);ko_line(202,"FX BACK / EDIT WAVE",T_MID);
+    } else if(ko.view==26) {
+        ko_line(60,N_DIV[ko_roll_div],T_THEME);ko_line(82,ko_roll_enabled?"K2 ROLL ON":"K2 ROLL OFF",T_THEME);
+        ko_line(126,"K1 RATE / HOLD DRUM PADS",T_MID);ko_line(202,"LFO BACK / EDIT HOME",T_MID);
+    } else if(ko.view==19) {
+        const ko_table_t *tab=ko_table();
+        if(tab->n) {const ko_chop_t *c=&tab->chop[ko.selected];ko_value(0,"K1 ATTACK ms ",((c->rsv>>KO_ATTACK_SHIFT)&31u)*5u);
+            ko_value(1,"K2 RELEASE ms ",((c->rsv>>KO_RELEASE_SHIFT)&31u)*10u);
+            ko_line(116,c->rsv&KO_LATCH?"K3 MODE LATCH":(c->rsv&KO_ONE)||((c->rsv&KO_NO_LOOP)&&!(c->rsv&KO_GATE))?"K3 MODE ONE-SHOT":"K3 MODE HOLD",T_THEME);
+            ko_line(138,c->rsv&KO_NO_LOOP?"K4 LOOP OFF":"K4 LOOP ON",T_THEME);}
+        ko_line(180,"RELEASE 0: TRACK DEFAULT",T_MID);ko_line(202,"ENV BACK / EDIT WAVE",T_MID);
+    } else if(ko.view==20) {
+        ko_value(0,"K1 CHOP ",ko.selected+1);ko_value(1,"K2 COPY FROM ",ko_copy_chop+1);
+        ko_line(116,"K3 DUPLICATE+ / SPLIT-",T_THEME);ko_line(138,"K4 SETTINGS+ / MERGE-",T_THEME);
+        ko_line(202,"FX BANK/GROUP / EDIT WAVE",T_MID);
+    } else if(ko.view==21) {
+        static const char *const click[3]={"K1 METRONOME OFF","K1 METRONOME REC","K1 METRONOME ON"};
+        static const char *const count[3]={"K2 COUNT-IN OFF","K2 COUNT-IN 1 BAR","K2 COUNT-IN 2 BARS"};
+        static const char *const quant[3]={"K3 LIVE QUANT OFF","K3 LIVE QUANT 1/16","K3 LIVE QUANT 1/8"};
+        ko_line(60,click[rp_get(RP_CLICK)],T_THEME);ko_line(82,count[rp_get(RP_COUNTIN)],T_THEME);
+        ko_line(104,quant[ko_quantize[song.sel]],T_THEME);
+        ko_line(126,song.sel==1?"PAD CHOKES: ENV ON KIT":ko_choke[ko_id()]?"K4 SONG CHOKE ON":"K4 SONG OVERLAP",T_THEME);
+        ko_line(180,"QUANTIZE WHILE PLAYING",T_MID);ko_line(202,"ENV TAP / LFO TIMING",T_MID);
+    } else if(ko.view==22) {
+        ko_value(0,"K1 DESTINATION A-D ",ko_variation_slot+1);
+        ko_line(82,"K2 CLEAR TRACK NOTES",T_THEME);ko_line(104,"K3 CLEAR TRACK LOCKS",T_THEME);
+        ko_line(126,"K4 DUPLICATE TO SLOT",T_THEME);ko_line(180,"STOP / RELEASE TO EDIT",T_MID);ko_line(202,"ENV BACK / SAVE HOLD UNDO",T_MID);
     } else if(ko.view==18) {
         ko_line(52,chain_config.rsv[0]==1?"K1 LAUNCH: PATTERN END":"K1 LAUNCH: NEXT BAR",T_THEME);
         ko_value(1,"SECTION ",ko_section+1);ko_line(96,"K2 MOVE SECTION LEFT/RIGHT",T_THEME);
-        ko_line(118,"K3 RIGHT DUPLICATE SECTION",T_THEME);ko_line(199,"REC SAVE / ENV BACK",T_MID);
+        ko_line(118,"K3 RIGHT DUPLICATE SECTION",T_THEME);ko_line(199,"REC SAVE / ENV VARIATIONS",T_MID);
     } else if(ko.view==16) {
         ko_pad_params_t *p=&ko_kit_params[ko_kit_pad];ko_value(0,"PAD ",ko_kit_pad+1);
         ko_value(1,"K1 PITCH ",p->pitch);ko_value(2,"K2 LEVEL ",p->level);
         ko_value(3,"K3 DECAY ",p->decay);ko_value(4,"K4 CHOKE GROUP ",p->choke);
-        ko_line(199,"DECAY 0 FULL / GROUP 0 OFF",T_MID);ko_line(220,"KEY SELECT / ENV BACK",T_MID);
+        ko_line(199,"DECAY 0 FULL / GROUP 0 OFF",T_MID);ko_line(220,"LFO ROLL / ENV BACK",T_MID);
     } else if(ko.view==14) {
         step_t *n=&TSEL->step[ko_seq[song.sel].cursor];int16_t gate=TSEL->p[P_SGATE];
         (void)motion_lock_get(TSEL,ko_seq[song.sel].cursor,P_SGATE,&gate);
         ko_value(0,"K1 VELOCITY ",n->vel);ko_value(1,"K2 GATE ",gate);
         ko_value(2,"K3 CHANCE % ",step_chance(n));ko_value(3,"K4 REPEATS ",step_ratchet(n));
         ko_value(4,"STEP ",ko_seq[song.sel].cursor+1u);
-        ko_line(199,"PRESETS STEP / SAVE HOLD UNDO",T_MID);ko_line(220,"ENV GRID / LFO SWING",T_MID);
+        ko_line(199,"PRESETS STEP / SAVE HOLD UNDO",T_MID);ko_line(220,"ENV PITCH/NUDGE / LFO SWING",T_MID);
     } else if(ko.view==15) {
         ko_value(0,"K1 SWING % ",TSEL->p[P_SSWING]);ko_value(1,"K2 GATE ",TSEL->p[P_SGATE]);
-        ko_value(2,"K3 BPM ",song.g[G_BPM]);ko_line(199,"LFO GRID / ENV STEP DETAILS",T_MID);
+        ko_value(2,"K3 BPM ",song.g[G_BPM]);ko_line(199,"LFO REC PREFS / ENV DETAIL",T_MID);
     } else if (ko.view==8 || ko.view==9) {
         ko_arrange_draw(layout);
     } else if(ko.view>=10 && ko.view<=13) {
@@ -402,6 +521,7 @@ static void ko_draw(void)
             ko_line(118, "K3 SPLIT+ / JOIN-", T_MID);
             ko_value(4, "OCT PITCH semis ", c->pitch);
         } else ko_line(66, (song.sel==2 ? "UPLOAD SONG 2" : "UPLOAD SONG 1"), T_MID);
+        ko_line(163,"ENV ENVELOPE / LFO CHOPS",T_MID);
         ko_line(185, "K4 UNDO / REDO",T_MID);
         ko_line(207, "EDIT BACK TO WAVEFORM", T_MID);
     } else {

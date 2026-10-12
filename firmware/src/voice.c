@@ -388,6 +388,16 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         if (stopped) return;                         /* press again: release the latched chop */
     }
 #endif
+#if FELUCCA_KO
+    if(ko_song(t)) {
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
+        const ko_table_t *tab=&ko_states[id].table[ko_states[id].current];
+        uint32_t j=tab->n?slc_note_slice(t->p,note,tab->n):KO_CHOPS;
+        uint32_t group=j<tab->n?tab->chop[j].rsv>>KO_CHOKE_SHIFT:0;
+        for(i=0;i<NVOICE;i++)if(t->v[i].active && (ko_choke[id] ||
+            (group && (ko_env_flags[id][i]>>KO_CHOKE_SHIFT)==group)))voice_kill(&t->v[i]);
+    }
+#endif
     if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
         for (i = 0; i < t->xp_n && t->xp_note[i] != note; i++)
             ;
@@ -674,6 +684,12 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         if (!v->active)
             continue;
         {
+#if FELUCCA_KO
+            if(ko_song(t) && ((uint32_t)v->s[4]&KO_VOICE) && v->stage!=4u &&
+                (ko_env_release[FELUCCA_KO_DUAL && t==trk+2][i] ||
+                 (((uint32_t)v->s[4]&KO_V_NO_LOOP) && !(ko_env_flags[FELUCCA_KO_DUAL && t==trk+2][i]&KO_GATE)))) env=32767;
+            else
+#endif
             env = env_tick(t, v);
             if (e->ownenv && v->active) {               /* the engine's envelopes (FM6): they end the voice */
                 if (e->done(t, v)) {

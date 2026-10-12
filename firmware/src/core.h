@@ -273,7 +273,9 @@ typedef struct {                 /* a step as formats 1..4 (projects to FUN4) st
 } step8_t;
 
 /* Probability keeps zero-initialized and legacy patterns at 100%. */
-static uint32_t step_chance(const step_t *s) { return !s->probability ? 100u : s->probability <= 100u ? s->probability : 0u; }
+static uint32_t step_condition(const step_t *s) {return s->probability>=102u && s->probability<=105u ? s->probability-101u:0u;}
+static void step_set_condition(step_t *s,uint32_t c) {s->probability=(uint8_t)(c?101u+(c>4u?4u:c):0u);}
+static uint32_t step_chance(const step_t *s) { return (!s->probability || step_condition(s)) ? 100u : s->probability <= 100u ? s->probability : 0u; }
 static void step_set_chance(step_t *s, uint32_t chance) { s->probability = (uint8_t)(chance >= 100u ? 0u : chance ? chance : 101u); }
 /* RATCH: a NOTE step plays its notes and hits this many times (1..4), in equal parts of the step; every older
  * pattern holds 0 there, x1 */

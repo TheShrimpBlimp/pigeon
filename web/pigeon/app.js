@@ -1,3 +1,5 @@
+import { sha256hex } from '../fm1pkg.js';
+import { recordInstall } from './install-count.js';
 // SPDX-License-Identifier: GPL-3.0-only
 import {
   inspect,
@@ -10,7 +12,12 @@ import {
   HEAD,
   join,
 } from "./bank.js";
-import { Device, validateArchive } from "./device.js";
+import { editors as createEditors } from "./editors.js";
+import { WaveEditor } from "./wave-editor.js";
+import { Package, logicalImage } from "../fm1pkg.js";
+import { Updater } from "../fm1ota.js";
+import { crc } from "./bank.js";
+import { Device, validateArchive, b64 } from "./device.js";
 import { BackupConnection } from "../fm1backup.js";
 const $ = (id) => document.getElementById(id);
 let image = null,
@@ -25,7 +32,10 @@ let image = null,
   playing = null;
 const sources = [null, null],
   pendingPads = Array(16).fill(null);
-let kitReplaceAll = false;
+let labels = {};
+let kitReplaceAll = false,
+  editors = null;
+const trimWaves = [null, null];
 const db = new Promise((resolve, reject) => {
   const r = indexedDB.open("pigeon-library", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("files");
@@ -52,11 +62,14 @@ async function load(key) {
 }
 function status(text, error = false) {
   $("status").textContent = text;
+  $("transfer-status").textContent = text;
+  $("transfer-status").classList.toggle("error",error);
   $("status").parentElement.classList.toggle("error", error);
 }
 function progress(label, done, total) {
   status(`${label} • ${Math.round((done / total) * 100)}%`);
   $("job").value = done / total;
+  $("transfer-progress").value = done / total;
 }
 function controls() {
   document.querySelectorAll("button,input,select").forEach((e) => {
@@ -66,6 +79,7 @@ function controls() {
       (e.hasAttribute("data-bank") && !image) ||
       (e.hasAttribute("data-device") && !device);
   });
+  $("send-help").textContent=initializing?"Preparing the tool…":busy?"Operation in progress — keep USB connected.":!image?"Open a .kob bank or import Song 1 before sending.":!device?"Bank ready. Connect the FM1 and select matching MIDI ports before sending.":"Bank and FM1 ready. Press Send bank to review the transfer.";
   $("restore").disabled = initializing || busy || !device || !archive;
   $("recovery").disabled = initializing || busy || !recovery;
 }
@@ -128,6 +142,7 @@ async function readAudio(file) {
   const mono = (await render.startRendering()).getChannelData(0);
   return {
     pcm: mono.slice(),
+    filename: file.name,
     name: file.name.replace(/\.[^.]+$/, ""),
     duration: mono.length / 22050,
   };
@@ -162,7 +177,7 @@ function wave(canvas, pcm, starts = []) {
     c.stroke();
   }
 }
-async function play(pcm, rate = 22050) {
+async function play(pcm, rate = 22050, loop = false) {
   const c = await context();
   playing?.stop();
   const b = c.createBuffer(1, pcm.length, rate);
@@ -170,6 +185,7 @@ async function play(pcm, rate = 22050) {
   playing = c.createBufferSource();
   playing.buffer = b;
   playing.connect(c.destination);
+  playing.loop = loop;
   playing.start();
 }
 async function songAudio(slot) {
@@ -220,10 +236,22 @@ async function updateBank(next) {
   inspect(next);
   await store("bank", next);
   image = next;
-  archive = null;
+  if (archive) {
+    archive = { ...archive, bank: b64(next), bank_crc: crc(next) };
+    await store("session", archive);
+  }
   render();
 }
+async function remember(key, name) {
+  labels[key] = name;
+  await store("labels", labels);
+  if (archive) {
+    archive = { ...archive, labels };
+    await store("session", archive);
+  }
+}
 function render() {
+  editors?.refresh();
   const info = image ? inspect(image) : null;
   $("used").textContent = info
     ? `${(info.payloadUsed / 1024).toFixed(1)} / 408 KiB used`
@@ -238,7 +266,12 @@ function render() {
     $(`info${i}`).textContent = s
       ? `${s.seconds.toFixed(2)} seconds • ${s.codec} • ${(s.bytes / 1024).toFixed(1)} KiB • ${s.fields[16]} initial chops`
       : "Import your audio below.";
-    if (sources[i]) wave($(`wave${i}`), sources[i].pcm);
+    if (sources[i])
+      trimWaves[i]?.set(
+        sources[i].pcm,
+        Math.floor(Number($(`start${i}`).value) * 22050),
+        Math.floor(Number($(`end${i}`).value) * 22050),
+      );
     else if (s) {
       const comp = component(image, i + 1),
         w = comp.wave,
@@ -246,10 +279,20 @@ function render() {
       wave($(`wave${i}`), pcm);
     } else wave($(`wave${i}`), null);
   }
+  for (let i = 0; i < 2; i++) {
+    const c = image && component(image, i + 1);
+    if (!sources[i])
+      $(`source-name${i}`).textContent = c
+        ? labels["song:" + crc(c.song)] || ""
+        : "";
+  }
   for (let p = 0; p < 16; p++) {
     const has = info && p < info.pads;
     $(`padname${p}`).textContent =
-      pendingPads[p]?.name || (has ? "Loaded" : "Empty");
+      pendingPads[p]?.filename ||
+      (has
+        ? labels["pad:" + crc(encodedPad(image, p).encoded)] || "Loaded"
+        : "Empty");
     $(`pad${p}`).classList.toggle("secondary", !has && !pendingPads[p]);
   }
   controls();
@@ -257,8 +300,23 @@ function render() {
 for (let i = 0; i < 2; i++) {
   const section = document.createElement("article");
   section.className = "song";
-  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio<input id="file${i}" type="file" accept="audio/*"></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Import into Song ${i + 1}</button></div>`;
+  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio<input id="file${i}" type="file" accept="audio/*"></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="source-name${i}"></p><div class="edit-fields"><label>Zoom<input id="trim-zoom${i}" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="trim-scroll${i}" type="range" min="0" max="1000" value="0"></label><label>Loop preview<select id="trim-loop${i}"><option value="0">Off</option><option value="1">On</option></select></label><button id="trim-stop${i}">Stop preview</button></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Import into Song ${i + 1}</button></div>`;
   $("songs").append(section);
+  trimWaves[i] = new WaveEditor($(`wave${i}`), (a, b) => {
+    $(`start${i}`).value = (a / 22050).toFixed(5);
+    $(`end${i}`).value = (b / 22050).toFixed(5);
+    estimate();
+  });
+  for (const k of ["zoom", "scroll"])
+    $(`trim-${k}${i}`).oninput = () => {
+      trimWaves[i].zoom = Number($(`trim-zoom${i}`).value);
+      trimWaves[i].scroll = Number($(`trim-scroll${i}`).value) / 1000;
+      trimWaves[i].draw();
+    };
+  $(`trim-stop${i}`).onclick = () => {
+    playing?.stop();
+    status("Preview stopped");
+  };
   const estimate = () => {
     const seconds = Number($(`end${i}`).value) - Number($(`start${i}`).value),
       br = Number($(`rate${i}`).value);
@@ -271,6 +329,7 @@ for (let i = 0; i < 2; i++) {
     run(async () => {
       const source = await readAudio($(`file${i}`).files[0]);
       sources[i] = source;
+      $(`source-name${i}`).textContent = $(`file${i}`).files[0].name;
       $(`start${i}`).value = 0;
       $(`end${i}`).value = source.duration.toFixed(3);
       estimate();
@@ -297,7 +356,7 @@ for (let i = 0; i < 2; i++) {
   }
   $(`preview${i}`).onclick = () =>
     run(async () => {
-      await play(sectionPcm());
+      await play(sectionPcm(), 22050, Number($(`trim-loop${i}`).value) === 1);
       status(`Playing Song ${i + 1} import section`);
     });
   $(`stored${i}`).onclick = () =>
@@ -315,6 +374,11 @@ for (let i = 0; i < 2; i++) {
         sources[i].name,
       );
       await updateBank(image ? repack(image, encoded, i + 1) : encoded);
+      await remember(
+        "song:" + crc(component(image, i + 1).song),
+        sources[i].filename,
+      );
+      render();
       status(
         `Song ${i + 1} imported locally. Save the bank or send it to the FM1.`,
       );
@@ -374,6 +438,12 @@ $("apply-kit").onclick = () =>
             : new Int16Array(64),
       );
     await updateBank(replaceKit(image, pcm));
+    for (let p = 0; p < last; p++)
+      if (pendingPads[p])
+        await remember(
+          "pad:" + crc(encodedPad(image, p).encoded),
+          pendingPads[p].filename,
+        );
     pendingPads.fill(null);
     kitReplaceAll = false;
     render();
@@ -400,11 +470,18 @@ $("open").onchange = () =>
         v = validateArchive(a);
       await updateBank(v.bank);
       archive = a;
+      if (a.labels && typeof a.labels === "object") {
+        labels = { ...labels, ...a.labels };
+        await store("labels", labels);
+      }
+      await store("session", a);
       controls();
       status(
         "Session opened and validated locally. Restore sends its projects, settings, and samples.",
       );
     } else {
+      archive = null;
+      await store("session", null);
       await updateBank(new Uint8Array(await file.arrayBuffer()));
       status("Sample bank opened locally.");
     }
@@ -489,6 +566,9 @@ $("connect").onclick = () =>
     };
     if (!device) throw Error("No MIDI ports found. Connect the FM1 by USB.");
     await device.negotiate();
+    const info = await device.ask(1);
+    $("firmware-version").textContent =
+      "Installed: " + String.fromCharCode(...info.slice(0, info.indexOf(0)));
     status("Pigeon connected. Stop playback before reading or sending.");
   });
 $("input").onchange = $("output").onchange = attach;
@@ -515,26 +595,35 @@ async function protect() {
   saveArchive(`pigeon-recovery-${date()}.pigeon`, a);
   return a;
 }
-$("upload").onclick = () =>
-  run(async () => {
-    const info = inspect(image);
-    if (
-      !confirm(
-        `Replace the FM1 sample bank with ${info.songs.map((s) => s.name).join(" + ")} and ${info.pads} drum pads (${(info.payloadUsed / 1024).toFixed(1)} KiB)? Stop playback and release all keys. A recovery session will be saved first.`,
-      )
-    )
-      return;
+$("upload").onclick = () => {
+  if(busy || initializing || !image || !device){controls();return;}
+  const info=inspect(image);
+  $("send-summary").textContent=`Replace both FM1 songs and the kit with ${info.songs.map(s=>s.name).join(" + ")} and ${info.pads} drum pads (${(info.payloadUsed/1024).toFixed(1)} KiB)?`;
+  $("send-review").hidden=false;
+  $("send-review").scrollIntoView({block:"nearest"});
+  $("send-confirm").focus();
+};
+$("send-cancel").onclick=()=>{$("send-review").hidden=true;status("Bank transfer cancelled. Nothing was written.");};
+$("send-confirm").onclick=()=>run(async()=>{
+  if(!image || !device)throw Error("Reconnect the FM1 and select a bank before sending.");
+  $("send-review").hidden=true;
+  let stage="Saving recovery backup";
+  try{
     await protect();
-    const actual = await device.writeBank(image);
+    stage="Writing and verifying the bank";
+    status("Recovery saved. Starting sample-bank transfer…");
+    const actual=await device.writeBank(image);
     await updateBank(actual);
-    status(
-      "Bank sent and verified by reading it back. Recovery backup retained.",
-    );
-  });
+    status("Bank sent and verified by reading it back. Recovery backup retained.");
+  }catch(e){throw Error(`${stage}: ${e.message||String(e)}`);}
+});
 $("backup").onclick = () =>
   run(async () => {
     const a = await device.capture();
+    archive = a;
     await store("backup", a);
+    await store("session", a);
+    render();
     saveArchive(`pigeon-session-${date()}.pigeon`, a);
     status(
       "Complete session backed up: projects, settings, samples, and chop metadata.",
@@ -588,16 +677,113 @@ async function offline() {
     return false;
   }
 }
+editors = createEditors({
+  bank: () => image,
+  archive: () => archive,
+  setBank: updateBank,
+  setArchive: async (a) => {
+    validateArchive(a);
+    await store("session", a);
+    archive = a;
+    render();
+  },
+  run,
+  status,
+  play,
+  songAudio,
+  padName: (p) => {
+    const pad = image && encodedPad(image, p);
+    return pad ? labels["pad:" + crc(pad.encoded)] || "" : "";
+  },
+  setPadName: async (p, name) => {
+    const pad = encodedPad(image, p);
+    if (!pad) throw Error("Pad is empty");
+    await remember("pad:" + crc(pad.encoded), name.slice(0, 128));
+    render();
+  },
+  saveArchive,
+  stop: () => {
+    playing?.stop();
+    status("Preview stopped");
+  },
+});
+const updatePanel = document.createElement("section");
+updatePanel.className = "kit";
+updatePanel.innerHTML =
+  '<h2>Firmware update</h2><p id="firmware-version">Connect the FM1 to read its firmware version.</p><label>Choose Pigeon firmware<input id="firmware-file" type="file" accept=".fwsc"></label><p id="firmware-package">Choose a local .fwsc package. The GUI does not download firmware.</p><button id="firmware-install" data-device>Back up and install firmware</button><p>Installing reboots the FM1. Keep USB connected throughout. A full recovery session is saved first.</p><p>Successful browser installs report an anonymous completion event to the Pigeon counter; no device identity or sample data is sent.</p>';
+document.querySelector(".status-box").before(updatePanel);
+let firmwarePackage = null;
+$("firmware-file").onchange = () =>
+  run(async () => {
+    firmwarePackage = null;
+    const file = $("firmware-file").files[0];
+    if (!file || file.size > 2 * 1024 * 1024)
+      throw Error("Choose a Pigeon .fwsc package under 2 MiB");
+    const bytes = new Uint8Array(await file.arrayBuffer()),
+      pkg = new Package(bytes);
+    if (
+      !/^FM-1_9\d\d$/.test(pkg.product) ||
+      !new TextDecoder().decode(pkg.dec).includes("FELUCCA-LOADER-1") ||
+      !new TextDecoder()
+        .decode(pkg.dec.subarray(pkg.appOff, pkg.appOff + pkg.app.size))
+        .includes("Pigeon")
+    )
+      throw Error(
+        "Package is not Pigeon firmware with the supported update loader",
+      );
+    firmwarePackage = { bytes, product: pkg.product, release: await sha256hex(bytes) };
+    $("firmware-package").textContent =
+      `${file.name} • ${pkg.product} • ${(bytes.length / 1024).toFixed(1)} KiB`;
+    status("Firmware package validated locally");
+  });
+$("firmware-install").onclick = () =>
+  run(async () => {
+    if (!firmwarePackage) throw Error("Choose a firmware package first");
+    if (
+      !confirm(
+        `Install ${firmwarePackage.product}? Stop playback and release all keys. A full recovery backup will be saved before rebooting. Keep USB connected.`,
+      )
+    )
+      return;
+    await protect();
+    connection?.close();
+    device = null;
+    const updater = new Updater(midi);
+    try {
+      await updater.install(
+        logicalImage(firmwarePackage.bytes),
+        firmwarePackage.product,
+        (stage, value) =>
+          status(`Firmware update: ${stage}${value ? " • " + value : ""}`),
+      );
+      void recordInstall(firmwarePackage.release,"sample-tool");
+      ports();
+      attach();
+      status(
+        "Firmware installed and identity verified. Recovery session retained.",
+      );
+    } finally {
+      ports();
+      attach();
+    }
+  });
 render();
 status("Preparing your offline workspace…");
 const caching = offline();
 try {
+  labels = (await load("labels")) || {};
   const saved = await load("bank");
   if (saved) {
     inspect(saved);
     image = saved;
     render();
     status("Restored your last local bank.");
+  }
+  const session = await load("session");
+  if (session) {
+    validateArchive(session);
+    archive = session;
+    render();
   }
   recovery = await load("recovery");
   if (recovery) validateArchive(recovery);

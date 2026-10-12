@@ -591,7 +591,7 @@ static int rec_tap(void)                                /* 1: the arming changed
 {
     uint8_t bit = (uint8_t)(1u << song.sel);
 #if FELUCCA_KO
-    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) {ko_pattern_save();return 1;}
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18 || ko.view==22)) {ko_pattern_save();return 1;}
 #endif
     if (chain_busy()) {
         ui_message("STOP TO RECORD");
@@ -1332,7 +1332,18 @@ static int page_tap(uint32_t b)
         ko_seq[song.sel].enabled=1;
         ko.view=ko.view==7?0:7;go_home();ui.force=1;return 1;
     }
-    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18) && b==B_ENV) {ko.view=ko.view==18?9:18;ui.force=1;return 1;}
+    if(ko_home() && song.sel!=1 && (ko.view==23 || ko.view==27) && b==B_FX){ko.view=ko.view==27?23:27;ui.force=1;return 1;}
+    if(ko_home() && ko.view==23 && b==B_EDIT){ko_tap_tempo();return 1;}
+    if(ko_home() && (ko.view==21 || ko.view==23) && b==B_ENV){ko.view=ko.view==23?21:23;ui.force=1;return 1;}
+    if(ko_home() && (ko.view==14 || ko.view==24) && b==B_ENV){ko.view=ko.view==24?14:24;ui.force=1;return 1;}
+    if(ko_home() && song.sel!=1 && (ko.view==20 || ko.view==25) && b==B_FX){ko.view=ko.view==25?20:25;ui.force=1;return 1;}
+    if(ko_home() && song.sel==1 && (ko.view==16 || ko.view==26) && b==B_LFO){ko.view=ko.view==26?16:26;ui.force=1;return 1;}
+    if(ko_home() && song.sel!=1 && (ko.view==5 || ko.view==19 || ko.view==20) && (b==B_ENV || b==B_LFO)) {
+        ko.view=b==B_ENV?(ko.view==19?5:19):(ko.view==20?5:20);ui.force=1;return 1;
+    }
+    if(ko_home() && (ko.view==15 || ko.view==21) && b==B_LFO) {ko.view=ko.view==21?15:21;ui.force=1;return 1;}
+    if(ko_home() && (ko.view==18 || ko.view==22) && b==B_ENV) {ko.view=ko.view==22?18:22;ui.force=1;return 1;}
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18 || ko.view==22) && b==B_ENV) {ko.view=ko.view==18?9:18;ui.force=1;return 1;}
     if(ko_home() && (ko.view==1 || ko.view==2) && b==B_EDIT) {
         mom_restore();TSEL->p[P_DLY]=TSEL->p[P_CHOR]=TSEL->p[P_REV]=TSEL->p[P_DIST]=0;
         if(song.sel==1)TSEL->p[P_E4]=127;else TSEL->p[P_E7]=127;
@@ -1550,8 +1561,8 @@ static void ui_input(void)
         }
     song.grid = (uint8_t)keys_mode();
 #if FELUCCA_KO
-    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) song.grid=4;
-    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14)) song.grid=5;
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18 || ko.view==22)) song.grid=4;
+    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14 || ko.view==24)) song.grid=5;
 #endif
     /* The menu/dialog keys play again; NAME and pattern selection stay silent. */
     if (home == BT_TAP && ui.menu) {                    /* HOME (pressed, or held) closes the menu, from ABOUT too; */
@@ -1738,8 +1749,8 @@ static void ui_input(void)
     }
     song.grid = (uint8_t)keys_mode();
 #if FELUCCA_KO
-    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18)) song.grid=4;
-    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14)) song.grid=5;
+    if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18 || ko.view==22)) song.grid=4;
+    if(ko_home() && !transport_busy() && !(song.rec&(1u<<song.sel)) && (ko.view==7 || ko.view==14 || ko.view==24)) song.grid=5;
 #endif
     /* seq.c sees the new keyboard role before the next audio block. */
 #if FELUCCA_KO
@@ -1766,7 +1777,7 @@ static void ui_input(void)
         }
     }
     if(ko_home() && song.sel==1 && notes) for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {int32_t pad=ko_pad(key);if(pad>=0 && pad<16) {ko_kit_pad=(uint8_t)pad;ui.force=1;}}
-    if(song.grid==5u || (song.grid==4u && ko.view==18)) {}
+    if(song.grid==5u || (song.grid==4u && (ko.view==18 || ko.view==22))) {}
     else if(song.grid==4u) {ko_pattern_keys(notes);}
     else
 #endif

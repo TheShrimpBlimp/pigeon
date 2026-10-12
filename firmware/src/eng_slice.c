@@ -531,8 +531,14 @@ static void slice_note_on(track_t *t, voice_t *v)
     if (ko_song(t)) {
         ko_state_t *ks=ko_track_state(t);
         const ko_chop_t *c = &ks->table[ks->current].chop[j];
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2,vi=(uint32_t)(v-t->v);
+        uint32_t attack=((c->rsv>>KO_ATTACK_SHIFT)&31u)*5u,release=((c->rsv>>KO_RELEASE_SHIFT)&31u)*10u;
+        ko_voice_transpose[id][vi]=(int8_t)clamp(t->p[P_TRANS],-24,24);ko_env_flags[id][vi]=c->rsv;ko_env_gain[id][vi]=attack?0:32767;
+        ko_env_attack[id][vi]=(uint16_t)(attack?32767u*CTL/(FS*attack/1000u):32767u);
+        ko_env_release[id][vi]=(uint16_t)(release?32767u*CTL/(FS*release/1000u):0u);
+
         v->s[4] |= (int32_t)(KO_VOICE | (uint32_t)(c->pitch + 24) << 24 |
-            (c->rsv & KO_NO_LOOP ? KO_V_NO_LOOP : 0u) | (c->rsv & KO_LATCH ? KO_V_LATCH : 0u));
+            (c->rsv & (KO_NO_LOOP|KO_ONE) ? KO_V_NO_LOOP : 0u) | (c->rsv & KO_LATCH ? KO_V_LATCH : 0u));
     }
 #endif
     v->s[6] = 0;
@@ -628,8 +634,16 @@ static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
     int ko_voice = 0;
 #if FELUCCA_KO
     ko_voice = ((uint32_t)v->s[4] & KO_VOICE) != 0;
-    if (ko_voice && v->active && v->stage != 4u && ((uint32_t)v->s[4] & KO_V_NO_LOOP)) {
+    if (ko_voice && v->active && v->stage != 4u && ((uint32_t)v->s[4] & KO_V_NO_LOOP) &&
+        !(ko_env_flags[FELUCCA_KO_DUAL && t==trk+2][v-t->v]&KO_GATE)) {
         v->stage = 2; v->env = 1 << 24; adsr = 32767; /* ONE: complete the chop after release */
+    }
+    if(ko_voice) {
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2,vi=(uint32_t)(v-t->v);
+        int32_t gain=ko_env_gain[id][vi];
+        if(v->stage==3u && ko_env_release[id][vi]) {gain-=ko_env_release[id][vi];if(gain<=0){gain=0;v->active=0;}}
+        else if(v->stage!=4u) gain=clamp(gain+ko_env_attack[id][vi],0,32767);
+        ko_env_gain[id][vi]=(uint16_t)gain;adsr=mulq15(adsr,gain);
     }
 #endif
     if (!ko_voice && p[P_E4] == SLC_ONE && v->stage == 3u && ((uint32_t)v->s[4] & 7u) != SLC_SINE)
@@ -665,9 +679,15 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     int32_t pitch = p[P_E3];
 #if FELUCCA_KO
     if (pk & KO_VOICE)
-        pitch += (int32_t)((pk >> 24) & 63u) - 24;
+        pitch += (int32_t)((pk >> 24) & 63u) - 24 + ko_voice_transpose[FELUCCA_KO_DUAL && t==trk+2][v-t->v];
 #endif
     stepq = (pow2_q16(clamp(m->pitch16 - v->pitch_cur + pitch * 16, -1536, 576)) >> 8) * (s->rate >> 8);
+#if FELUCCA_KO
+    if(pk & KO_VOICE) {
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
+        if(ko_sync[id].on)stepq=ko_sync_step(stepq,(s->rate*44100u+32768u)>>16,ko_sync[id].samples,ko_sync[id].beats,(uint32_t)song.g[G_BPM]);
+    }
+#endif
     d.pos = v->ph[0];
     d.pred = v->s[0];
     d.idx = v->s[1];

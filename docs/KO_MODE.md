@@ -334,7 +334,7 @@ chorus and reverb sends on the selected track. Compression remains separate.
 
 On Patterns or Arrangement, ENV opens arrangement tools: K1 chooses NEXT BAR or
 PATTERN END launch timing; K2 moves the selected section; K3 right duplicates it,
-including repeats and per-track pattern assignments. ENV returns to Arrangement;
+including repeats and per-track pattern assignments. ENV opens variations; SCL returns to Patterns;
 REC saves the chain and launch preference with the selected project. Pattern-end
 launches use the arrangement clock track's loop (Song 1 before a pattern launch);
 tracks with different sequence lengths may therefore restart midway. Sources
@@ -367,3 +367,97 @@ before writing. Complete archives validate every object's CRC before restore and
 save an automatic recovery archive first. Restore commits objects individually:
 a disconnect can leave a partial restore; reconnect and restore again. Sample
 uploads also make a recovery bank and verify the encoded payload after writing.
+
+## Chop envelopes and operations
+
+From song HOME, EDIT opens chop settings; ENV then opens the envelope page: K1 attack (0–155 ms),
+K2 release (0–310 ms; 0 uses the track default), K3 hold/one-shot/latch,
+and K4 loop on/off. ENV returns to chop settings; EDIT returns to waveform editing. Legacy chops keep their
+existing held-loop behavior. Explicit one-shot always plays once.
+
+LFO on the chop settings page opens chop operations: K1 selects a chop, K2 chooses a settings
+source, K3 clockwise duplicates / counterclockwise splits, and K4 clockwise
+copies settings / counterclockwise merges with the previous chop. Settings copy
+preserves boundaries. LFO returns to chop settings; EDIT returns to the waveform.
+
+On the grid, LFO opens timing; LFO again opens recording preferences. K1 chooses
+metronome OFF / REC / ON, K2 independently chooses count-in OFF / 1 bar / 2 bars,
+K3 selects live quantization OFF / 1/16 / 1/8, and K4 toggles song choke.
+Quantization affects live input during transport, not stored pattern events.
+Choke fades earlier voices on the same song track. Stop cancels queued live notes.
+
+From Arrangement, ENV opens tools; ENV again opens variations: K1 chooses destination A–D, K2 clears
+selected-track notes while retaining locks, K3 clears locks separately, and K4
+copies the current project to the chosen slot. Copy/save stops playback before
+flash access. Existing project A/B storage commits retain the last valid project
+after interrupted writes; sample/chop metadata remains a single-copy sector.
+
+## Tempo, rolls and advanced sequencing
+
+From SEQ: LFO opens timing, LFO again opens recording preferences, and ENV opens
+tempo tools. EDIT taps tempo (40–240 BPM); a gap over two seconds starts a fresh
+tap series. K1 adjusts BPM, K2 sets the selected chop's beat count (1–16), K3
+applies its calculated BPM, and K4 selects the chop. Calculation uses the
+unpitched audio length, not an automatic musical beat detector.
+
+From the grid: ENV opens step details; ENV again opens advanced step editing.
+K1 sets pitch ±24 semitones using an existing parameter lock, K2 sets microtiming
+from −8 to +7 sixteenths of a step, K3 sets the condition, and K4 selects the step.
+Microtiming enables unquantized step playback. As in the inherited sequencer,
+nudges apply to single-repeat NOTE steps; repeated steps stay on their subdivision.
+Conditions are ALWAYS/probability, EVERY SECOND PASS, EVERY FOURTH PASS, FIRST
+PASS, and AFTER FIRST. They replace the probability choice on that step; the
+probability knob restores a probability-based step. Every-second/fourth starts
+on passes 2/4. Transport restart resets counts; stopped pattern selection also
+resets them. Early step-zero nudges use the upcoming pass's condition.
+
+From drum HOME: ENV opens pad settings; LFO opens roll controls. K1 selects
+1/4, 1/8, 1/16, or 1/32, and K2 toggles roll OFF/ON. With roll enabled, held drum
+pads repeat at that division, whether or not transport is running. Release,
+Stop, or MIDI panic cancels repeats. Roll note-ons can be recorded with the
+existing recording workflow. Up to eight held pad notes are retained.
+
+## Chop groups, song gain and alternate layouts
+
+From song HOME: EDIT opens chop settings, LFO opens operations, and FX opens
+group/layout/gain controls. K1 sets the selected chop's choke group (0–3; 0 allows
+overlap). Only chops in the same nonzero group cut each other off; song-wide
+choke still cuts all earlier chops on that song track.
+
+K2 switches A/B chop layouts; K3 adjusts non-destructive track gain (0–127);
+K4 clockwise copies the current layout into the other layout. Stop and release
+all pads before switching or copying layouts. B initially copies A. Each song
+has two independent layouts of up to 32 chops using the same encoded audio, so
+layout changes consume no sample payload. Layouts retain boundaries, pitch,
+envelopes, loop/latch/one-shot settings and choke groups. Gain stays in the
+existing project track-level field; saving a project/session retains it.
+
+The GUI step editor also exposes pitch, nudge and conditions, and its chop
+editor exposes group 0–3. Its chop edits affect the layout active in the loaded
+bank. Full bank/session backups include the inactive layout too. Extended
+conditions and transpose locks require this firmware; older firmware may reject
+projects that use them. Existing projects keep their layout and defaults.
+
+### Drum-loop tempo sync
+
+Song 2 (and Song 1) now has optional speed-based tempo sync. From the sequencer,
+press LFO for timing, LFO for recording preferences, ENV for tempo tools, then
+FX for sync. K1 sets 1–64 beats, K2 turns sync off/on, K3 chooses selected-chop
+or whole-song reference, and K4 selects the reference chop. Adjusting these
+controls captures the reference length. Chop-boundary edits afterward do not
+change that reference until you adjust a sync control again.
+
+Enter the number of beats actually contained in the reference, rather than
+its desired duration. The project BPM sets playback speed. For example, a
+four-beat loop lasting two seconds is 120 BPM; at 90 BPM it plays at 75% speed.
+Sync changes pitch with speed; OCT and step pitch remain additive. The sync
+ratio is limited to 0.5–2.0, so tempos outside that range will not match exactly.
+The whole-song setting changes the timing reference, not the chop boundaries:
+use a chop spanning the complete loop for whole-loop playback, or sequence the
+existing chops for sliced playback. Slice timing still comes from the sequencer.
+
+Sync defaults off and is stored with the sample-bank metadata when edits are
+saved. It is bound to the imported audio CRC, and a new sample resets it. The
+new optional KSY1 record is at metadata offset 3456; existing sample capacity,
+project format, and other metadata records are unchanged. Hardware playback
+validation is required before calling tempo sync verified on the FM1.
