@@ -137,10 +137,6 @@ try {
     .locator("#kit-files")
     .setInputFiles([wav, { ...wav, name: "snare.wav" }]);
   await page.waitForFunction(() =>
-    document.getElementById("status").textContent.startsWith("Kit staged"),
-  );
-  await page.locator("#apply-kit").click();
-  await page.waitForFunction(() =>
     document
       .getElementById("status")
       .textContent.startsWith("Drum kit replaced"),

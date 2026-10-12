@@ -374,6 +374,7 @@ for (let i = 0; i < 2; i++) {
         sources[i].name,
       );
       await updateBank(image ? repack(image, encoded, i + 1) : encoded);
+      if (pendingPads.some(Boolean)) await applyPendingKit();
       await remember(
         "song:" + crc(component(image, i + 1).song),
         sources[i].filename,
@@ -392,10 +393,8 @@ for (let p = 0; p < 16; p++) {
   $(`padfile${p}`).onchange = () =>
     run(async () => {
       pendingPads[p] = await readAudio($(`padfile${p}`).files[0]);
-      render();
-      status(
-        `Pad ${p + 1} staged. Click Apply drums to local bank, then Send bank to FM1 above.`,
-      );
+      if (!image) { render(); status("Drum staged. Prepare Song 1 first to create a bank; the drum will then be applied automatically."); return; }
+      await applyPendingKit();
     });
   $(`pad${p}`).onclick = () =>
     run(async () => {
@@ -417,11 +416,10 @@ $("kit-files").onchange = () =>
     }
     pendingPads.splice(0, 16, ...next);
     kitReplaceAll = true;
-    render();
-    status("Kit staged in file-picker order. Apply drums to local bank, then Send bank to FM1 above.");
+    if (!image) { render(); status("Drums staged. Prepare Song 1 first to create a bank; the drums will then be applied automatically."); return; }
+    await applyPendingKit();
   });
-$("apply-kit").onclick = () =>
-  run(async () => {
+async function applyPendingKit() {
     const info = inspect(image),
       last = Math.max(
         kitReplaceAll ? 0 : info.pads,
@@ -448,7 +446,7 @@ $("apply-kit").onclick = () =>
     kitReplaceAll = false;
     render();
     status("Drum kit replaced locally. Use Send bank to FM1 above to transfer it.");
-  });
+}
 $("clear-kit").onclick = () =>
   run(async () => {
     if (!confirm("Remove all 16 drum pads from this local bank?")) return;
