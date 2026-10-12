@@ -61,8 +61,8 @@
         <progress id="transfer-progress" max="1" value="0" aria-label="Bank transfer progress"></progress>
         <div id="send-review" hidden>
           <p id="send-summary"></p>
-          <p>Stop playback and release all keys. A recovery archive will be saved before writing. Keep USB connected until readback verification finishes.</p>
-          <button id="send-confirm" data-device data-bank>Back up and send bank</button>
+          <p>Stop playback and release all keys. Sending replaces the current sample bank. Use Back up full session separately if you want to keep it. Keep USB connected until readback verification finishes.</p>
+          <button id="send-confirm" data-device data-bank>Send bank</button>
           <button id="send-cancel">Cancel</button>
         </div>
       </section>
@@ -129,7 +129,7 @@
           download your banks and backups.
         </p>
         <p>
-          A recovery backup is saved locally before sending or restoring.
+          Back up full session is a separate action. Sending samples does not require a backup. A recovery backup is saved before restoring.
           Transfers write device flash; keep USB connected until verification
           finishes. Session restore commits objects separately and is not
           atomic. Sample replacement resets settings belonging to the changed

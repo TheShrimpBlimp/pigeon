@@ -607,14 +607,12 @@ $("send-cancel").onclick=()=>{$("send-review").hidden=true;status("Bank transfer
 $("send-confirm").onclick=()=>run(async()=>{
   if(!image || !device)throw Error("Reconnect the FM1 and select a bank before sending.");
   $("send-review").hidden=true;
-  let stage="Saving recovery backup";
+  const stage="Writing and verifying the bank";
   try{
-    await protect();
-    stage="Writing and verifying the bank";
-    status("Recovery saved. Starting sample-bank transfer…");
+    status("Starting sample-bank transfer…");
     const actual=await device.writeBank(image);
     await updateBank(actual);
-    status("Bank sent and verified by reading it back. Recovery backup retained.");
+    status("Bank sent and verified by reading it back.");
   }catch(e){throw Error(`${stage}: ${e.message||String(e)}`);}
 });
 $("backup").onclick = () =>

@@ -143,7 +143,7 @@ export class Device {
         !same(actual.subarray(info.used), image.subarray(info.used)))
     )
       throw Error(
-        "Device readback differs from the uploaded bank. Recovery backup is retained.",
+        "Device readback differs from the uploaded bank. Retry sending the bank or restore a saved backup.",
       );
     return actual;
   }
