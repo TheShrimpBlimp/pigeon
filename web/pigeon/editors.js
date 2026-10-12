@@ -216,7 +216,7 @@ export function editors(api) {
   const pads = document.createElement("section");
   pads.className = "kit";
   pads.innerHTML = `<h2>Drum pad settings</h2><div class="edit-fields"><label>Pad<select id="pad-setting-index">${Array.from({ length: 16 }, (_, i) => `<option value="${i}">Pad ${i + 1}</option>`).join("")}</select></label><label>Name<input id="pad-label" maxlength="128"></label><label>Pitch<input id="pad-pitch" type="number" min="-24" max="24"></label><label>Level<input id="pad-level" type="number" min="0" max="127"></label><label>Decay<input id="pad-decay" type="number" min="0" max="127"></label><label>Choke group<input id="pad-choke" type="number" min="0" max="4"></label></div><div class="song-actions"><button id="pad-settings-apply" data-bank>Apply pad settings</button><button id="pad-remove" data-bank>Remove pad</button><button id="pad-left" data-bank>Move pad left</button><button id="pad-right" data-bank>Move pad right</button></div><p>Decay 0 plays the full one-shot. Choke group 0 allows overlap. Removing a pad leaves a silent hit so later assignments keep their key numbers.</p>`;
-  block.after(pads);
+  $("drum-settings-host").append(pads);
   $("pad-setting-index").onchange = () => {
     pad = Number($("pad-setting-index").value);
     refresh();
@@ -263,7 +263,7 @@ export function editors(api) {
   const patterns = document.createElement("section");
   patterns.className = "kit";
   patterns.innerHTML = `<h2>Pattern editor</h2><p>Open a full .pigeon session or back up the connected FM1. Edits are included when saving or restoring the session.</p><div class="edit-fields"><label>Pattern<select id="pattern-object"><option value="0">Current project</option>${["A", "B", "C", "D"].map((n, i) => `<option value="${i + 2}">Pattern ${n}</option>`).join("")}</select></label><label>Track<select id="pattern-track"><option value="0">Song 1</option><option value="1">Drums</option><option value="2">Song 2</option></select></label><label>Length<input id="pattern-length" type="number" min="1" max="64" value="16"></label><button id="pattern-length-apply">Apply length</button></div><div class="pattern-grid" id="pattern-grid"></div><div class="edit-fields"><label>Step<input id="pattern-step" type="number" min="1" max="64" value="1"></label><label>Chop / pad (0 = rest)<input id="pattern-chop" type="number" min="0" max="32"></label><label>Velocity<input id="pattern-velocity" type="number" min="1" max="127" value="100"></label><label>Probability (%)<input id="pattern-probability" type="number" min="0" max="100" value="100"></label><label>Step pitch<input id="pattern-pitch" type="number" min="-24" max="24" value="0"></label><label>Nudge (step /16)<input id="pattern-nudge" type="number" min="-8" max="7" value="0"></label><label>Condition<select id="pattern-condition"><option value="0">Always / probability</option><option value="1">Every second pass</option><option value="2">Every fourth pass</option><option value="3">First pass</option><option value="4">After first pass</option></select></label><label>Repeats<input id="pattern-repeats" type="number" min="1" max="4" value="1"></label></div><div class="song-actions"><button id="pattern-apply">Apply step</button><button id="pattern-clone">Copy current project to selected slot</button><button id="session-save">Save full session</button></div>`;
-  pads.after(patterns);
+  block.after(patterns);
   function bytes() {
     const a = api.archive();
     if (!a) throw Error("Open or back up a full session first");

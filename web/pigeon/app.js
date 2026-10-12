@@ -300,7 +300,7 @@ function render() {
 for (let i = 0; i < 2; i++) {
   const section = document.createElement("article");
   section.className = "song";
-  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio<input id="file${i}" type="file" accept="audio/*"></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="source-name${i}"></p><div class="edit-fields"><label>Zoom<input id="trim-zoom${i}" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="trim-scroll${i}" type="range" min="0" max="1000" value="0"></label><label>Loop preview<select id="trim-loop${i}"><option value="0">Off</option><option value="1">On</option></select></label><button id="trim-stop${i}">Stop preview</button></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Import into Song ${i + 1}</button></div>`;
+  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio<input id="file${i}" type="file" accept="audio/*"></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="source-name${i}"></p><div class="edit-fields"><label>Zoom<input id="trim-zoom${i}" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="trim-scroll${i}" type="range" min="0" max="1000" value="0"></label><label>Loop preview<select id="trim-loop${i}"><option value="0">Off</option><option value="1">On</option></select></label><button id="trim-stop${i}">Stop preview</button></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Apply to local Song ${i + 1}</button></div>`;
   $("songs").append(section);
   trimWaves[i] = new WaveEditor($(`wave${i}`), (a, b) => {
     $(`start${i}`).value = (a / 22050).toFixed(5);
@@ -394,7 +394,7 @@ for (let p = 0; p < 16; p++) {
       pendingPads[p] = await readAudio($(`padfile${p}`).files[0]);
       render();
       status(
-        `Pad ${p + 1} staged. Click Replace kit to apply all staged hits.`,
+        `Pad ${p + 1} staged. Click Apply drums to local bank, then Send bank to FM1 above.`,
       );
     });
   $(`pad${p}`).onclick = () =>
@@ -418,7 +418,7 @@ $("kit-files").onchange = () =>
     pendingPads.splice(0, 16, ...next);
     kitReplaceAll = true;
     render();
-    status("Kit staged in file-picker order. Replace kit to apply it.");
+    status("Kit staged in file-picker order. Apply drums to local bank, then Send bank to FM1 above.");
   });
 $("apply-kit").onclick = () =>
   run(async () => {
@@ -447,7 +447,7 @@ $("apply-kit").onclick = () =>
     pendingPads.fill(null);
     kitReplaceAll = false;
     render();
-    status("Drum kit replaced locally. Songs preserved.");
+    status("Drum kit replaced locally. Use Send bank to FM1 above to transfer it.");
   });
 $("clear-kit").onclick = () =>
   run(async () => {

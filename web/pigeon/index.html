@@ -82,6 +82,7 @@
           preserves the others.
         </p>
       </section>
+      <section class="preparation-note"><h2>Prepare samples locally</h2><p>The tools below prepare your songs, drum kit, and settings on this computer. They do not send data to the FM1. After applying your changes, use <strong>Send bank to FM1</strong> above to import the complete sample bank onto the device.</p></section>
       <section class="songs" id="songs"></section>
       <section class="kit">
         <div class="section-heading">
@@ -90,19 +91,20 @@
             <h2>16 one-shot pads</h2>
           </div>
           <label class="button secondary"
-            >Choose one-shots<input
+            >Choose drum files<input
               id="kit-files"
               type="file"
               accept="audio/*"
               multiple /></label
-          ><button id="apply-kit" data-bank>Replace kit</button
+          ><button id="apply-kit" data-bank>Apply drums to local bank</button
           ><button id="clear-kit" data-bank>Clear kit</button>
         </div>
         <p>
           Choose up to 16 files. Assign them in pad order below; click a pad to
-          preview. Empty gaps become silent pads.
+          preview. Then press Apply drums to local bank and use Send bank to FM1 above. Empty gaps become silent pads.
         </p>
         <div id="pads" class="pads"></div>
+        <div id="drum-settings-host"></div>
       </section>
       <section class="status-box" aria-live="polite">
         <strong id="status"
