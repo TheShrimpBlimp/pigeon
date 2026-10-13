@@ -98,9 +98,11 @@ same-stub update has none. AddressSanitizer and UndefinedBehaviorSanitizer pass
 on the stub and recovery tests. Existing tests confirm all reclaimed sample
 extents are preserved, and a legacy downgrade with an active bank is refused.
 
-Hardware verification is pending. Docker stopped because the development Mac
-ran low on disk; the target package had already built successfully. A subsequent
-standalone stub rebuild was interrupted. This candidate's complete target rebuild
-reproducibility has not been reverified after that interruption.
+Hardware verification is pending. A complete rebuild on 2026-10-13 reproduced
+both the application and installable package byte for byte, without changing the
+pinned stub. SHA-256:
+
+- Application: `c185f69e2ba6baa890efc458de0a329eb94729d70656a013c99b4098fdd85d81`
+- Package: `e66361f80bb03f64ac537b7797936c6c4a4805f88d53a2c5660c29cb0828930d`
 
 See [recovery details and limits](PIGEON_RECOVERY.md).
