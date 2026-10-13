@@ -71,10 +71,14 @@ footer { margin-top: 12px; font-size: 12px; }
 footer nav a { margin: 0 6px; }
 footer small { font-size: 11px; opacity: .8; }
 h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(--green)}h2{font-size:30px;font-weight:400;line-height:1.2}header{padding-bottom:24px}section{padding:32px 0;border-bottom:1px solid var(--rule)}button,select,input{font:inherit;color:var(--fg);background:var(--body);border:1px solid var(--rule);padding:10px 12px;max-width:100%}button{cursor:pointer}button:hover{border-color:var(--green)}button:disabled,input:disabled,select:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--green);outline-offset:3px}input[type=file]{display:block;width:100%;margin:12px 0}input::file-selector-button{font-family:Little,monospace;background:var(--green);color:#16210c;border:0;padding:8px;cursor:pointer}.sample-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:24px}.sample-grid label{padding:16px;background:var(--body);min-width:0}.sample-grid span{display:block;color:var(--dim);font-size:13px;overflow-wrap:anywhere}.eyebrow{color:var(--green);font-size:12px;letter-spacing:.1em}.fine, #storage-help{color:var(--dim);font-size:13px}progress{width:100%;accent-color:var(--green);height:12px}.credits a{color:var(--green)}footer nav{display:flex;justify-content:center;gap:18px;margin:14px 0}@media(max-width:650px){.sample-grid{grid-template-columns:1fr}h1{font-size:46px}h2{font-size:25px}#midi-input{margin-top:10px}}
+.sample-grid>.sample-slot{padding:16px;background:var(--body);min-width:0}.sample-slot label{padding:0;background:none}.compression-controls{margin:14px 0}.compression-controls label{font-size:13px;margin-bottom:6px}.compression-controls select{width:100%}.compression-controls[hidden]{display:none}
+
+.support-row{max-width:1160px;margin:0 auto;padding:12px 0;text-align:right}.coffee-link{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid #526546;background:#1a2116;color:#b9ef77!important;text-decoration:none;font-size:13px;line-height:1.4;letter-spacing:.025em}.coffee-link:hover{border-color:#b9ef77;background:#283321}.coffee-link:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}
 </style>
 </head>
 <body>
 <main>
+<div class="support-row"><a class="coffee-link" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a></div>
 <header><a href="../../">← PIGEON</a><h1>Try PIGEON.</h1><p>An FM1 running PIGEON, right in your browser. Switch on, add your own samples, and start chopping. Nothing is preloaded.</p></header>
 <div class="install-counter"><div id="trial-total" class="nixie-digits" role="img" aria-label="Trial counter loading"></div><div class="counter-caption">BROWSER TRIALS<p id="trial-count-status">Loading shared count…</p><p>One per browser · counted after switching on</p></div></div>
 <div class="device" id="device">
@@ -94,8 +98,8 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 
 <section class="sample-loader" aria-labelledby="samples-heading"><p class="eyebrow">YOUR SOUNDS</p><h2 id="samples-heading">Add your samples.</h2>
 <label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 408 KiB</option><option value="unlimited">Unlimited storage</option></select>
-<p id="storage-help">The real FM1 shares 408 KiB between two songs and 16 drum pads. Imports use mono 22.05 kHz IMA ADPCM; this meter includes waveform and alignment overhead.</p>
-<div class="sample-grid"><label>Song 1<input id="song1-file" type="file" accept="audio/*" disabled><span id="song1-name">Empty</span></label><label>Song 2<input id="song2-file" type="file" accept="audio/*" disabled><span id="song2-name">Empty</span></label><label>Drum kit · up to 16 files<input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span></label></div>
+<p id="storage-help">The real FM1 shares 408 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.</p>
+<div class="sample-grid"><div class="sample-slot"><label for="song1-file">Song 1</label><input id="song1-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song1-quality">MP3 quality</label><select id="song1-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song1-name">Empty</span></div><div class="sample-slot"><label for="song2-file">Song 2</label><input id="song2-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song2-quality">MP3 quality</label><select id="song2-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song2-name">Empty</span></div><div class="sample-slot"><label for="kit-files">Drum kit · up to 16 files</label><input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span></div></div>
 <p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="417792" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 408 KiB</p><button id="clear-samples" type="button" disabled>Clear samples</button>
 <p class="fine">Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
 <section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Use the on-screen knobs and buttons to edit. Sound comes from your computer.</p></section>
@@ -458,18 +462,20 @@ let shownTrials=0;
 function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,String(total).padStart(6,'0'));trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
 trialTotal().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
 window.addEventListener('online',()=>{if(loaderReady)recordTrial().then(showTrials).catch(()=>{});});
-import {buildBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
-let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,image:null},bankId=0;
+import {prepareBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
+let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,bitrates:[64,64],image:null},bankId=0;
 const bankRequests=new Map(), sampleStatus=document.getElementById('sample-status'), mode=document.getElementById('storage-mode');
 function refreshSamples(){
-  for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
+  for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples','song1-quality','song2-quality'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
   document.getElementById('song1-name').textContent=samples.songs[0]?.name||'Empty';
   document.getElementById('song2-name').textContent=samples.songs[1]?.name||'Empty';
   document.getElementById('kit-name').textContent=samples.pads.length?samples.pads.map(p=>p.name).join(', '):'Empty';
+  document.querySelectorAll('.compression-controls').forEach(e=>e.hidden=samples.unlimited);
+  for(let i=0;i<2;i++)document.getElementById(`song${i+1}-quality`).value=(samples.bitrates||[64,64])[i];
   const used=samples.image? samples.image.length-HEAD:0;
   const meter=document.getElementById('sample-meter');meter.max=samples.unlimited?Math.max(used,1):FM1_POOL-HEAD;meter.value=used;
   document.getElementById('sample-usage').textContent=`${(used/1024).toFixed(1)} KiB`+(samples.unlimited?' · unlimited mode': ' / 408 KiB');
-  document.getElementById('storage-help').textContent=samples.unlimited?'No FM1 storage cap. Available browser memory still applies. These samples may not fit a physical FM1.':'The real FM1 shares 408 KiB between two songs and 16 drum pads. Imports use mono 22.05 kHz IMA ADPCM; this meter includes waveform and alignment overhead.';
+  document.getElementById('storage-help').textContent=samples.unlimited?'No FM1 storage cap. Available browser memory still applies. These samples may not fit a physical FM1.':'The real FM1 shares 408 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.';
   if(!samples.image)sampleStatus.textContent='Load Song 1 to begin. No samples are preloaded.';
 }
 function sendBank(image,unlimited,clear=false){return new Promise((resolve,reject)=>{
@@ -481,7 +487,10 @@ async function changeSamples(operation){
   if(loaderBusy)return;loaderBusy=true;refreshSamples();sampleStatus.textContent='Processing your audio locally…';
   try{
     const next=await operation();
-    if(next.songs[0]){next.image=buildBank(next.songs,next.pads,next.unlimited);await sendBank(next.image,next.unlimited);}else{next.image=null;await sendBank(null,false,true);}
+    if(next.songs[0]){
+      const prepared=await prepareBank(next.songs,next.pads,next.unlimited,next.bitrates||[64,64],(slot,p)=>sampleStatus.textContent=`Compressing Song ${slot+1} locally… ${Math.round(p*100)}%`);
+      next.songs=prepared.songs;next.image=prepared.image;await sendBank(next.image,next.unlimited);
+    }else{next.image=null;await sendBank(null,false,true);}
     samples=next;mode.value=samples.unlimited?'unlimited':'fm1';refreshSamples();sampleStatus.textContent=next.image?'Samples loaded. Play the keys to try them.':'Samples cleared.';
     try{await bankStorage(samples);}catch{sampleStatus.textContent+=' Browser storage is unavailable; this session only.';}
   }catch(e){mode.value=samples.unlimited?'unlimited':'fm1';sampleStatus.textContent=e.message;}
@@ -499,8 +508,11 @@ document.getElementById('kit-files').onchange=e=>{
     const pads=[];for(const file of files)pads.push(await decodeSample(file,audioContext));return {...samples,pads};
   });
 };
+for(let slot=0;slot<2;slot++)document.getElementById(`song${slot+1}-quality`).onchange=e=>{
+  const bitrate=Number(e.target.value);changeSamples(async()=>{const bitrates=(samples.bitrates||[64,64]).slice();bitrates[slot]=bitrate;return {...samples,bitrates};});
+};
 mode.onchange=()=>changeSamples(async()=>({...samples,unlimited:mode.value==='unlimited'}));
-document.getElementById('clear-samples').onclick=()=>changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',image:null}));
+document.getElementById('clear-samples').onclick=()=>changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',bitrates:samples.bitrates||[64,64],image:null}));
 
 // ------------------------------------------------------------------ switching on
 const status = document.getElementById("status");
@@ -517,7 +529,11 @@ async function switchOn() {
     node = new AudioWorkletNode(ac, "felucca", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     node.onprocessorerror=()=>{say("Audio processing stopped. Reload the page to restart.");document.getElementById("start").hidden=false;};
     node.connect(ac.destination);
-    const saved=await bankStorage().catch(()=>null);
+    let saved=await bankStorage().catch(()=>null);
+    if(saved?.image&&!saved.unlimited&&!saved.songs[0]?.compressed){
+      const prepared=await prepareBank(saved.songs,saved.pads,false,saved.bitrates||[64,64]);
+      saved={...saved,...prepared,bitrates:saved.bitrates||[64,64]};await bankStorage(saved).catch(()=>{});
+    }
     if(saved?.songs){samples=saved;document.getElementById('storage-mode').value=saved.unlimited?'unlimited':'fm1';}
     let warned = false;
     await new Promise((res, rej) => {

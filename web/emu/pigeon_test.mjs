@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import {normalize,indexedMp3,join,inspect} from '../pigeon/bank.js';
 import {storeSectors,restoreSectors} from './worklet.js';
 import {buildBank,FM1_POOL} from './loader.js';
 const bytes=fs.readFileSync('build/emu/felucca.wasm');
@@ -16,6 +18,14 @@ const small=[{name:'own.wav',pcm:tone(22050)},null];
 function load(image,unlimited=false){const ptr=e.web_upload_buffer(image.length);assert(ptr);new Uint8Array(e.memory.buffer,ptr,image.length).set(image);return e.web_load_bank(image.length,unlimited?1:0,0);}
 assert.equal(load(buildBank(small)),0);assert.equal(e.web_samples_loaded(),1);
 e.web_keys(1);render(200);e.web_keys(0);render(80);assert(peak>0.001,'imported audio must sound');
+const sandbox={console};vm.createContext(sandbox);vm.runInContext(fs.readFileSync('web/pigeon/vendor/lame.js','utf8'),sandbox);
+for(const bitrate of [24,32,40,48,56,64]){
+ const pcm=normalize(small[0].pcm),encoder=new sandbox.lamejs.Mp3Encoder(1,22050,bitrate),chunks=[];
+ for(let i=0;i<pcm.length;i+=1152)chunks.push(new Uint8Array(encoder.encodeBuffer(pcm.subarray(i,i+1152))));
+ chunks.push(new Uint8Array(encoder.flush()));const compressed={...indexedMp3(join(chunks),pcm.length),bitrate};
+ const song={...small[0],compressed};const image=buildBank([song,null]);assert.equal(inspect(image).songs[0].codec,'MP3');
+ assert.equal(load(image),0,`MP3 ${bitrate} bank must load`);peak=0;e.web_keys(1);render(200);e.web_keys(0);render(80);assert(peak>0.001,`MP3 ${bitrate} must sound in real WASM firmware`);
+}
 const large=[{name:'long.wav',pcm:tone(900000)},null];
 assert.throws(()=>buildBank(large),/408 KiB/);
 const unlimited=buildBank(large,[],true);assert(unlimited.length>FM1_POOL);

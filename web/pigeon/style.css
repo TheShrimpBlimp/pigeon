@@ -359,3 +359,5 @@ body, body *, button, input, select, textarea { font-family: "Little Character",
 .transfer-panel progress { width: 100%; }
 #transfer-status.error { color: #ffb39b; }
 #send-review[hidden] { display: none; }
+
+.support-row{max-width:1160px;margin:0 auto;padding:12px 0;text-align:right}.coffee-link{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid #526546;background:#1a2116;color:#b9ef77!important;text-decoration:none;font-size:13px;line-height:1.4;letter-spacing:.025em}.coffee-link:hover{border-color:#b9ef77;background:#283321}.coffee-link:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Bump this version whenever a shipped runtime asset changes.
-const CACHE = "pigeon-library-v17";
+const CACHE = "pigeon-library-v18";
 const ASSETS = [
   "./",
   "index.html",
