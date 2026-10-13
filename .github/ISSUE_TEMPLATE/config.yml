@@ -1,11 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Feature idea or request
-    url: https://github.com/hugelton/Felucca/discussions/categories/ideas
-    about: Ideas and requests go to Discussions (no promise they will be added).
-  - name: Question
-    url: https://github.com/hugelton/Felucca/discussions/categories/q-a
-    about: How to use Felucca, or how something works.
-  - name: Web editor or installer
-    url: https://github.com/hugelton/Felucca-WebApp
-    about: The web editor and installer live in Felucca-WebApp.
+  - name: Pigeon controls and setup
+    url: https://theshrimpblimp.com/pigeon/
+    about: Downloads, setup, controls, and the browser sample tool.

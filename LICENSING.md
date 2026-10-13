@@ -1,19 +1,15 @@
 # Pigeon licensing
 
-The owner-supplied splash photograph in `assets/branding/splash.png` is not an
-inherited Felucca asset. Its provenance and redistribution status are documented
-in `assets/branding/README.md`; the software license does not establish a license
-for that photograph.
+The sampler uses a Pigeon text splash; no photograph is distributed.
+See `assets/branding/README.md` for branding details.
 
 Pigeon is a derivative of Felucca 1.5.1, developed as an independent FM1
 performance sampler. Original copyright and license notices remain intact.
 
 Pigeon is free software, licensed under the GNU General Public License, version 3 only
 (`GPL-3.0-only`, full text in `LICENSE`). That covers Pigeon source contributions and inherited GPL code. Creative assets
-retain their documented licenses; the supplied photograph is addressed separately
-above. A few
-bundled or ported parts keep their own licences; they are listed below, and their licence
-texts are in `LICENSES/`.
+retain their documented licenses. A few bundled or ported parts keep their own
+licences; they are listed below, and their licence texts are in `LICENSES/`.
 
 The Pigeon sampler profile bundles libmad under
 GPL-2.0-or-later. Its original notices and license are retained in

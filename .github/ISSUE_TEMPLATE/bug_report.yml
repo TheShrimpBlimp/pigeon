@@ -1,17 +1,17 @@
 name: Bug report
-description: Something in Felucca doesn't work as it should (one bug per issue)
+description: Something in Pigeon doesn't work as it should (one bug per issue)
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Issues are for reproducible bugs only. Feature ideas go to [Discussions › Ideas](https://github.com/hugelton/Felucca/discussions/categories/ideas), questions to [Q&A](https://github.com/hugelton/Felucca/discussions/categories/q-a).
+        Report a reproducible Pigeon bug. For questions or feature requests, open a blank issue.
   - type: input
     id: version
     attributes:
-      label: Felucca version
+      label: Pigeon version
       description: Hold HOME > ABOUT on the FM-1
-      placeholder: "v1.0.2"
+      placeholder: "0.1-dev"
     validations:
       required: true
   - type: input

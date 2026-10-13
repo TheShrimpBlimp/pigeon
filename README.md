@@ -1,6 +1,6 @@
 # Pigeon
 
-Pigeon is an independent, audio-only performance sampler for the **M-VAVE FM1**.
+Pigeon is an open-source, audio-only performance sampler for the **M-VAVE FM1**.
 Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencing
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
@@ -86,8 +86,8 @@ Pigeon is its own project, built on the work of
 Instruments, and the credited contributors and library authors.
 
 Pigeon remains **GPL-3.0-only**. The [GPL text](LICENSE), inherited copyright
-notices, and third-party licenses are preserved. The supplied splash photograph
-has separate provenance described in [assets/branding/README.md](assets/branding/README.md).
+notices, and third-party licenses are preserved. The text splash is described in
+[assets/branding/README.md](assets/branding/README.md).
 The software license does not grant rights to imported commercial recordings.
 
 FUNA project layouts, engine/parameter IDs, and USB/update protocol identities
@@ -117,11 +117,12 @@ devices. Tracking begins with this release; earlier installs are not counted.
 
 ## Project repositories
 
-- Firmware: https://github.com/TheShrimpBlimp/fm1-ko-sampler
+- Firmware: https://github.com/TheShrimpBlimp/pigeon
 - Sample tool: https://github.com/TheShrimpBlimp/pigeon-tool
 - Website: https://github.com/TheShrimpBlimp/pigeon-website
 
-All three repositories are currently private. The website checkout lives at
+The firmware repository is public and welcomes contributions. The sample tool
+and website have separate repositories. The website checkout lives at
 `web/site/`; clone it there when preparing a hosted build from this firmware
 checkout. The standalone sample tool checkout lives at `repositories/pigeon-tool/`.
 These independent checkouts are excluded from the firmware repository.

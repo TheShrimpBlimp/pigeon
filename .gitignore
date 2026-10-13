@@ -6,3 +6,10 @@ __pycache__/
 # Independently versioned Pigeon tool and website repositories.
 /repositories/
 /web/site/
+
+# Local Python environment and hosting state.
+.venv/
+.wrangler/
+.env
+.env.*
+!.env.example
