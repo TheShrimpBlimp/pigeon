@@ -1,6 +1,6 @@
-# Pigeon
+# PIGEON
 
-Pigeon is an open-source, audio-only performance sampler for the **M-VAVE FM1**.
+PIGEON is an open-source, audio-only performance sampler for the **M-VAVE FM1**.
 Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencing
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
@@ -33,7 +33,7 @@ Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
   waveform zoom, and playback following.
 
 Eight audio voices are shared across the instrument. Synth engines are
-unavailable in the Pigeon profile. Direct recording, resampling, and compressed
+unavailable in the PIGEON profile. Direct recording, resampling, and compressed
 reverse playback are outside the current release scope.
 
 ## Main controls
@@ -82,23 +82,23 @@ conversion, testing, and maintenance under human direction.
 
 ## Foundation and licensing
 
-Pigeon is its own project, built on the work of
+PIGEON is its own project, built on the work of
 [Felucca](https://github.com/hugelton/Felucca), Leo Kuroshita, Hügelton
 Instruments, and the credited contributors and library authors.
 
-Pigeon remains **GPL-3.0-only**. The [GPL text](LICENSE), inherited copyright
+PIGEON remains **GPL-3.0-only**. The [GPL text](LICENSE), inherited copyright
 notices, and third-party licenses are preserved. The text splash is described in
 [assets/branding/README.md](assets/branding/README.md).
 The software license does not grant rights to imported commercial recordings.
 
 FUNA project layouts, engine/parameter IDs, and USB/update protocol identities
 remain for compatibility. Legacy synth project data can be retained but its
-engines do not sound in Pigeon; projects using replaced factory samples can
+engines do not sound in PIGEON; projects using replaced factory samples can
 sound different. The baseline build and regression fixtures remain available
 for compatibility checks. Internal `FELUCCA_*` names are implementation details.
 
 [Archived upstream documentation](docs/FELUCCA_UPSTREAM.md) describes the
-foundation, rather than Pigeon's supported feature set.
+foundation, rather than PIGEON's supported feature set.
 
 ### Browser sampler tool
 
@@ -109,7 +109,7 @@ from an HTTPS website without installing anything and works offline after
 **Offline ready** appears. Audio processing stays on your computer.
 See [the GUI guide](web/pigeon/README.md).
 
-The hosted Pigeon site reports anonymous successful-install totals. Browser
+The hosted PIGEON site reports anonymous successful-install totals. Browser
 installers count only after the FM1 restart identity is verified; repeated
 installations count again, and offline reports wait in local browser storage.
 The counter stores a random event ID, firmware checksum, source, and day, with
@@ -127,3 +127,12 @@ and website have separate repositories. The website checkout lives at
 `web/site/`; clone it there when preparing a hosted build from this firmware
 checkout. The standalone sample tool checkout lives at `repositories/pigeon-tool/`.
 These independent checkouts are excluded from the firmware repository.
+
+### Try PIGEON in the browser
+
+The [browser emulator](https://theshrimpblimp.com/pigeon/webapp/emu/) starts
+empty. Load your own Song 1, Song 2 and drum samples; audio stays on your
+computer. Choose the real 408 KiB FM1 sample pool or unlimited browser storage.
+Connect a MIDI controller (including the FM1) to play its keys; use the on-screen
+knobs and buttons to edit. The emulator credits Charles Vestal’s FM1 X0X browser
+code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.

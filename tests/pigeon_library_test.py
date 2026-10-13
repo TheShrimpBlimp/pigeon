@@ -36,4 +36,4 @@ with tempfile.TemporaryDirectory() as d:
  finally:bank.upload=original_upload
  assert writes[0][0]=='bank' and writes[-1]==(2,0)
  assert [ident for stage,ident in writes[1:] if stage==0]==list(range(2,10))+[1,0]
- print('Pigeon library tests PASSED')
+ print('PIGEON library tests PASSED')

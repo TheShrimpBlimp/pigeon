@@ -1,4 +1,4 @@
-> Archived documentation for the Felucca 1.5.1 foundation. Links and installation instructions describe upstream Felucca, not Pigeon. See the [project README](../README.md) for this firmware.
+> Archived documentation for the Felucca 1.5.1 foundation. Links and installation instructions describe upstream Felucca, not PIGEON. See the [project README](../README.md) for this firmware.
 
 # Felucca
 

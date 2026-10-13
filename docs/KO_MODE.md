@@ -1,9 +1,9 @@
-# Pigeon sampler interface (v0.1)
+# PIGEON sampler interface (v0.1)
 
 For the optional shared bank and minute-long songs, see [Expanded KO storage](KO_STORAGE.md).
 The slot capacities below describe `FELUCCA_KO=1` without `FELUCCA_KO_STORAGE`.
 
-Pigeon uses this interface for one transient-chopped song sample and sixteen separate drum one-shots.
+PIGEON uses this interface for one transient-chopped song sample and sixteen separate drum one-shots.
 Build the standalone product with `./build-sampler.sh`; the inherited menu still calls this interface KO MODE.
 The following also documents the legacy sampler build for compatibility.
 Standard Felucca remains the default build; its engines, track count, parameter IDs, and FUNA project
@@ -225,7 +225,7 @@ for precise edits; scrolling never changes the selected chop. After a K1 or K2
 edit, the scroll cursor jumps to that updated start or end, including an end
 boundary exactly at the sample's length.
 
-## Pigeon display and sequencer timing
+## PIGEON display and sequencer timing
 
 Knob edits update changed text and waveform columns through the existing buffered
 canvas, without clearing the page. The waveform follows the newest playing song
@@ -239,7 +239,7 @@ length: 1/4, 1/8, 1/16, 1/32, triplets, or longer divisions. These are the exist
 project-compatible per-track divisions, with swing retained. SAMPLE END still
 waits for the complete chop; its rests use the chosen division. OCT keys continue
 to control pitch on the waveform/edit pages. The existing three-second photo
-splash remains until the replacement Pigeon logo is supplied.
+splash remains until the replacement PIGEON logo is supplied.
 
 Each song chop has independent positions: K1 can cross neighboring chops, but
 stops before its own end. Extend the end with K2 to move the start farther. Pad

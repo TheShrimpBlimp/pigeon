@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Check Pigeon's actual screens with its shipped Little Character font. */
+/* Check PIGEON's actual screens with its shipped Little Character font. */
 #include <stdio.h>
 #include <stdint.h>
 static uint32_t text_checks,text_failures,screen_view,screen_track;
@@ -31,6 +31,6 @@ int main(void) {
             ko.view=screen_view;ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;
         }
     }
-    printf("Pigeon screen text: %u checks, %u clipping failures\n",text_checks,text_failures);
+    printf("PIGEON screen text: %u checks, %u clipping failures\n",text_checks,text_failures);
     return !text_checks || text_failures;
 }

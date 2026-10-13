@@ -461,7 +461,7 @@ $("open").onchange = () =>
     const file = $("open").files[0];
     if (!file || file.size > 2 * 1024 * 1024)
       throw Error(
-        "Choose a Pigeon .kob bank or .pigeon session smaller than 2 MiB",
+        "Choose a PIGEON .kob bank or .pigeon session smaller than 2 MiB",
       );
     if (file.name.toLowerCase().endsWith(".pigeon")) {
       const a = JSON.parse(await file.text()),
@@ -567,7 +567,7 @@ $("connect").onclick = () =>
     const info = await device.ask(1);
     $("firmware-version").textContent =
       "Installed: " + String.fromCharCode(...info.slice(0, info.indexOf(0)));
-    status("Pigeon connected. Stop playback before reading or sending.");
+    status("PIGEON connected. Stop playback before reading or sending.");
   });
 $("input").onchange = $("output").onchange = attach;
 $("read").onclick = () =>
@@ -706,7 +706,7 @@ editors = createEditors({
 const updatePanel = document.createElement("section");
 updatePanel.className = "kit";
 updatePanel.innerHTML =
-  '<h2>Firmware update</h2><p id="firmware-version">Connect the FM1 to read its firmware version.</p><label>Choose Pigeon firmware<input id="firmware-file" type="file" accept=".fwsc"></label><p id="firmware-package">Choose a local .fwsc package. The GUI does not download firmware.</p><button id="firmware-install" data-device>Back up and install firmware</button><p>Installing reboots the FM1. Keep USB connected throughout. A full recovery session is saved first. Charge the FM1 fully, use a direct USB cable without a hub, and keep the computer awake. Unsupported source firmware is blocked before the update starts.</p><p><a href="https://theshrimpblimp.com/pigeon/guide/PIGEON_RECOVERY.md" target="_blank" rel="noopener noreferrer">Interrupted-update recovery and first-install limits</a></p><p>Successful browser installs report an anonymous completion event to the Pigeon counter; no device identity or sample data is sent.</p>';
+  '<h2>Firmware update</h2><p id="firmware-version">Connect the FM1 to read its firmware version.</p><label>Choose PIGEON firmware<input id="firmware-file" type="file" accept=".fwsc"></label><p id="firmware-package">Choose a local .fwsc package. The GUI does not download firmware.</p><button id="firmware-install" data-device>Back up and install firmware</button><p>Installing reboots the FM1. Keep USB connected throughout. A full recovery session is saved first. Charge the FM1 fully, use a direct USB cable without a hub, and keep the computer awake. Unsupported source firmware is blocked before the update starts.</p><p><a href="https://theshrimpblimp.com/pigeon/guide/PIGEON_RECOVERY.md" target="_blank" rel="noopener noreferrer">Interrupted-update recovery and first-install limits</a></p><p>Successful browser installs report an anonymous completion event to the PIGEON counter; no device identity or sample data is sent.</p>';
 document.querySelector(".status-box").before(updatePanel);
 let firmwarePackage = null;
 $("firmware-file").onchange = () =>
@@ -714,7 +714,7 @@ $("firmware-file").onchange = () =>
     firmwarePackage = null;
     const file = $("firmware-file").files[0];
     if (!file || file.size > 2 * 1024 * 1024)
-      throw Error("Choose a Pigeon .fwsc package under 2 MiB");
+      throw Error("Choose a PIGEON .fwsc package under 2 MiB");
     const bytes = new Uint8Array(await file.arrayBuffer()),
       pkg = new Package(bytes);
     if (
@@ -722,10 +722,10 @@ $("firmware-file").onchange = () =>
       !new TextDecoder().decode(pkg.dec).includes("FELUCCA-LOADER-1") ||
       !new TextDecoder()
         .decode(pkg.dec.subarray(pkg.appOff, pkg.appOff + pkg.app.size))
-        .includes("Pigeon")
+        .toUpperCase().includes("PIGEON")
     )
       throw Error(
-        "Package is not Pigeon firmware with the supported update loader",
+        "Package is not PIGEON firmware with the supported update loader",
       );
     firmwarePackage = { bytes, product: pkg.product, release: await sha256hex(bytes) };
     $("firmware-package").textContent =

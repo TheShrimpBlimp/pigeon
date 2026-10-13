@@ -31,5 +31,5 @@ int main(void) {
     bad+=check("sync ignores invalid reference",ko_sync_step(32768,22050,0,4,120)==32768);
     ko_context=0;ko_sync[0]=(ko_sync_t){.samples=44100,.beats=4,.on=1};ko_store_sector(1);memset(&ko_sync[0],0,sizeof ko_sync[0]);ko_store_load();bad+=check("sync preferences persist with audio",ko_sync[0].samples==44100&&ko_sync[0].on&&ko_sync[0].beats==4);ko_context=~0u;
     song.sel=2;go_home();ko.view=23;page_tap(B_FX);bad+=check("Song 2 sync controls reachable",ko.view==27);ko_knob(0,1);bad+=check("sync beats editable",ko_sync[1].beats>=1);
-    printf("Pigeon performance features: %s\n",bad?"FAILED":"PASSED");return bad!=0;
+    printf("PIGEON performance features: %s\n",bad?"FAILED":"PASSED");return bad!=0;
 }

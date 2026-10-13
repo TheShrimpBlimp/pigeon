@@ -83,5 +83,5 @@ int main(void)
     for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==140)label=!strcmp(ko_lines[i].text,"SPEED % 150");
     bad+=check("sync speed display follows external tempo without forced redraw",label);song.g[G_BPM]=120;
     const char *screens=getenv("KO_SCREEN_DIR");if(screens) {ko_palette_on=1;palette_set(settings.palette);ko.view=7;screen_save(screens,"pigeon-sequencer");ko.view=0;screen_save(screens,"pigeon-waveform");}
-    printf("Pigeon UI: %s\n",bad?"FAILED":"PASSED");return bad!=0;
+    printf("PIGEON UI: %s\n",bad?"FAILED":"PASSED");return bad!=0;
 }

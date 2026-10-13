@@ -313,7 +313,7 @@ def official():
 
 def compatibility():
     cases=[("FM-1_015",None,"allow"),("FM-1_000",None,"refuse"),
-           ("FM-1_900","Pigeon 0.1-dev","allow"),("FM-1_910","FELUCCA v1.0","allow"),
+           ("FM-1_900","PIGEON 0.1-dev","allow"),("FM-1_910","FELUCCA v1.0","allow"),
            ("FM-1_909","FELUCCA 0.9-BETA","refuse"),("FM-1_920","FELUCCA SLOOP 2.2","refuse"),
            ("FM-1_920","ChoralRoot 0.18","allow"),("FM-1_900","MELODEE v0.11.1","allow"),
            ("FM-1_920",None,"refuse"),("FM-1_900","Other v1.0","refuse")]
@@ -324,9 +324,9 @@ def compatibility():
         dev=FakeFM1(image,identity=ident,info=info)
         rc,out,err=cli([p,"--yes"],dev)
         ok(rc==8 and dev.upgrades==0 and "Return to the official V15" in err,"unsupported source refused before UPGRADE: "+str(info))
-    dev=FakeFM1(image,identity="FM-1_900",info="Pigeon 0.1-dev")
+    dev=FakeFM1(image,identity="FM-1_900",info="PIGEON 0.1-dev")
     rc,out,err=cli([p,"--yes"],dev)
-    ok(rc==0 and dev.upgrades==2,"Pigeon dev identity accepted only with read-only INFO")
+    ok(rc==0 and dev.upgrades==2,"PIGEON dev identity accepted only with read-only INFO")
     dev=FakeFM1(image,identity="FM-1_900",info="FELUCCA SLOOP 2.2")
     rc,out,err=cli([p,"--yes","--force"],dev)
     ok(rc==0 and dev.upgrades==2,"explicit CLI --force overrides unsupported-source guard")

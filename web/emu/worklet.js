@@ -46,6 +46,13 @@ if (typeof registerProcessor === "function") {
       this.port.onmessage = (e) => this.onMessage(e.data);
     }
 
+    loadBank(image,unlimited,restore=false) {
+      const ex=this.ex,bytes=new Uint8Array(image),ptr=ex.web_upload_buffer(bytes.length);
+      if(!ptr)throw Error('The browser has no more sample memory available.');
+      new Uint8Array(ex.memory.buffer,ptr,bytes.length).set(bytes);
+      if(ex.web_load_bank(bytes.length,unlimited?1:0,restore?1:0))throw Error('The sample bank could not be loaded.');
+      this.sentDraws=-1;
+    }
     async onMessage(m) {
       if (m.type === "load") {
         try {
@@ -57,6 +64,7 @@ if (typeof registerProcessor === "function") {
           ex.web_master(m.master ?? 700);
           ex.web_boot();
           this.ex = ex;
+          if(m.bank){this.loadBank(m.bank,m.unlimited,true);}
           this.sentWrites = ex.web_flash_writes_count();
           this.port.postMessage({ type: "ready", rate: ex.web_sample_rate() });
         } catch (err) {
@@ -66,7 +74,12 @@ if (typeof registerProcessor === "function") {
       }
       const ex = this.ex;
       if (!ex) return;
-      if (m.type === "buttons" || m.type === "keys") this.queue.push(m);
+      if(m.type==='clear-bank'){ex.web_clear_bank();this.port.postMessage({type:'bank-loaded',id:m.id});}
+      else if(m.type==='bank') {
+        try{this.loadBank(m.image,m.unlimited);this.port.postMessage({type:'bank-loaded',id:m.id});}
+        catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
+      }
+      else if (m.type === "buttons" || m.type === "keys") this.queue.push(m);
       else if (m.type === "enc") ex.web_enc(m.role, m.n | 0);
       else if (m.type === "master") ex.web_master(m.value | 0);
       else if (m.type === "midi") ex.web_midi(m.data[0] | 0, m.data[1] | 0, m.data[2] | 0);

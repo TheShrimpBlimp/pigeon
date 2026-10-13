@@ -8,7 +8,11 @@
 #define KO_APP_DATA_HI 0x92000u /* cfg_tool and cfg retain their original last sector */
 #define KO_TOP_LO 0xEA000u
 #define KO_TOP_HI 0xFC000u
+#ifdef FELUCCA_WEB
+#define KO_BANK_SIZE web_bank_capacity
+#else
 #define KO_BANK_SIZE 0x67000u /* 412 KiB, excludes USR1's metadata sector */
+#endif
 #define KO_BANK_HEAD 4096u
 #define KO_BANK_MAGIC 0x32424F4Bu /* KOB2 */
 /* JLFS app-area entry at +224, CRC protected and encrypted like its peers. */
@@ -17,6 +21,9 @@
 
 static inline unsigned ko_bank_phys(unsigned off, unsigned *avail)
 {
+#ifdef FELUCCA_WEB
+    if (web_bank_memory) { *avail=off<web_bank_capacity?web_bank_capacity-off:0;return 0x2000000u+off; }
+#endif
     static const unsigned lo[] = {0xA0000u, 0xB4000u, KO_APP_HI, KO_TOP_LO};
     static const unsigned size[] = {0x13000u, 0x28000u, KO_APP_DATA_HI-KO_APP_HI, KO_TOP_HI-KO_TOP_LO};
     unsigned i;

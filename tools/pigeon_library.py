@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Pigeon local sample library and complete archives. No device writes except upload/restore."""
+"""PIGEON local sample library and complete archives. No device writes except upload/restore."""
 import argparse, base64, json, shutil, struct, subprocess, tempfile, wave, zlib
 from pathlib import Path
 import ko_bank as bank
@@ -92,7 +92,7 @@ def capture(link):
     return dict(format='pigeon-archive',version=1,objects=objects,bank=base64.b64encode(image).decode(),bank_crc=zlib.crc32(image))
 
 def validate_archive(a):
-    if a.get('format')!='pigeon-archive' or a.get('version')!=1 or not isinstance(a.get('objects'),list):raise ValueError('Invalid Pigeon archive')
+    if a.get('format')!='pigeon-archive' or a.get('version')!=1 or not isinstance(a.get('objects'),list):raise ValueError('Invalid PIGEON archive')
     if [o['id'] for o in a['objects']]!=list(range(10)):raise ValueError('Incomplete archive')
     image=base64.b64decode(a['bank'],validate=True);bank.validate(image)
     if zlib.crc32(image)!=a['bank_crc']:raise ValueError('Sample bank CRC mismatch')
@@ -144,11 +144,11 @@ def main():
         if a.play:subprocess.run(['afplay',a.out],check=True)
     elif a.cmd=='info':bank.preview(Path(a.file).read_bytes())
     elif a.cmd=='backup':
-        archive=capture(Link());validate_archive(archive);Path(a.file).write_text(json.dumps(archive)+'\n');print('Complete Pigeon archive saved')
+        archive=capture(Link());validate_archive(archive);Path(a.file).write_text(json.dumps(archive)+'\n');print('Complete PIGEON archive saved')
     elif a.cmd=='restore':
         archive=json.loads(Path(a.file).read_text());validate_archive(archive)
         # Preserve an automatic recovery archive before the first restore write.
-        link=Link();backup=capture(link);Path(a.file+'.before-restore.pigeon').write_text(json.dumps(backup)+'\n');restore(link,archive);print('Pigeon archive restored')
+        link=Link();backup=capture(link);Path(a.file+'.before-restore.pigeon').write_text(json.dumps(backup)+'\n');restore(link,archive);print('PIGEON archive restored')
     elif a.cmd=='upload':
         image=Path(a.file).read_bytes();bank.validate(image);link=Link();backup=bank.export(link);Path(a.file+'.before-upload.kob').write_bytes(backup);bank.upload(link,image)
         actual=bank.export(link)
@@ -157,4 +157,4 @@ def main():
         print('Bank uploaded and verified')
 if __name__=='__main__':
     try:main()
-    except (ValueError,TimeoutError,subprocess.CalledProcessError) as e:raise SystemExit(f'Pigeon library: {e}')
+    except (ValueError,TimeoutError,subprocess.CalledProcessError) as e:raise SystemExit(f'PIGEON library: {e}')

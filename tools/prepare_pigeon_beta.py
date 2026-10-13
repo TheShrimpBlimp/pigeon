@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Build a local Pigeon candidate with checksums; never flash or publish it."""
+"""Build a local PIGEON candidate with checksums; never flash or publish it."""
 import argparse
 import hashlib
 import json
@@ -71,7 +71,7 @@ def main():
     source_hash_path = out / 'source-sha256.json'
     source_hash_path.write_text(json.dumps(source_hashes, indent=2) + '\n')
     values = list(map(int, metrics.groups()))
-    manifest = {'product': 'Pigeon', 'candidate': args.version, 'source_commit': revision,
+    manifest = {'product': 'PIGEON', 'candidate': args.version, 'source_commit': revision,
                 'source_has_uncommitted_changes': dirty, 'source_file_hashes_sha256': sha(source_hash_path), 'flashed': False, 'hardware_verified': False,
                 'identical_rebuild': args.verify_reproducible, 'host_suite_run': args.run_tests,
                 'target_budget_passed': True, 'sample_payload_bytes': 408 * 1024,

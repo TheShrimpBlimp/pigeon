@@ -1,4 +1,4 @@
-# Pigeon workflow expansion
+# PIGEON workflow expansion
 
 Authorized scope: both requested feature lists, excluding firmware performance
 macros. Build and test; do not flash, publish, push, or touch user audio files.

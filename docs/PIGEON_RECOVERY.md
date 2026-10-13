@@ -1,4 +1,4 @@
-# Pigeon update safeguards and recovery
+# PIGEON update safeguards and recovery
 
 Adapted from ChoralRoot FM-1 by Quixotic7 and the ChoralRoot contributors:
 https://github.com/Quixotic7/ChoralRootFM1 (GPL-3.0-only).
@@ -11,16 +11,16 @@ hub; keep the computer awake. Back up your instrument and keep it connected
 until the installer verifies the restarted identity.
 
 Browser and command-line installers read the running firmware's INFO text,
-because FM-1_9xx identities are shared by forks. Stock V1–V99, Pigeon, Felucca
+because FM-1_9xx identities are shared by forks. Stock V1–V99, PIGEON, Felucca
 1.0 or later, Melodee, and ChoralRoot are recognized update sources. Sloop,
 FM-1_000 rescue mode, Felucca 0.x/beta builds, missing INFO on a 9xx identity,
 and unknown firmware are refused before the update command. Follow the source
 firmware's official-return procedure first. CLI --force overrides this refusal
 and is explicitly unsafe. A checksum-verified official V15 return remains possible.
 
-## Recovery stub (Pigeon version 4)
+## Recovery stub (PIGEON version 4)
 
-This candidate adds ChoralRoot's boot-stub design, adapted to Pigeon's existing
+This candidate adds ChoralRoot's boot-stub design, adapted to PIGEON's existing
 sample storage boundaries. Flash 0x4120–0x4fff contains the pinned stub;
 the app starts at 0x5000. Flash sector 0x76000 holds the commit marker at
 0x76fe0. The app body must end before 0x76000. The KOPOOL2 boundary stays

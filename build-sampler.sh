@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Build the standalone Pigeon product profile.
+# Build the standalone PIGEON product profile.
 set -eu
 cd "$(dirname "$0")"
 if [ "$#" -ne 0 ]; then
-    printf '%s\n' 'build-sampler.sh builds the Pigeon development profile without arguments.' >&2
+    printf '%s\n' 'build-sampler.sh builds the PIGEON development profile without arguments.' >&2
     exit 2
 fi
 export FELUCCA_KO=1
@@ -15,4 +15,4 @@ export FELUCCA_CDC=0
 ./build.sh
 cp build/felucca.fwsc build/pigeon.fwsc
 cp build/felucca.bin build/pigeon.bin
-printf '%s\n' 'Pigeon: build/pigeon.fwsc'
+printf '%s\n' 'PIGEON: build/pigeon.fwsc'

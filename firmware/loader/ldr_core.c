@@ -20,7 +20,7 @@
  *      and flash: 4K boundary - 256 between 0x93000 and 0xFC000, outside
  *      Felucca's store, where only user data lives) so the SPL boots the new
  *      app, and resets.
- * With a Pigeon boot stub: invalidate its marker before any changed sector,
+ * With a PIGEON boot stub: invalidate its marker before any changed sector,
  * write the marker sector last. An incomplete body boots the staged loader.
  * Legacy firmware without a stub has no cold-boot recovery guarantee.
  *

@@ -1,6 +1,6 @@
-# Pigeon controls
+# PIGEON controls
 
-Pigeon is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
+PIGEON is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
 Choose the track first; edits belong to that track. Song 2 can hold drum loops.
 
 | Page | Controls |

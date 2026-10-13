@@ -8,7 +8,7 @@
                               JieLi SDK files under Apache-2.0, see LICENSING.md)
   webapp/installer/index.html index_pkg.html, self-contained (fm1pkg.js, fm1ota.js, metadata inlined)
   webapp/editor/index.html    editor.html (+ fukiai.ttf, FUKIAI-LICENSE.txt)
-  webapp/pigeon/index.html   offline local Pigeon sample GUI (+ bundled encoder/source)
+  webapp/pigeon/index.html   offline local PIGEON sample GUI (+ bundled encoder/source)
   src/                        not touched
 
   web/make_site.py build/felucca-X.Y.fwsc X.Y OUT_DIR
@@ -98,7 +98,7 @@ def main(pkg, version, out):
         shutil.copy(HERE / dependency, out / "webapp" / dependency)
     emulator = HERE.parent / "build" / "emu"
     if not (emulator / "felucca.wasm").is_file():
-        raise SystemExit("Build the Pigeon browser emulator first: web/emu/build.sh")
+        raise SystemExit("Build the PIGEON browser emulator first: web/emu/build.sh")
     shutil.copytree(emulator, out / "webapp" / "emu", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("native_check", "*.f32"))
     safe_version=re.sub(r'[^A-Za-z0-9.-]', '-', version)
@@ -106,7 +106,8 @@ def main(pkg, version, out):
     tokens={"VERSION":safe_version,"BUILD_DATE":datetime.now(ZoneInfo("America/Toronto")).strftime("%B %d, %Y"),"PACKAGE_BYTES":f"{len(raw):,}","SHA256":hashlib.sha256(raw).hexdigest()}
     for key,value in tokens.items():landing=landing.replace("{{"+key+"}}",html_escape.escape(value))
     (out / "index.html").write_text(landing,encoding="utf-8")
-    shutil.copy(HERE / "site" / "site.css",out / "site.css")
+    for asset in ("site.css","nixie.css","nixie.js"):
+        shutil.copy(HERE / "site" / asset,out / asset)
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
     guide=out / "guide";guide.mkdir(exist_ok=True)
     for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
@@ -122,6 +123,7 @@ def main(pkg, version, out):
     if worker_root:
         server=worker_root / 'server';server.mkdir(parents=True,exist_ok=True)
         shutil.copy(HERE / 'site' / 'worker' / 'index.js',server / 'index.js')
+        shutil.copy(HERE / 'site' / 'trial-api.js',worker_root / 'trial-api.js')
         metadata=worker_root / '.openai';metadata.mkdir(exist_ok=True)
         shutil.copy(hosting,metadata / 'hosting.json')
         config={"name":"pigeon-fm1","main":"index.js","compatibility_date":"2026-10-12","assets":{"directory":"../client","binding":"ASSETS","run_worker_first":["/api/*"]},"d1_databases":[{"binding":"DB","database_name":"pigeon-installs","database_id":"00000000-0000-4000-8000-000000000000"}]}

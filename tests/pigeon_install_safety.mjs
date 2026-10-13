@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
 import {Updater,classifyFirmware} from '../web/fm1ota.js';
-const cases=[['FM-1_015',null,'allow'],['FM-1_000',null,'refuse'],['FM-1_900','Pigeon 0.1-dev','allow'],['FM-1_910','FELUCCA v1.0','allow'],['FM-1_909','FELUCCA 0.9-BETA','refuse'],['FM-1_920','FELUCCA SLOOP 2.2','refuse'],['FM-1_920','ChoralRoot 0.18','allow'],['FM-1_900','MELODEE v0.11.1','allow'],['FM-1_920',null,'refuse'],['FM-1_900','Other v1.0','refuse']];
+const cases=[['FM-1_015',null,'allow'],['FM-1_000',null,'refuse'],['FM-1_900','PIGEON 0.1-dev','allow'],['FM-1_910','FELUCCA v1.0','allow'],['FM-1_909','FELUCCA 0.9-BETA','refuse'],['FM-1_920','FELUCCA SLOOP 2.2','refuse'],['FM-1_920','ChoralRoot 0.18','allow'],['FM-1_900','MELODEE v0.11.1','allow'],['FM-1_920',null,'refuse'],['FM-1_900','Other v1.0','refuse']];
 for(const [identity,info,verdict] of cases) {
  assert.equal(classifyFirmware(identity,info).verdict,verdict);
  const sent=[]; const replies=[];

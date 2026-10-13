@@ -173,16 +173,16 @@ run "KO: pads, independent chops, one shots, compression, metadata and unchanged
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_sequence_test" tests/ko_sequence_test.c -lm
 run "KO: 16 steps, sample-end timing, recording LEDs and all-key chops" "$OUT/ko_sequence_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_ui_test" tests/pigeon_ui_test.c -lm
-run "Pigeon: partial drawing, playback follow, step divisions and K1 response" "$OUT/pigeon_ui_test"
+run "PIGEON: partial drawing, playback follow, step divisions and K1 response" "$OUT/pigeon_ui_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_test.c -lm
-run "Pigeon: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
+run "PIGEON: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
-run "Pigeon: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
+run "PIGEON: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_expansion_test" tests/pigeon_expansion_test.c -lm
-run "Pigeon: envelopes, chop operations, quantization, choke and recording preferences" "$OUT/pigeon_expansion_test"
+run "PIGEON: envelopes, chop operations, quantization, choke and recording preferences" "$OUT/pigeon_expansion_test"
 $CC -w -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_performance_test" tests/pigeon_performance_test.c -lm
-run "Pigeon: tap/loop tempo, pitch/nudge/conditions, rolls, chop groups and alternate layouts" "$OUT/pigeon_performance_test"
-run "Pigeon: independent imports and complete archive integrity" python3 tests/pigeon_library_test.py
+run "PIGEON: tap/loop tempo, pitch/nudge/conditions, rolls, chop groups and alternate layouts" "$OUT/pigeon_performance_test"
+run "PIGEON: independent imports and complete archive integrity" python3 tests/pigeon_library_test.py
 run "KO kit upload: exact zones and pad order" python3 tests/ko_upload_test.py
 $CC -w -o "$OUT/lcd_audio_test" tests/lcd_audio_test.c
 run "LCD: DMA pixel order and bounded sample refill gaps during redraw" "$OUT/lcd_audio_test"
@@ -423,7 +423,7 @@ else
         run "ASan/UBSan: $t" "$A/$t"
     done
     $SCC -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -o "$A/pigeon_performance_test" tests/pigeon_performance_test.c -lm
-    run "ASan/UBSan: Pigeon sampler performance profile" "$A/pigeon_performance_test"
+    run "ASan/UBSan: PIGEON sampler performance profile" "$A/pigeon_performance_test"
     $SCC -o "$A/fuzz_ed" tests/fuzz_ed.c -lm
     run "ASan/UBSan fuzz: editor SysEx and raw USB-MIDI packets (20000, seed 7)" "$A/fuzz_ed" 20000 7
     $SCC -o "$A/fuzz_proj" tests/fuzz_proj.c -lm

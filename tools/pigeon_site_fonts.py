@@ -36,6 +36,6 @@ for name in ('waveform','sequencer','tempo-sync'):
         if not bounds.bounds:continue
         a,b,c,d=bounds.bounds;sx=(x1-x0)/(c-a);sy=(y1-y0)/(d-b)
         overlays.append(f'<rect x="{x0}" y="{y0}" width="{x1-x0}" height="{y1-y0}" fill="{colour(bg)}"/><path fill="{colour(fg)}" transform="matrix({sx} 0 0 {-sy} {x0-a*sx} {y0+d*sy})" d="{pen.getCommands()}"/>')
-    svg='<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 240 240"><title>'+html.escape('Pigeon '+name+' — original Little Character outlines, firmware layout')+'</title><g shape-rendering="crispEdges">'+''.join(parts)+'</g><g>'+''.join(overlays)+'</g></svg>'
+    svg='<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 240 240"><title>'+html.escape('PIGEON '+name+' — original Little Character outlines, firmware layout')+'</title><g shape-rendering="crispEdges">'+''.join(parts)+'</g><g>'+''.join(overlays)+'</g></svg>'
     (folder/(name+'.svg')).write_text(svg)
     print(name, len(overlays),'text runs rerendered from original TTF outlines')

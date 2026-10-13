@@ -6,17 +6,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Try Pigeon · FM1 browser emulator</title>
+<title>Try PIGEON · FM1 browser emulator</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22/%3E%3Crect x=%224%22 y=%224%22 width=%228%22 height=%228%22 fill=%22%23fff%22/%3E%3C/svg%3E">
-<meta name="description" content="Try Pigeon sampler firmware on a virtual FM1. Play, chop, and sequence bundled demo samples in your browser.">
+<meta name="description" content="Try PIGEON sampler firmware on a virtual FM1. Load your own samples, then chop, play, and sequence them in your browser.">
+<link rel="stylesheet" href="../../nixie.css">
 <style>
-/* DotGothic16 (SIL OFL 1.1, fonts/OFL.txt), cut to printable ASCII, for the knob labels */
-@font-face { font-family: "DotGothic16"; src: url("fonts/DotGothic16-subset.woff") format("woff"); font-display: swap; }
-:root { --bg: #d8e0cc; --fg: #111; --dim: #2c2c2e; --rule: #5a5a5e;
-        --body: #1d1d1f; --tray: #141415; --part: #2a2a2d; --edge: #3a3a3e; --label: #d6d6d8;
-        --lit: #fff4d6; --green: #5fe08a; color-scheme: light; }
+@font-face { font-family: Little; src: url("fonts/LittleCharacterRegular.ttf") format("truetype"); font-display: swap; }
+:root { --bg:#11150f; --fg:#edf1e8; --dim:#abb5a3; --rule:#35412e;
+        --body:#1a2116; --tray:#11150f; --part:#283321; --edge:#35412e; --label:#edf1e8;
+        --lit:#b9ef77; --green:#b9ef77; color-scheme:dark; }
+* { box-sizing:border-box; font-family:Little,monospace !important; font-synthesis:none; }
 html, body { background: var(--bg); }
-body { margin: 0; color: var(--fg); font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+body { margin: 0; color: var(--fg); font:16px/1.65 Little,monospace;letter-spacing:.025em; }
 main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 32px; }
 @media (orientation: portrait) and (max-width: 700px) { main { padding: 8px 8px 24px; } }
 a { color: inherit; }
@@ -28,7 +29,7 @@ a { color: inherit; }
 .hit.knob { cursor: ns-resize; border-radius: 50%; }
 .hit:focus-visible { outline: 2px solid var(--lit); outline-offset: 2px; }
 .face { transition: fill .05s; }
-.dim .face.btn { fill: #3a3934; }
+.dim .face.btn { fill: var(--edge); }
 .lit .face.btn { fill: var(--lit); }
 .lit text { fill: #1d1d1f; }
 .green .face.btn { fill: var(--green); }
@@ -36,12 +37,12 @@ a { color: inherit; }
 .face.key { fill: #0c0c0d; stroke: var(--edge); stroke-width: 1.5; }
 .slit { fill: #3a3a3c; transition: fill .05s; }
 .dim .slit { fill: #77777b; }
-.lit .slit { fill: #ececee; filter: drop-shadow(0 0 3px rgba(255, 255, 255, .6)); }
+.lit .slit { fill: var(--green); filter: drop-shadow(0 0 3px rgba(255, 255, 255, .6)); }
 /* #119: what can be pressed breathes, dark .. ~60 % of lit and back (hal/fm1_input.h fm1_led_breath, ~1.1 s; MENU >
  * LEDS DIM LO ~30 %): the peaks between dark and lit at ~0.8 / ~0.58 on screen (the LED's share, gamma-encoded) */
-@keyframes breath-btn { 0%, 100% { fill: #3a3934; } 50% { fill: #d8cfb6; } }
+@keyframes breath-btn { 0%, 100% { fill: var(--edge); } 50% { fill: #d8cfb6; } }
 @keyframes breath-slit { 0%, 100% { fill: #3a3a3c; } 50% { fill: #c8c8ca; } }
-@keyframes breath-btn-lo { 0%, 100% { fill: #3a3934; } 50% { fill: #aca592; } }
+@keyframes breath-btn-lo { 0%, 100% { fill: var(--edge); } 50% { fill: #aca592; } }
 @keyframes breath-slit-lo { 0%, 100% { fill: #3a3a3c; } 50% { fill: #a1a1a3; } }
 .breath .face.btn { animation: breath-btn 1.13s ease-in-out infinite; }
 .breath .slit { animation: breath-slit 1.13s ease-in-out infinite; }
@@ -60,20 +61,22 @@ a { color: inherit; }
 .start { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;
          background: rgba(0, 0, 0, .5); border-radius: 4% / 6%; }
 .start[hidden] { display: none; }
-.start button { font: inherit; font-size: 18px; padding: 12px 28px; background: #fff; color: #000; border: 0; cursor: pointer; }
+.start button { font: inherit; font-size: 18px; padding: 12px 28px; background:var(--green);color:#16210c; border: 0; cursor: pointer; }
 .start button:disabled { opacity: .4; cursor: progress; }
-.start p { margin: 0; max-width: 32em; text-align: center; color: #fff; }
+.start p { margin: 0; max-width: 32em; text-align: center; color: var(--fg); }
 .keys, footer { margin: 16px 0 0; color: var(--dim); text-align: center; }
 .keys span { white-space: nowrap; margin: 0 8px; }
-kbd { font: 600 11px ui-monospace, Menlo, monospace; border: 1px solid var(--rule); padding: 0 4px; color: var(--fg); }
+kbd { font:14px Little,monospace; border: 1px solid var(--rule); padding: 0 4px; color: var(--fg); }
 footer { margin-top: 12px; font-size: 12px; }
 footer nav a { margin: 0 6px; }
 footer small { font-size: 11px; opacity: .8; }
+h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(--green)}h2{font-size:30px;font-weight:400;line-height:1.2}header{padding-bottom:24px}section{padding:32px 0;border-bottom:1px solid var(--rule)}button,select,input{font:inherit;color:var(--fg);background:var(--body);border:1px solid var(--rule);padding:10px 12px;max-width:100%}button{cursor:pointer}button:hover{border-color:var(--green)}button:disabled,input:disabled,select:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--green);outline-offset:3px}input[type=file]{display:block;width:100%;margin:12px 0}input::file-selector-button{font-family:Little,monospace;background:var(--green);color:#16210c;border:0;padding:8px;cursor:pointer}.sample-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:24px}.sample-grid label{padding:16px;background:var(--body);min-width:0}.sample-grid span{display:block;color:var(--dim);font-size:13px;overflow-wrap:anywhere}.eyebrow{color:var(--green);font-size:12px;letter-spacing:.1em}.fine, #storage-help{color:var(--dim);font-size:13px}progress{width:100%;accent-color:var(--green);height:12px}.credits a{color:var(--green)}footer nav{display:flex;justify-content:center;gap:18px;margin:14px 0}@media(max-width:650px){.sample-grid{grid-template-columns:1fr}h1{font-size:46px}h2{font-size:25px}#midi-input{margin-top:10px}}
 </style>
 </head>
 <body>
 <main>
-<header><a href="../../">← Pigeon</a><h1>Try Pigeon.</h1><p>An FM1 running Pigeon, right in your browser. Switch on, then play the keys to hear the bundled CC0 demo samples.</p></header>
+<header><a href="../../">← PIGEON</a><h1>Try PIGEON.</h1><p>An FM1 running PIGEON, right in your browser. Switch on, add your own samples, and start chopping. Nothing is preloaded.</p></header>
+<div class="install-counter"><div id="trial-total" class="nixie-digits" role="img" aria-label="Trial counter loading"></div><div class="counter-caption">BROWSER TRIALS<p id="trial-count-status">Loading shared count…</p><p>One per browser · counted after switching on</p></div></div>
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 624" aria-hidden="true"></svg>
   <canvas id="screen" width="240" height="240" role="img" aria-label="The screen"></canvas>
@@ -89,13 +92,16 @@ footer small { font-size: 11px; opacity: .8; }
   <span><kbd>Shift</kbd>-click holds a button</span>
 </p>
 
-<section aria-label="Physical FM1 controller" style="margin-top:24px"><h2>Use your FM1 as the controller.</h2><button id="midi-connect" type="button" disabled>Connect FM1</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on the emulator first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Keys work with existing MIDI firmware. Knobs, buttons, and MASTER require the new Pigeon controller firmware. Connecting pauses the physical instrument and temporarily sends its panel to this browser; disconnecting returns control to the FM1. Sound comes from your computer.</p></section>
-<section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your virtual instrument saves in this browser. The demo songs and kit use short excerpts of the bundled factory audio. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
-<footer>
-  <small class="version">@VERSION@@PREVIEW@</small><br>
-  Pigeon by The Shrimp Blimp · Built on Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> · browser build after charlesvestal's <a href="https://github.com/charlesvestal/fm1-x0x">X0X</a> · DotGothic16 font, <a href="fonts/OFL.txt">SIL OFL 1.1</a><br>
-  <nav><a href="../installer/">Install</a><a href="../pigeon/">Sample tool</a><a href="https://github.com/TheShrimpBlimp/pigeon">Source</a></nav>
-  <small>M-VAVE and FM-1 are trademarks of their respective owners. Pigeon is not affiliated with or endorsed by them.</small>
+<section class="sample-loader" aria-labelledby="samples-heading"><p class="eyebrow">YOUR SOUNDS</p><h2 id="samples-heading">Add your samples.</h2>
+<label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 408 KiB</option><option value="unlimited">Unlimited storage</option></select>
+<p id="storage-help">The real FM1 shares 408 KiB between two songs and 16 drum pads. Imports use mono 22.05 kHz IMA ADPCM; this meter includes waveform and alignment overhead.</p>
+<div class="sample-grid"><label>Song 1<input id="song1-file" type="file" accept="audio/*" disabled><span id="song1-name">Empty</span></label><label>Song 2<input id="song2-file" type="file" accept="audio/*" disabled><span id="song2-name">Empty</span></label><label>Drum kit · up to 16 files<input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span></label></div>
+<p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="417792" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 408 KiB</p><button id="clear-samples" type="button" disabled>Clear samples</button>
+<p class="fine">Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
+<section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Use the on-screen knobs and buttons to edit. Sound comes from your computer.</p></section>
+<section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
+<section class="credits" aria-labelledby="credits-heading"><p class="eyebrow">EMULATOR CREDITS</p><h2 id="credits-heading">Built on open-source work.</h2><p>The browser emulator is adapted from <a href="https://github.com/charlesvestal/fm1-x0x">Charles Vestal’s FM1 X0X emulator</a>: its <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/x0x_web.c">simulated FM1 and WebAssembly wrapper</a>, <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/worklet.js">AudioWorklet audio runtime</a>, and <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/index.html">interactive browser panel</a> underpin this version.</p><p>Felucca’s browser adaptation and firmware are by Leo Kuroshita and Hügelton Instruments. PIGEON is created and directed by The Shrimp Blimp. The emulator runs PIGEON’s firmware against a simulated FM1.</p><p><a href="https://github.com/TheShrimpBlimp/pigeon/tree/main/web/emu">PIGEON emulator source</a> · <a href="../../firmware/LICENSE">GPL-3.0 licence</a> · lit.chr / Little Character Regular by S M Astrid Bin, <a href="fonts/LittleCharacter-OFL.txt">SIL OFL 1.1</a></p></section>
+<footer><small class="version">@VERSION@@PREVIEW@</small><nav><a href="../../">PIGEON</a><a href="../pigeon/">Sample tool</a><a href="../installer/">Install</a></nav><small>M-VAVE and FM-1 are trademarks of their respective owners. PIGEON is not affiliated with or endorsed by them.</small>
 </footer>
 </main>
 
@@ -109,7 +115,7 @@ const PLAY_GREEN = 14;
 const WHITE = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26];
 const BLACK = [1, 3, 5, 8, 10, 13, 15, 17, 20, 22, 25];
 const BLACK_AFTER = [0, 1, 2, 4, 5, 7, 8, 9, 11, 12, 14];      // the white key each black one follows
-const STORE = "pigeon-emu-flash-v1";
+const STORE = "pigeon-emu-flash-v2";
 
 // ------------------------------------------------------------------ the panel
 // Two drawings of the same controls: WIDE after the FM-1's own layout, TALL for a phone held upright (the
@@ -139,17 +145,16 @@ function el(tag, attrs, parent = svg) {
   parent.appendChild(e);
   return e;
 }
-const SANS = "-apple-system, 'Helvetica Neue', Arial, sans-serif", DOT = "'DotGothic16', " + SANS;
+const SANS="Little, monospace", DOT=SANS;
 function label(parent, x, y, s, size, font = SANS, ink = "var(--label)") {
   const t = el("text", { x, y, "text-anchor": "middle", "font-family": font,
-                         "font-size": size, "font-weight": 600, fill: ink, "letter-spacing": ".04em" }, parent);
+                         "font-size": size, "font-weight": 400, fill: ink, "letter-spacing": ".04em" }, parent);
   t.textContent = s;
   return t;
 }
 const KEYNAMES = ["F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯", "E"];
 const keyName = (k) => KEYNAMES[k % 12] + (3 + Math.floor((k + 5) / 12));
 
-let hardwareButtons=0, hardwareKeys=0;
 let node = null, btnMask = 0, keyMask = 0, latched = 0, masterValue = 700, lastLeds = [0, 0, 0, 0, 0], layout = null;
 const angle = Object.fromEntries(KNOBS.map((n) => [n, 0]));
 angle.MASTER = -135 + 270 * masterValue / 1023;
@@ -234,7 +239,7 @@ function build(name) {
 
 // ------------------------------------------------------------------ input
 function syncButtons(redraw) {
-  let m = latched | hardwareButtons;
+  let m = latched;
   for (const b of btnBy.values()) m |= 1 << b;
   if (m !== btnMask) { btnMask = m; send({ type: "buttons", mask: m }); }
   else if (!redraw) return;
@@ -246,7 +251,7 @@ function syncButtons(redraw) {
   }
 }
 function syncKeys(redraw) {
-  let m = hardwareKeys;
+  let m = 0;
   for (const k of keyBy.values()) m |= 1 << k;
   if (m !== keyMask) { keyMask = m; send({ type: "keys", mask: m }); }
   else if (!redraw) return;
@@ -327,7 +332,7 @@ function bindKnob(k) {
 const tall = matchMedia("(orientation: portrait) and (max-width: 700px)");
 build(tall.matches ? "tall" : "wide");
 tall.addEventListener("change", () => build(tall.matches ? "tall" : "wide"));
-document.fonts?.load("16px DotGothic16").then(() => build(layout), () => {});   // the labels' width: the hit areas
+document.fonts?.load("16px Little").then(() => build(layout), () => {});   // the labels' width: the hit areas
 
 // the computer keyboard, every key one control: F3..A#4 on the Z (white) and A (black) rows, B4..G5 on Q..O
 // in semitones, the twelve buttons on the number row in the panel's order (held while the key is), [ ] OCT
@@ -427,33 +432,75 @@ function saveFlash(sectors) {
   } catch { return false; }                                       // private mode, full: this session only
 }
 
-// Physical FM1: explicit connection, selected input only; never writes flash.
+// MIDI controller: explicit connection, selected input only; never writes flash.
 import {connectController} from './controller.js';
 let disconnectController=null;
 const midiConnect=document.getElementById('midi-connect'), midiDisconnect=document.getElementById('midi-disconnect');
 const midiStatus=document.getElementById('midi-status');
-const panelInput=frame=>{
-  hardwareButtons=frame.buttons;hardwareKeys=frame.keys;
-  syncButtons();syncKeys();
-  frame.enc.forEach((n,role)=>{const knob=knobs.find(k=>k.role===role);if(n && knob)turn(knob,n);});
-  if(frame.master!==null){
-    masterValue=frame.master;angle.MASTER=-135+270*masterValue/1023;
-    const knob=knobs.find(k=>k.role==='master');if(knob)drawKnob(knob);
-    send({type:'master',value:masterValue});
-  }
-};
 midiConnect.onclick=async()=>{
   midiConnect.disabled=true;
   try {
     if(!navigator.requestMIDIAccess)throw Error('Web MIDI is unavailable. Use desktop Chrome or Edge.');
-    disconnectController=await connectController({navigator,select:document.getElementById('midi-input'),status:midiStatus,send,onPanel:panelInput});
+    disconnectController=await connectController({navigator,select:document.getElementById('midi-input'),status:midiStatus,send});
     midiDisconnect.disabled=false;
   }catch(e){midiStatus.textContent=e.message;midiConnect.disabled=false;}
 };
-const disconnect=()=>{disconnectController?.();disconnectController=null;midiDisconnect.disabled=true;midiConnect.disabled=false;midiStatus.textContent='FM1 disconnected. Physical controls return within 1.5 seconds.';};
+const disconnect=()=>{disconnectController?.();disconnectController=null;midiDisconnect.disabled=true;midiConnect.disabled=false;midiStatus.textContent='MIDI controller disconnected.';};
 midiDisconnect.onclick=disconnect;
 window.addEventListener('pagehide',disconnect);
 document.addEventListener('visibilitychange',()=>{if(document.hidden && disconnectController)disconnect();});
+
+import {renderNixie} from '../../nixie.js';
+import {trialTotal,recordTrial} from './trial-count.js';
+const trialDigits=document.getElementById('trial-total'),trialCountStatus=document.getElementById('trial-count-status');
+renderNixie(trialDigits,'000000');
+let shownTrials=0;
+function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,String(total).padStart(6,'0'));trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
+trialTotal().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
+window.addEventListener('online',()=>{if(loaderReady)recordTrial().then(showTrials).catch(()=>{});});
+import {buildBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
+let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,image:null},bankId=0;
+const bankRequests=new Map(), sampleStatus=document.getElementById('sample-status'), mode=document.getElementById('storage-mode');
+function refreshSamples(){
+  for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
+  document.getElementById('song1-name').textContent=samples.songs[0]?.name||'Empty';
+  document.getElementById('song2-name').textContent=samples.songs[1]?.name||'Empty';
+  document.getElementById('kit-name').textContent=samples.pads.length?samples.pads.map(p=>p.name).join(', '):'Empty';
+  const used=samples.image? samples.image.length-HEAD:0;
+  const meter=document.getElementById('sample-meter');meter.max=samples.unlimited?Math.max(used,1):FM1_POOL-HEAD;meter.value=used;
+  document.getElementById('sample-usage').textContent=`${(used/1024).toFixed(1)} KiB`+(samples.unlimited?' · unlimited mode': ' / 408 KiB');
+  document.getElementById('storage-help').textContent=samples.unlimited?'No FM1 storage cap. Available browser memory still applies. These samples may not fit a physical FM1.':'The real FM1 shares 408 KiB between two songs and 16 drum pads. Imports use mono 22.05 kHz IMA ADPCM; this meter includes waveform and alignment overhead.';
+  if(!samples.image)sampleStatus.textContent='Load Song 1 to begin. No samples are preloaded.';
+}
+function sendBank(image,unlimited,clear=false){return new Promise((resolve,reject)=>{
+  const id=++bankId,timer=setTimeout(()=>{bankRequests.delete(id);reject(Error('Loading timed out. Reload the emulator.'));},30000);
+  bankRequests.set(id,{resolve,reject,timer});
+  const copy=image?.slice();node.port.postMessage({type:clear?'clear-bank':'bank',id,image:copy,unlimited},copy?[copy.buffer]:[]);
+});}
+async function changeSamples(operation){
+  if(loaderBusy)return;loaderBusy=true;refreshSamples();sampleStatus.textContent='Processing your audio locally…';
+  try{
+    const next=await operation();
+    if(next.songs[0]){next.image=buildBank(next.songs,next.pads,next.unlimited);await sendBank(next.image,next.unlimited);}else{next.image=null;await sendBank(null,false,true);}
+    samples=next;mode.value=samples.unlimited?'unlimited':'fm1';refreshSamples();sampleStatus.textContent=next.image?'Samples loaded. Play the keys to try them.':'Samples cleared.';
+    try{await bankStorage(samples);}catch{sampleStatus.textContent+=' Browser storage is unavailable; this session only.';}
+  }catch(e){mode.value=samples.unlimited?'unlimited':'fm1';sampleStatus.textContent=e.message;}
+  finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
+}
+for(let slot=0;slot<2;slot++)document.getElementById(`song${slot+1}-file`).onchange=e=>{
+  const file=e.target.files[0];if(!file)return;e.target.value='';changeSamples(async()=>{
+    if(slot===1&&!samples.songs[0])throw Error('Load Song 1 before Song 2.');
+    const songs=samples.songs.slice();songs[slot]=await decodeSample(file,audioContext);return {...samples,songs};
+  });
+};
+document.getElementById('kit-files').onchange=e=>{
+  const files=[...e.target.files];if(!files.length)return;e.target.value='';changeSamples(async()=>{
+    if(!samples.songs[0])throw Error('Load Song 1 before adding a drum kit.');if(files.length>16)throw Error('Choose up to 16 drum samples.');
+    const pads=[];for(const file of files)pads.push(await decodeSample(file,audioContext));return {...samples,pads};
+  });
+};
+mode.onchange=()=>changeSamples(async()=>({...samples,unlimited:mode.value==='unlimited'}));
+document.getElementById('clear-samples').onclick=()=>changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',image:null}));
 
 // ------------------------------------------------------------------ switching on
 const status = document.getElementById("status");
@@ -463,19 +510,24 @@ async function switchOn() {
   go.disabled = true;
   go.textContent = "Starting…";
   try {
-    const ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    const ac = audioContext = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
     const [wasm] = await Promise.all([
       fetch("felucca.wasm").then((r) => { if (!r.ok) throw new Error(`felucca.wasm: ${r.status}`); return r.arrayBuffer(); }),
       ac.audioWorklet.addModule("worklet.js")]);
     node = new AudioWorkletNode(ac, "felucca", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     node.onprocessorerror=()=>{say("Audio processing stopped. Reload the page to restart.");document.getElementById("start").hidden=false;};
     node.connect(ac.destination);
+    const saved=await bankStorage().catch(()=>null);
+    if(saved?.songs){samples=saved;document.getElementById('storage-mode').value=saved.unlimited?'unlimited':'fm1';}
     let warned = false;
     await new Promise((res, rej) => {
       node.port.onmessage = (e) => {
         const m = e.data;
         if (m.type === "ready") res();
         else if (m.type === "error") rej(new Error(m.message));
+        else if(m.type==='bank-loaded'||m.type==='bank-error'){
+          const pending=bankRequests.get(m.id);if(pending){bankRequests.delete(m.id);clearTimeout(pending.timer);m.type==='bank-loaded'?pending.resolve():pending.reject(Error(m.message));}
+        }
         else if (m.type === "frame") {
           document.getElementById("screen").dataset.deviceTime=m.now;
           if (m.fb) drawScreen(m.fb);
@@ -486,7 +538,7 @@ async function switchOn() {
           }
         }
       };
-      node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue }, [wasm]);
+      node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue, bank:saved?.image, unlimited:saved?.unlimited }, [wasm]);
     });
     await ac.resume();
     document.getElementById("start").hidden = true;
@@ -496,6 +548,8 @@ async function switchOn() {
     syncKeys();
     send({ type: "visible", on: !document.hidden });
     midiConnect.disabled=false;
+    loaderReady=true;refreshSamples();
+    recordTrial().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
   } catch (err) {
     node = null;
     go.disabled = false;

@@ -80,7 +80,7 @@ static inline uint32_t smp_byte(uint32_t off)
 #endif
 #ifdef FELUCCA_WEB
     /* User sample offsets address the simulated NOR, beyond the factory array. */
-    return *(const volatile uint8_t *)((uintptr_t)SMP_DATA + off);
+    return fm1_web_sample_byte((uintptr_t)SMP_DATA + off);
 #else
     return SMP_DATA[off];
 #endif
@@ -154,6 +154,9 @@ static void smp_user_scan(uint32_t k)
  * (engines.c snd_missing, ui_input.c sample_notice). */
 static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int32_t lp, uint32_t *ph, int32_t *y)
 {
+#ifdef FELUCCA_WEB
+    return; /* Empty browser slots stay silent until the user imports audio. */
+#endif
     uint32_t i, p = *ph, inc = pitch_inc((uint32_t)clamp(m->pitch16 + d16, 0, 2047));
     int32_t s = *y;
     for (i = 0; i < n; i++, p += inc) {

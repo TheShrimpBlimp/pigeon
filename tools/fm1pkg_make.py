@@ -31,7 +31,7 @@ from pathlib import Path
 APP_SLOT = 0x8DFBC
 KO_APP_HI = 0x78000
 KO_APP_SLOT = APP_SLOT - (0x93000 - KO_APP_HI)
-# Pigeon boot-stub layout, adapted from ChoralRoot FM-1 (GPL-3.0-only).
+# PIGEON boot-stub layout, adapted from ChoralRoot FM-1 (GPL-3.0-only).
 STUB_LEN = 0xEE0
 STUB_SIG = b"CRSTUB"
 BODY_MAX = 0x71000  # body 0x5000..0x75fff; last whole slot sector is 0x76000
@@ -212,7 +212,7 @@ def flash_image(app, key, ko_storage=False):
     if len(app) > app_slot:
         raise SystemExit(f"app is {len(app)} B, the slot is {app_slot} B")
     if has_stub(app) and not ko_storage:
-        raise SystemExit("Pigeon boot stub requires the KOPOOL2 layout")
+        raise SystemExit("PIGEON boot stub requires the KOPOOL2 layout")
     app = commit(app) if has_stub(app) else app + b"\xFF" * (app_slot - len(app))
     blk = 0x120 + app_slot + len(cfg_tool)              # app_area_head block size
     area = bytearray(b"\xFF" * blk)

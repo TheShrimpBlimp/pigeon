@@ -200,5 +200,5 @@ assert.deepEqual(
 );
 await assert.rejects(new Device(async () => [0]).writeBank(kit));
 console.log(
-  "Pigeon GUI: all bitrates, bank integrity, independent replacement, kit, archive preflight, transfer/readback, and restore order passed",
+  "PIGEON GUI: all bitrates, bank integrity, independent replacement, kit, archive preflight, transfer/readback, and restore order passed",
 );

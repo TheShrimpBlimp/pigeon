@@ -148,7 +148,7 @@ def model_of(text):
 # Compatibility policy adapted from ChoralRoot FM-1 contributors (GPL-3.0-only).
 # https://github.com/Quixotic7/ChoralRootFM1
 RECOVERY_URL = "https://github.com/Quixotic7/MvaveFM1Unbricker"
-REFUSE_REASON = "ChoralRoot reports failed installs over Sloop and old Felucca betas. This firmware is not recognized as a supported Pigeon update source."
+REFUSE_REASON = "ChoralRoot reports failed installs over Sloop and old Felucca betas. This firmware is not recognized as a supported PIGEON update source."
 
 
 def classify_firmware(identity, info):
@@ -189,7 +189,7 @@ def classify_firmware(identity, info):
 
 def refusal_text(name):
     return (f"Installing over {name} is not supported: {REFUSE_REASON} "
-            f"Return to the official V15 firmware with the installer you used for {name} first, then install Pigeon. "
+            f"Return to the official V15 firmware with the installer you used for {name} first, then install PIGEON. "
             f'If an FM-1 is already dark (black screen, a "WL82 UBOOT1.00" USB disk): {RECOVERY_URL}')
 
 

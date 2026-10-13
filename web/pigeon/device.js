@@ -32,7 +32,7 @@ export function validateArchive(a) {
     !Array.isArray(a.objects) ||
     a.objects.length !== 10
   )
-    throw Error("Not a complete Pigeon archive");
+    throw Error("Not a complete PIGEON archive");
   const bank = unb64(a.bank);
   inspect(bank);
   if (bkCrc(bank) !== a.bank_crc) throw Error("Sample bank checksum mismatch");
@@ -75,7 +75,7 @@ export class Device {
       !same(a.slice(2, 8), [...u21(SIZE), ...u21(HEAD)]) ||
       a[9] !== 3
     )
-      throw Error("Connected firmware does not support Pigeon sample banks");
+      throw Error("Connected firmware does not support PIGEON sample banks");
     return a;
   }
   async ok(cmd, args = [], timeout) {
@@ -96,7 +96,7 @@ export class Device {
       v = new DataView(header.buffer),
       used = v.getUint32(8, true);
     if (v.getUint32(0, true) !== 0x32424f4b || used < HEAD || used > SIZE)
-      throw Error("Device has no valid Pigeon bank");
+      throw Error("Device has no valid PIGEON bank");
     const chunks = [];
     for (let off = 0; off < used; off += 256) {
       chunks.push(await read(off, Math.min(256, used - off)));

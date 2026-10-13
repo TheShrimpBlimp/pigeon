@@ -1,4 +1,4 @@
-# Pigeon performance and compatibility audit
+# PIGEON performance and compatibility audit
 
 Source audit and host validation, updated 2026-10-13. No device writes or flashes.
 
@@ -74,19 +74,19 @@ Do not claim the sample-loader issue fixed solely from simulated transfer tests.
 ## Inherited screen-lint limitation
 
 The broad `tests/run_tests.sh` also draws retired Felucca synth pages and checks
-their original font alignment. With Pigeon's Little Character font it reports
+their original font alignment. With PIGEON's Little Character font it reports
 legacy layout/alignment failures; that whole suite is not claimed green. Those
 checks remain intact. `tests/run_pigeon_tests.sh` is the product-specific gate,
 retaining audio/storage compatibility checks and adding `pigeon_screen_test.c`
-for actual Pigeon pages: 815 text draws across all three tracks, zero fixed-label
+for actual PIGEON pages: 815 text draws across all three tracks, zero fixed-label
 clipping failures. This clipping check does not prove every layout is visually
 ideal or replace a physical screen review.
 
 ## Recovery candidate validation (2026-10-13)
 
-The ChoralRoot-derived Pigeon stub v4 is pinned by SHA-256 in
+The ChoralRoot-derived PIGEON stub v4 is pinned by SHA-256 in
 `firmware/stub/stub.lock`; the built image matches that pin. Target compilation
-and memory checks passed. The complete Pigeon product suite, JS transport tests,
+and memory checks passed. The complete PIGEON product suite, JS transport tests,
 Python installer simulations, browser install-refusal test, and desktop/mobile
 website checks passed. All 92 golden renders remain unchanged.
 

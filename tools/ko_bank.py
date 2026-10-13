@@ -271,7 +271,7 @@ def storage_summary(image):
 
 def preview(image):
     s=storage_summary(image)
-    print('Pigeon — combined sample storage')
+    print('PIGEON — combined sample storage')
     for i,song in enumerate(s['songs'],1):
         print(f"  Song {i}: {song['name']} / {song['seconds']:.2f}s / {song['codec']} / {song['bytes']/1024:.1f} KiB")
     print(f"  Drum kit: {s['drums']['pads']} pads / {s['drums']['bytes']/1024:.1f} KiB")

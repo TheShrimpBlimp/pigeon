@@ -1,6 +1,6 @@
-# Building Pigeon
+# Building PIGEON
 
-The standalone Pigeon development profile is built with `./build-sampler.sh`.
+The standalone PIGEON development profile is built with `./build-sampler.sh`.
 It enables the sampler interface and expanded sample storage, producing
 `build/pigeon.fwsc` and `build/pigeon.bin`. The underlying build also produces
 the compatibility filenames below. `./build.sh` alone builds the inherited
@@ -40,7 +40,7 @@ The underlying build makes three files in `build/`:
 
 On Linux x86-64 the toolchain runs natively and Docker is not needed.
 
-## Build Pigeon
+## Build PIGEON
 
 ```sh
 PYTHON=.venv/bin/python ./build-sampler.sh
@@ -58,7 +58,7 @@ and the version string `v1.0`; the package is `build/felucca-1.0.fwsc`, and
 (`felucca-1.0-app.bin`), `SHA256SUMS`, the sample attribution, `LICENSE`, `LICENSING.md` and
 `LICENSES/` (the package contains Apache-2.0 SDK files, so the licence texts travel with it).
 
-The Pigeon script selects `FELUCCA_KO=1`, `FELUCCA_KO_STORAGE=1`,
+The PIGEON script selects `FELUCCA_KO=1`, `FELUCCA_KO_STORAGE=1`,
 `FELUCCA_SAMPLER_ONLY=1`, and `FELUCCA_KO_DUAL=1` for two songs and the drum kit.
 The shared flash bank and MP3 decoder replace factory
 sample audio and changes the application reservation; see
@@ -161,7 +161,7 @@ The ordinary `build.sh` Felucca profile remains available.
 
 `build-sampler.sh` also sets `FELUCCA_KO_DUAL=1` for independent Song 2.
 
-## Pigeon sample GUI
+## PIGEON sample GUI
 
 Run `python3 tools/pigeon_gui.py` (Windows: `py tools/pigeon_gui.py`) and open
 <http://127.0.0.1:8765/pigeon/> in Chrome or Edge. The same GUI is included at
@@ -169,14 +169,14 @@ Run `python3 tools/pigeon_gui.py` (Windows: `py tools/pigeon_gui.py`) and open
 before disconnecting the network. See [the GUI guide](web/pigeon/README.md) for
 imports, device transfers, recovery backups, offline caching, and browser tests.
 
-For a local Pigeon candidate with checksums, repeated-build comparison and host
-validation, see [Pigeon beta preparation](docs/PIGEON_BETA.md). Control reference:
-[Pigeon controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
+For a local PIGEON candidate with checksums, repeated-build comparison and host
+validation, see [PIGEON beta preparation](docs/PIGEON_BETA.md). Control reference:
+[PIGEON controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
 findings: [performance audit](docs/PIGEON_PERFORMANCE_AUDIT.md).
 
-## Pigeon recovery candidate
+## PIGEON recovery candidate
 
-Pigeon builds include the ChoralRoot-derived boot stub pinned by
+PIGEON builds include the ChoralRoot-derived boot stub pinned by
 `firmware/stub/stub.lock`. Its marker occupies flash sector `0x76000`, below
 KOPOOL2; the existing sample layout remains intact. See
 [recovery and first-install limits](docs/PIGEON_RECOVERY.md).
@@ -186,9 +186,9 @@ and the existing product checks. The recovery suite generates synthetic host
 fixtures under `build/pigeon-tests/recovery/`; never install those on hardware.
 Intended stub changes require a version bump and `FM1_STUB_LOCK=update`.
 
-The Pigeon browser trial includes bundled CC0 demo samples. Verify it with
+The PIGEON browser trial starts empty and accepts users’ own samples with hardware-limited or browser-only expanded storage. Verify it with
 `node web/emu/pigeon_test.mjs` and `node web/emu/test-browser.mjs` (the latter
 uses the repository-local Playwright setup described in web/pigeon/README.md).
 Firmware controller lease tests: compile `tests/browser_controller_test.c` with
 `-Ibuild/gen -Ifirmware/src -lm`. Full panel USB control requires the updated
-Pigeon firmware; physical-device verification remains pending.
+PIGEON firmware; physical-device verification remains pending.

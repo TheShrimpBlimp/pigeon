@@ -1,17 +1,17 @@
-# Pigeon licensing
+# PIGEON licensing
 
-The sampler uses a Pigeon text splash; no photograph is distributed.
+The sampler uses a PIGEON text splash; no photograph is distributed.
 See `assets/branding/README.md` for branding details.
 
-Pigeon is a derivative of Felucca 1.5.1, developed as an independent FM1
+PIGEON is a derivative of Felucca 1.5.1, developed as an independent FM1
 performance sampler. Original copyright and license notices remain intact.
 
-Pigeon is free software, licensed under the GNU General Public License, version 3 only
-(`GPL-3.0-only`, full text in `LICENSE`). That covers Pigeon source contributions and inherited GPL code. Creative assets
+PIGEON is free software, licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`, full text in `LICENSE`). That covers PIGEON source contributions and inherited GPL code. Creative assets
 retain their documented licenses. A few bundled or ported parts keep their own
 licences; they are listed below, and their licence texts are in `LICENSES/`.
 
-The Pigeon sampler profile bundles libmad under
+The PIGEON sampler profile bundles libmad under
 GPL-2.0-or-later. Its original notices and license are retained in
 `firmware/vendor/libmad/COPYRIGHT` and `firmware/vendor/libmad/COPYING`; provenance
 and the local bounds fix are documented in `firmware/vendor/libmad/FELUCCA_ORIGIN.md`.
@@ -19,11 +19,11 @@ The combined firmware remains GPL-3.0-only.
 
 Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 
-## Pigeon authorship and AI-use disclosure
+## PIGEON authorship and AI-use disclosure
 
-Pigeon is directed and maintained by its human project creator, The Shrimp Blimp,
+PIGEON is directed and maintained by its human project creator, The Shrimp Blimp,
 and human contributors. Original Felucca and third-party authors retain their
-copyrights. Pigeon-specific contributions are distributed under GPL-3.0-only;
+copyrights. PIGEON-specific contributions are distributed under GPL-3.0-only;
 this does not transfer ownership of inherited work or separately licensed assets.
 
 **AI was used for menial coding. All assets, direction, conceptualization, and
@@ -47,9 +47,9 @@ Three source files are ports and keep the licence of their originals:
 `firmware/src/fm6_core.c` (msfa, Apache-2.0). The firmware built with them is GPL-3.0-only as
 a whole.
 
-You may use, study, change and share Pigeon under the GPL. If you distribute Pigeon, or
+You may use, study, change and share PIGEON under the GPL. If you distribute PIGEON, or
 firmware derived from it, you must also give your recipients its complete corresponding
-source under the same licence. That includes devices that ship with modified Pigeon inside.
+source under the same licence. That includes devices that ship with modified PIGEON inside.
 
 ## Inherited Hügelton Instruments work
 
@@ -128,7 +128,7 @@ Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
 
 ## Little Character display font
 
-Pigeon uses Little Character Regular by S M Astrid Bin, copyright May 2025,
+PIGEON uses Little Character Regular by S M Astrid Bin, copyright May 2025,
 under the SIL Open Font License 1.1. The unmodified font is vendored at
 `assets/fonts/LittleCharacterRegular.ttf`; its original license is in
 `assets/fonts/LittleCharacter-OFL.txt` and `LICENSES/LittleCharacter-OFL.txt`.
@@ -137,7 +137,7 @@ rasterized glyphs generated from this font.
 
 ## Browser sample encoder
 
-The Pigeon sample GUI bundles lamejs 1.2.1, Alex Zhukov's JavaScript port of
+The PIGEON sample GUI bundles lamejs 1.2.1, Alex Zhukov's JavaScript port of
 LAME, under LGPL-3.0. Its readable runtime at `web/pigeon/vendor/lame.js` is
 modified only to set the output sample rate explicitly. Original corresponding
 source, attribution, and LGPL/GPL texts are shipped in that directory and with
@@ -146,11 +146,11 @@ This browser dependency is separate from the firmware image.
 
 ## ChoralRoot recovery and installer safeguards
 
-Pigeon's boot stub (`firmware/stub/`), commit-marker packing, commit-last loader
+PIGEON's boot stub (`firmware/stub/`), commit-marker packing, commit-last loader
 ordering, staged-loader retention, and installer source-firmware classification
 are adapted from [ChoralRoot FM-1](https://github.com/Quixotic7/ChoralRootFM1)
 by Quixotic7 and the ChoralRoot FM-1 contributors, under GPL-3.0-only.
 Reference revision: `aa5875af20e3046ee161f988c5d91d3ae66d0c74`.
-Their copyright notices are retained. Pigeon uses its own KOPOOL2 flash layout;
+Their copyright notices are retained. PIGEON uses its own KOPOOL2 flash layout;
 see [recovery details](docs/PIGEON_RECOVERY.md). The linked Felucca and ChoralRoot
 credits in the tools follow ChoralRoot's explicit foundation attribution.

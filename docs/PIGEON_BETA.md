@@ -1,4 +1,4 @@
-# Preparing a Pigeon beta candidate
+# Preparing a PIGEON beta candidate
 
 Use the pinned target compiler provisioned by the existing build workflow and
 Python from the project virtual environment. From the firmware repository:
@@ -29,6 +29,6 @@ recording and save/reboot. Browser-only tests cannot establish those outcomes.
 Keep the previous flashed package and a full project/sample recovery archive.
 
 The bank capacity and serialized FUNA parameter IDs/layout remain unchanged.
-Extended conditions and pitch locks need current Pigeon firmware; older firmware
+Extended conditions and pitch locks need current PIGEON firmware; older firmware
 may reject such projects. Imported audio and private recovery archives are not
 release assets. Label this build a candidate until hardware checks pass.

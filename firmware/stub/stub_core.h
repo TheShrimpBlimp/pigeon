@@ -35,7 +35,7 @@
  * drives it high again before a hand-over. Nothing in this file changed but the version. */
 #ifndef STUB_CORE_H
 #define STUB_CORE_H
-/* Pigeon v4 adapts ChoralRoot v3 to the KOPOOL2 application boundary. */
+/* PIGEON v4 adapts ChoralRoot v3 to the KOPOOL2 application boundary. */
 #define STUB_VERSION 4                   /* in the stub's header (crt0_stub.S: no C suffix) and the RAM mailbox */
 #ifndef __ASSEMBLER__
 #include <stdint.h>

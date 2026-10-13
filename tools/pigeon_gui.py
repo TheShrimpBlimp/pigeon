@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Serve the self-contained Pigeon GUI locally; no audio uploads or device writes.
+"""Serve the self-contained PIGEON GUI locally; no audio uploads or device writes.
 
   python3 tools/pigeon_gui.py                 # macOS / Linux
   py tools/pigeon_gui.py                     # Windows
@@ -38,7 +38,7 @@ def main():
     except OSError as e:
         parser.exit(1, f'Cannot start local GUI: {e}. Try a different --port.\n')
     url = f'http://127.0.0.1:{server.server_port}/pigeon/'
-    print(f'Pigeon GUI: {url}\nOnly the web/ directory is served. Press Ctrl+C to stop.', flush=True)
+    print(f'PIGEON GUI: {url}\nOnly the web/ directory is served. Press Ctrl+C to stop.', flush=True)
     if not args.no_open:
         webbrowser.open(url)
     try:

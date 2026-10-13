@@ -21,11 +21,12 @@
 #include <stdint.h>
 
 #define FELUCCA_WEB 1
+#include "../../firmware/hal/fm1_web_sample.h"
 #define FELUCCA_KO 1
 #define FELUCCA_KO_DUAL 1
 #define FELUCCA_SAMPLER_ONLY 1
 #define FELUCCA_KO_STORAGE 1
-#define KO_BANK_XIP(off) ((const uint8_t *)nor + (off))
+#define KO_BANK_XIP(off) ((off) >= 0x2000000u ? web_bank_memory + (off) - 0x2000000u : (const uint8_t *)nor + (off))
 #ifndef FELUCCA_CDC
 #define FELUCCA_CDC 0                    /* as src/felucca.c: MENU > USB SERIAL is there (nothing behind it) */
 #endif
@@ -37,6 +38,8 @@
 #define FELUCCA_VERSION "WEB"
 #endif
 
+static uint8_t *web_bank_memory, *web_upload_memory;
+static uint32_t web_bank_capacity=0x67000u, web_upload_capacity;
 static uint8_t nor[0x100000];            /* the SPI NOR (erased: 0xFF) */
 #define SMP_USER_XIP(k) ((const uint8_t *)nor + SMP_USER_BASE + (k) * SMP_USER_SIZE)   /* eng_sample.c */
 #define main hostsim_main
@@ -255,34 +258,9 @@ static uint32_t lcd_audio_last, lcd_audio_enabled;
 /* --------------------------------------------------------- the device --- */
 static uint32_t web_booted, web_boot_ms, web_last_frame;
 
-/* Seed only an empty browser instrument with the bundled CC0 factory audio.
- * Existing saves always win. No imported user recordings are shipped. */
-#include "web_demo.h"
-static void web_demo_samples(void)
-{
-    for (uint32_t slot = 0; slot < 3; slot++) {
-        uint8_t *p = nor + SMP_USER_BASE + slot * SMP_USER_SIZE;
-        if (*(uint32_t *)p != 0xFFFFFFFFu) continue;
-        smp_user_hdr_t *h = (smp_user_hdr_t *)p;
-        memset(h, 0, sizeof *h);
-        h->magic = SMP_USER_MAGIC; h->version = 1; h->nz = slot == 1 ? 16 : 1;
-        h->data_len = 16384;
-        memcpy(p + SMP_USER_DATA, WEB_DEMO_DATA, h->data_len);
-        h->crc = st_crc32(p + SMP_USER_DATA, h->data_len);
-        for (uint32_t j = 0; j < h->nz; j++) {
-            smp_zone_t *z = &h->zone[j];
-            z->off = slot == 1 ? j * 1024 : 0;
-            z->n = slot == 1 ? 2048 : 32768; z->le = z->n - 1;
-            z->rate = 32768; z->root16 = (60 + (slot == 1 ? j : 0)) * 16;
-            z->lo = slot == 1 ? 60 + j : 0; z->hi = slot == 1 ? 60 + j : 127;
-        }
-    }
-}
-
 /* main.c fm1_main's boot, up to the main loop (no USB, no UART, no panel setup) */
 static void web_power_on(void)
 {
-    web_demo_samples();
     persist_boot();
     settings_init();
     usb_serial_apply();
@@ -522,3 +500,56 @@ EXPORT uint32_t web_screen_draws(void) { return web_draws; }
 EXPORT uint32_t web_now_ms(void) { return fm1_ms; }
 EXPORT uint32_t web_playing(void) { return song.playing; }
 EXPORT uint32_t web_sample_rate(void) { return FS; }
+
+/* Browser-only sample pool: the hardware mode still uses the real NOR extents. */
+EXPORT uint8_t *web_upload_buffer(uint32_t bytes)
+{
+#ifdef __wasm__
+    if (bytes > web_upload_capacity || web_upload_memory == web_bank_memory) {
+        uint32_t pages=(bytes+65535u)/65536u;
+        size_t start=__builtin_wasm_memory_grow(0,pages);
+        if(start==(size_t)-1) return 0;
+        web_upload_memory=(uint8_t *)(start*65536u);web_upload_capacity=pages*65536u;
+    }
+    return web_upload_memory;
+#else
+    return 0;
+#endif
+}
+EXPORT uint32_t web_load_bank(uint32_t bytes,uint32_t unlimited,uint32_t restore)
+{
+    if (!web_upload_memory || bytes<4096u || bytes>web_upload_capacity || (!unlimited && bytes>0x67000u)) return 1;
+    ko_bank_hdr_t *h=(ko_bank_hdr_t *)web_upload_memory;
+    if(h->used!=bytes) return 1;
+    uint8_t *old=web_bank_memory;uint32_t old_capacity=web_bank_capacity;
+    web_bank_memory=web_upload_memory;web_bank_capacity=unlimited?bytes:0x67000u;
+    ko_bank_hdr_t second={0};if(h->version==3)memcpy(&second,web_upload_memory+sizeof *h,sizeof second);
+    if(!ko_bank_header_valid(h) || ko_bank_crc(4096u,bytes-4096u)!=h->crc ||
+       !ko_bank_index_of(h) || !ko_bank_second_valid(h,&second)) {
+        web_bank_memory=old;web_bank_capacity=old_capacity;return 2;
+    }
+    seq_stop();for(uint32_t k=0;k<NTRK;k++)trk_all_off(&trk[k]);
+    if(!unlimited) {
+        web_bank_memory=0;web_bank_capacity=0x67000u;
+        for(uint32_t off=0;off<bytes;) {
+            uint32_t avail,phys=ko_bank_phys(off,&avail),n=bytes-off;if(n>avail)n=avail;
+            memcpy(nor+phys,web_upload_memory+off,n);off+=n;
+        }
+    }
+    memcpy(nor+SMP_USER_BASE,web_upload_memory,4096u);
+    if(!restore)memset(nor+SMP_USER_BASE+SLC_REC_OFF,255,4096u);
+    ko_bank_scan();memset(ko_states,0,sizeof ko_states);ko.on=1;ko_setup();
+    ko_prepare();ui.force=1;web_flash_writes++;
+    return ko_bank_active?0:3;
+}
+EXPORT uint32_t web_samples_loaded(void) { return ko_bank_active; }
+EXPORT uint32_t web_sample_pool_size(void) { return web_bank_capacity; }
+
+EXPORT void web_clear_bank(void) {
+    seq_stop();for(uint32_t k=0;k<NTRK;k++)trk_all_off(&trk[k]);
+    web_bank_memory=0;web_bank_capacity=0x67000u;
+    for(uint32_t off=0;off<0x67000u;) {uint32_t avail,phys=ko_bank_phys(off,&avail);memset(nor+phys,255,avail);off+=avail;}
+    memset(nor+SMP_USER_BASE+SLC_REC_OFF,255,4096u);
+    for(uint32_t k=0;k<SMP_USER_SLOTS;k++)smp_user_scan(k);
+    memset(ko_states,0,sizeof ko_states);ko.on=1;ko_setup();ui.force=1;web_flash_writes++;
+}

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Product identity only: storage, protocol and update IDs stay compatible. */
 #if FELUCCA_KO
-#define FW_DISPLAY_NAME "Pigeon"
+#define FW_DISPLAY_NAME "PIGEON"
 #define FW_DISPLAY_TITLE "PIGEON"
 #define FW_DISPLAY_VERSION "v0.1-dev"
 #define FW_DISPLAY_DESCRIPTION "Performance sampler"

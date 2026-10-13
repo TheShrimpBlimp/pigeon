@@ -72,5 +72,5 @@ int main(int argc,char **argv) {
     int bad=exercise(base,nf,0);free(old);
     free(logical);logical=load_logical(argv[3],&logical_len);nf=flash_off(logical);
     memcpy(base,nor,sizeof base);bad+=exercise(base,nf,1);
-    puts(bad?"PIGEON RECOVERY FAILED":"Pigeon recovery tests passed");return bad!=0;
+    puts(bad?"PIGEON RECOVERY FAILED":"PIGEON recovery tests passed");return bad!=0;
 }

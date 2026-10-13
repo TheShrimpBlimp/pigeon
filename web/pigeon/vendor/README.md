@@ -9,6 +9,6 @@ is distributed under LGPL-3.0 in the readable runtime. Upstream corresponding so
 original notices, and build scripts; upstream example media omitted).
 LAME: https://lame.sourceforge.net/ .
 
-The upstream encoder already disables its bit reservoir and VBR/ID3 tags. Pigeon
+The upstream encoder already disables its bit reservoir and VBR/ID3 tags. PIGEON
 uses mono 22,050 Hz at 24–64 kbps, validates every frame, adds the firmware index,
 and uses LAME's 576-sample encoder delay plus the decoder's 529-sample delay.

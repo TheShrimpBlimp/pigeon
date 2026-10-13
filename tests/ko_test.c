@@ -54,8 +54,8 @@ static void render_blocks(uint32_t blocks)
 int KO_TEST_MAIN(void)
 {
     int bad = 0; ui_power_on(); memset(&ko, 0, sizeof ko); memset(ko_flash, 255, sizeof ko_flash);
-    bad += check("sampler profile identifies itself as Pigeon",
-                 !strcmp(FW_DISPLAY_NAME, "Pigeon") && !strcmp(SPLASH_LINES[0], "Pigeon"));
+    bad += check("sampler profile identifies itself as PIGEON",
+                 !strcmp(FW_DISPLAY_NAME, "PIGEON") && !strcmp(SPLASH_LINES[0], "PIGEON"));
 #if BRAND_SPLASH_AVAILABLE
     draw_splash();
     int photo_ok = BRAND_SPLASH_W <= 208 && BRAND_SPLASH_H <= 192;

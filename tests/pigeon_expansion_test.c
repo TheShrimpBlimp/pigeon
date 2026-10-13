@@ -34,5 +34,5 @@ int PIGEON_EXPANSION_MAIN(int argc,char **argv){
  ko.view=22;trk[0].step[2].n=1;trk[0].step[2].time=ST_NOTE;trk[0].step[2].note[0]=60;trk[0].step[2].vel=100;(void)motion_set_lock(&trk[0],2,P_SGATE,50);ko_knob(1,1);int16_t gate=0;
  bad+=check("clear notes preserves locks",!trk[0].step[2].n&&motion_lock_get(&trk[0],2,P_SGATE,&gate));ko_knob(2,1);bad+=check("clear locks is separate",!motion_lock_get(&trk[0],2,P_SGATE,&gate));
  project_t p;project_store_t wire;project_capture(&p);if(!proj_pack(&wire,&p))bad++;else {FILE *f=fopen("build/expansion-project.funa","wb");if(!f)bad++;else{fwrite(&wire,1,sizeof wire,f);fclose(f);}}
- printf("Pigeon expansion: %s\n",bad?"FAILED":"PASSED");return bad!=0;
+ printf("PIGEON expansion: %s\n",bad?"FAILED":"PASSED");return bad!=0;
 }

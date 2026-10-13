@@ -279,7 +279,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "Pigeon browser: import/encoding, waveform/chop/pad/pattern editing, names, firmware validation, export and reload offline, persistence, and responsive layout passed",
+    "PIGEON browser: import/encoding, waveform/chop/pad/pattern editing, names, firmware validation, export and reload offline, persistence, and responsive layout passed",
   );
 } finally {
   await browser.close();

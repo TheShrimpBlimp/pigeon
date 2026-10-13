@@ -66,7 +66,11 @@ static int ko_bank_header_valid(const ko_bank_hdr_t *h)
     if (h->magic != KO_BANK_MAGIC || (h->version != 2 && !(FELUCCA_KO_DUAL && h->version==3)) || h->hcrc != ~c ||
         h->used < KO_BANK_HEAD || h->used > KO_BANK_SIZE ||
         h->codec < KO_CODEC_IMA || h->codec > KO_CODEC_MP3 ||
-        h->rate < 4000u || h->rate > 44100u || !h->samples || h->samples > 8000000u ||
+        h->rate < 4000u || h->rate > 44100u || !h->samples ||
+#ifndef FELUCCA_WEB
+        h->samples > 8000000u ||
+#endif
+        0 ||
         !ko_bank_range(h->song_off,h->song_len,h->used) || !h->song_len ||
         !ko_bank_range(h->kit_off,h->kit_len,h->used) || h->kit_n > 16 ||
         !h->auto_n || h->auto_n > 32 || h->apos[0] ||
@@ -86,7 +90,11 @@ static int ko_bank_header_valid(const ko_bank_hdr_t *h)
     }
     if (h->codec == KO_CODEC_IMA)
         return !h->frames && !h->skip && h->samples <= h->song_len*2u;
-    return h->rate == 22050u && h->frames >= 3u && h->frames < 16000u &&
+    return h->rate == 22050u && h->frames >= 3u && (h->frames < 16000u ||
+#ifdef FELUCCA_WEB
+           web_bank_capacity>0x67000u ||
+#endif
+           0) &&
            (h->frames+1u)*4u < h->song_len && h->skip <= 2304u && h->skip < h->frames*576u &&
            h->samples <= h->frames*576u-h->skip;
 }

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Pigeon product checks; inherited all-engine screen lint remains in run_tests.sh.
+# PIGEON product checks; inherited all-engine screen lint remains in run_tests.sh.
 set -eu
 cd "$(dirname "$0")/.."
 OUT=build/pigeon-tests

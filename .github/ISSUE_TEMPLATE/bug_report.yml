@@ -1,15 +1,15 @@
 name: Bug report
-description: Something in Pigeon doesn't work as it should (one bug per issue)
+description: Something in PIGEON doesn't work as it should (one bug per issue)
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Report a reproducible Pigeon bug. For questions or feature requests, open a blank issue.
+        Report a reproducible PIGEON bug. For questions or feature requests, open a blank issue.
   - type: input
     id: version
     attributes:
-      label: Pigeon version
+      label: PIGEON version
       description: Hold HOME > ABOUT on the FM-1
       placeholder: "0.1-dev"
     validations:

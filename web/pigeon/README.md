@@ -1,6 +1,6 @@
-# Pigeon FM1 Sampler GUI
+# PIGEON FM1 Sampler GUI
 
-A standalone browser tool for Pigeon on the FM1. The same files run on macOS,
+A standalone browser tool for PIGEON on the FM1. The same files run on macOS,
 Windows, and Linux, locally or on an HTTPS website. There is no backend, account,
 CDN, analytics, or audio upload. Chrome or Edge is recommended for USB MIDI/SysEx.
 Other browsers may support local editing while lacking device connectivity.
@@ -58,11 +58,11 @@ and conditions require the updated firmware. Save full session
 exports the edits; Restore session applies them to the instrument. Local session
 edits persist across reloads.
 
-**Firmware update** accepts a local Pigeon `.fwsc`, validates package checksums
+**Firmware update** accepts a local PIGEON `.fwsc`, validates package checksums
 and identity, reads the connected version, saves a full recovery session before
 installing, and verifies the returning identity. Keep USB connected during the
 update. This path uses the existing firmware update protocol; physical-device
-verification of the new GUI remains pending. Updating needs a responsive Pigeon
+verification of the new GUI remains pending. Updating needs a responsive PIGEON
 device so the mandatory backup can complete. For a device already in loader
 mode, use the CLI installer recovery procedure.
 

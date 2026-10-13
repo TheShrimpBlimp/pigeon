@@ -67,7 +67,7 @@ function parseIdentity(pkt) {
 
 // Compatibility policy adapted from ChoralRoot FM-1 contributors (GPL-3.0-only).
 // https://github.com/Quixotic7/ChoralRootFM1
-// ---- which firmware runs: may Pigeon be installed over it? (docs/INSTALL-COMPAT.md; tools/fm1_install.py
+// ---- which firmware runs: may PIGEON be installed over it? (docs/INSTALL-COMPAT.md; tools/fm1_install.py
 // classify_firmware is the same table). identity: the handshake text ("FM-1_015", "FM-1_910"); info: the version the
 // backup protocol's INFO answers ("FELUCCA v1.0", "MELODEE v0.11.1", "ChoralRoot 0.12"), null when it does not answer.
 // -> { verdict: "allow" | "refuse" | "loader", kind, name }. The 9xx identities are shared by every Felucca-based
@@ -97,10 +97,10 @@ export function classifyFirmware(identity, info) {
 }
 export function refusalText(name) {
   return `Installing over ${name} is not supported: ${REFUSE_REASON} ` +
-    `Return to the official V15 firmware with the installer you used for ${name} first, then install Pigeon. ` +
+    `Return to the official V15 firmware with the installer you used for ${name} first, then install PIGEON. ` +
     `If an FM-1 is already dark (black screen, a "WL82 UBOOT1.00" USB disk): ${RECOVERY_URL}`;
 }
-export const REFUSE_REASON = "ChoralRoot reports failed installs over Sloop and old Felucca betas. This firmware is not recognized as a supported Pigeon update source.";
+export const REFUSE_REASON = "ChoralRoot reports failed installs over Sloop and old Felucca betas. This firmware is not recognized as a supported PIGEON update source.";
 
 // one MIDI in/out pair with a SysEx queue
 class Link {

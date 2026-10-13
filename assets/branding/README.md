@@ -1,3 +1,3 @@
-# Pigeon splash
+# PIGEON splash
 
-The sampler uses the Pigeon text splash. No photograph is distributed.
+The sampler uses the PIGEON text splash. No photograph is distributed.

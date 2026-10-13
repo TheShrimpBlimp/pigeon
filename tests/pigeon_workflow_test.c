@@ -41,5 +41,5 @@ ko.view=18;chain_defaults(&chain_config);chain_config.count=2;chain_config.row[0
  seq_stop();ko_launch_ready=0;song.playing=0;ko_launch_pending=255;
  project_capture(&project);packed=proj_pack(&store,&project)&&proj_import(&proj_scratch,&store,sizeof store);
  bad+=check("launch preference survives project serialization",packed && proj_scratch.chain.rsv[0]==1);
- printf("Pigeon workflow: %s\n",bad?"FAILED":"PASSED");return bad!=0;
+ printf("PIGEON workflow: %s\n",bad?"FAILED":"PASSED");return bad!=0;
 }
