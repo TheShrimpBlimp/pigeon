@@ -18,7 +18,7 @@ install finishes the write. Needs mido with python-rtmidi.
 
 Exit codes: 0 done, 1 cancelled or other error, 2 bad arguments or package,
 3 FM-1 not found, 4 connection lost or the device stopped, 5 timeout (no
-loader / no restart), 6 wrong model, or another identity after the install.
+loader / no restart), 6 wrong model or restart identity, 8 unsupported source firmware.
 """
 import argparse
 import hashlib
@@ -44,7 +44,7 @@ DELAY = {"open": 0.3, "start": 2.0, "reply": 0.01, "loader": 3.0, "reboot": 3.0,
          "wait_loader": 30.0, "wait_reboot": 40.0}
 
 EXIT = {"usage": 2, "badpkg": 2, "notfound": 3, "model": 6, "lost": 4, "stopped": 4, "badreq": 4,
-        "noloader": 5, "noreturn": 5, "mismatch": 6}
+        "noloader": 5, "noreturn": 5, "mismatch": 6, "unsafe": 8}
 
 
 class InstallError(Exception):
@@ -143,6 +143,69 @@ def logical_image(raw):
 
 def model_of(text):
     return text.split("_")[0].removeprefix("ota-")
+
+
+# Compatibility policy adapted from ChoralRoot FM-1 contributors (GPL-3.0-only).
+# https://github.com/Quixotic7/ChoralRootFM1
+RECOVERY_URL = "https://github.com/Quixotic7/MvaveFM1Unbricker"
+REFUSE_REASON = "ChoralRoot reports failed installs over Sloop and old Felucca betas. This firmware is not recognized as a supported Pigeon update source."
+
+
+def classify_firmware(identity, info):
+    """-> (verdict "allow" | "refuse" | "loader", kind, name)"""
+    m = re.fullmatch(r"(ota-)?([^_]+)_(\d+)", identity or "", re.I)
+    v = (info or "").strip()
+    if not m:
+        return "refuse", "unknown", f"an unknown firmware ({identity or 'no identity'})"
+    if m[1]:
+        return "loader", "loader", identity
+    num = int(m[3])
+    if m[2] != "FM-1":
+        return "refuse", "unknown", identity
+    if 1 <= num < 100:
+        return "allow", "stock", f"the official M-VAVE firmware ({identity})"
+    if num == 0:
+        return "refuse", "sloop", "Sloop's rescue mode (FM-1_000)"
+    if num < 900:
+        return "refuse", "unknown", f"an unknown firmware ({identity})"
+    if re.match(r"pigeon\b", v, re.I):
+        return "allow", "pigeon", v
+    if re.match(r"choralroot\b", v, re.I):
+        return "allow", "choralroot", v
+    if re.match(r"melodee\b", v, re.I):
+        return "allow", "melodee", f"Melodee ({v[8:]})"
+    if re.search(r"sloop", v, re.I):
+        return "refuse", "sloop", "Sloop"
+    f = re.fullmatch(r"felucca\s+(v)?(\d+)\.(\d+)(\S*)", v, re.I)
+    # Felucca 1.0 and later: "v1.0", "v1.0.1", "v1.1-rc1" (build.py "v" + release); the 0.x betas: "0.9-BETA", "0.5 BETA"
+    if f and int(f[2]) >= 1 and not re.search(r"beta", v, re.I) and (f[1] or not f[4]):
+        return "allow", "felucca", f"Felucca {f[1] or 'v'}{f[2]}.{f[3]}{f[4]}"
+    if re.match(r"felucca\b", v, re.I):
+        return "refuse", "felucca-beta", f"a Felucca beta or a firmware based on one ({v})"
+    if v:
+        return "refuse", "unknown", f"an unknown firmware ({identity}, {v})"
+    return "refuse", "unknown", f"an unknown Felucca-based firmware ({identity})"
+
+
+def refusal_text(name):
+    return (f"Installing over {name} is not supported: {REFUSE_REASON} "
+            f"Return to the official V15 firmware with the installer you used for {name} first, then install Pigeon. "
+            f'If an FM-1 is already dark (black screen, a "WL82 UBOOT1.00" USB disk): {RECOVERY_URL}')
+
+
+def firmware_info(link):
+    """Read-only editor INFO; absent or malformed replies remain unidentified."""
+    link.drain()
+    if not link.send(bytes([240, 125, 70, 76, 1, 247])):
+        return None
+    end = time.monotonic() + 1.2
+    while time.monotonic() < end:
+        p = link.read(end - time.monotonic())
+        if p is None:
+            break
+        if len(p) >= 30 and p[:5] == bytes([240,125,70,76,1]) and p[-1] == 247:
+            return printable(p[5:29].split(b"\0",1)[0]).strip()
+    return None
 
 
 # ------------------------------------------------------------------ MIDI ---
@@ -358,12 +421,18 @@ class Updater:
         step("done", back.id.text)
         return back.id.text
 
-    def install(self, dev, image, product, step=lambda *a: None):
+    def install(self, dev, image, product, step=lambda *a: None, allow_unsafe=False, returning_stock=False):
         """running firmware -> loader -> new firmware; dev from find(). A device already in
         update mode only needs the write."""
         if model_of(dev.id.text) != model_of(product):
             dev.link.close()
             raise InstallError("model", f"the device is {dev.id.text}, the package is for {product}")
+        if not dev.id.loader and not returning_stock:
+            info = firmware_info(dev.link) if dev.id.version >= 900 else None
+            verdict, _, name = classify_firmware(dev.id.text, info)
+            if verdict != "allow" and not allow_unsafe:
+                dev.link.close()
+                raise InstallError("unsafe", refusal_text(name))
         ota = dev if dev.id.loader else self.check(dev, image, step)
         self.write(ota, image, step)
         return self.verify(product, step)
@@ -384,7 +453,7 @@ def load_package(path, force):
         raise InstallError("badpkg", f"{path}: no Felucca update loader in this package; only Felucca's own "
                                      "packages and the unmodified official V15 (FM-1.fwsc) are installed "
                                      "(--force overrides)")
-    return product, logical_image(raw)
+    return product, logical_image(raw), official
 
 
 def not_found(up):
@@ -429,7 +498,7 @@ def run(a, backend, out, ask):
         mode = "update loader (update not finished)" if dev.id.loader else "running"
         print(f"{dev.id.text}  [{mode}]  port: {dev.name}", file=out)
         return 0
-    product, image = load_package(a.package, a.force)
+    product, image, official = load_package(a.package, a.force)
     print(f"package: {product}  ({a.package})", file=out)
     dev = up.find()
     if not dev:
@@ -442,7 +511,8 @@ def run(a, backend, out, ask):
         return 1
     prog = Progress(out)
     try:
-        up.install(dev, image, product, prog)
+        up.install(dev, image, product, prog, allow_unsafe=a.force,
+                   returning_stock=official)
     finally:
         prog.end()
     return 0
@@ -461,7 +531,7 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
     ap.add_argument("--info", action="store_true", help="print the identity of the connected FM-1")
     ap.add_argument("--port", metavar="NAME", help="MIDI port to use (part of its name)")
     ap.add_argument("--yes", action="store_true", help="do not ask for confirmation")
-    ap.add_argument("--force", action="store_true", help="install a package without the Felucca loader marker")
+    ap.add_argument("--force", action="store_true", help="override package marker or unsupported source-firmware checks (risk of an unbootable FM1)")
     a = ap.parse_args(argv)
     if bool(a.info) == bool(a.package):
         ap.error("give a PACKAGE.fwsc or --info")

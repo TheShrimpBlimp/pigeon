@@ -50,6 +50,7 @@ def main():
             raise SystemExit('Node.js required for --run-tests codec verification')
         env['NODE'] = node
         run(['sh', 'tests/run_pigeon_tests.sh'], 'host-tests.log')
+        run(['sh', 'tests/run_pigeon_recovery_tests.sh'], 'recovery-tests.log')
 
     metrics = re.search(r'image (\d+) B; RAM .data\+\.bss (\d+) B of (\d+); pool (\d+) B of (\d+)', (out / 'build.log').read_text())
     if not metrics:
@@ -59,7 +60,7 @@ def main():
         dest = out / name.replace('pigeon.', 'pigeon-' + args.version + '.')
         shutil.copyfile(ROOT / 'build' / name, dest)
         artifacts[dest.name] = {'bytes': dest.stat().st_size, 'sha256': sha(dest)}
-    for name in ('KO_MODE.md', 'PIGEON_CONTROLS.md', 'PIGEON_BETA.md', 'PIGEON_PERFORMANCE_AUDIT.md'):
+    for name in ('KO_MODE.md', 'PIGEON_CONTROLS.md', 'PIGEON_BETA.md', 'PIGEON_PERFORMANCE_AUDIT.md', 'PIGEON_RECOVERY.md'):
         source = ROOT / 'docs' / name
         if source.exists():
             shutil.copyfile(source, out / name)

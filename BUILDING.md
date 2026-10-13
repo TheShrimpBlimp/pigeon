@@ -173,3 +173,15 @@ For a local Pigeon candidate with checksums, repeated-build comparison and host
 validation, see [Pigeon beta preparation](docs/PIGEON_BETA.md). Control reference:
 [Pigeon controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
 findings: [performance audit](docs/PIGEON_PERFORMANCE_AUDIT.md).
+
+## Pigeon recovery candidate
+
+Pigeon builds include the ChoralRoot-derived boot stub pinned by
+`firmware/stub/stub.lock`. Its marker occupies flash sector `0x76000`, below
+KOPOOL2; the existing sample layout remains intact. See
+[recovery and first-install limits](docs/PIGEON_RECOVERY.md).
+
+After building, run `PYTHON=.venv/bin/python tests/run_pigeon_recovery_tests.sh`
+and the existing product checks. The recovery suite generates synthetic host
+fixtures under `build/pigeon-tests/recovery/`; never install those on hardware.
+Intended stub changes require a version bump and `FM1_STUB_LOCK=update`.

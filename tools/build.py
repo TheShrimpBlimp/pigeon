@@ -30,9 +30,12 @@ FW = SRC / "firmware"
 OUT = SRC / "build"
 GEN = OUT / "gen"
 LDR = OUT / "loader"
+STB = OUT / "stub"
+STUB_XIP = 0x02000120
 sys.path.insert(0, str(SRC / "tools"))
 import fm1pkg_make  # noqa: E402
 import lz4blk  # noqa: E402
+STUB_LEN = fm1pkg_make.STUB_LEN
 
 APP_XIP = 0x02000120                # app.bin offset 0 in the XIP map; the SPL jumps here
 APP_SLOT = fm1pkg_make.APP_SLOT
@@ -168,11 +171,71 @@ def build_loader():
     if not image or len(image) > 0x14000:
         raise SystemExit("loader: image empty or too big")
     ota = ldr_wrap(image)
+    if len(ota) > 0x4000:
+        raise SystemExit("loader: staged image reaches the recovery record sector")
     (LDR / "ota.bin").write_bytes(ota)
     bss = [int(ln.split()[0], 16) for ln in syms.splitlines() if ln.rstrip().endswith("_bss_end")]
     print(f"loader: image {len(image)} B at {LOADER_LOAD:#x}" + (f", bss end {bss[0]:#x}" if bss else ""))
     print(f"loader: ota.bin {len(ota)} B")
     return ota
+
+
+# Copyright (C) 2026 ChoralRoot FM-1 contributors: pinned boot stub build.
+def build_stub():
+    """firmware/stub -> app.bin's first STUB_LEN bytes (0xFF padded). Code and constants only, built from its own
+    sources alone, so it is the same bytes in every build: the loader rewrites sector 0x4000 only when it changes
+    (docs/BOOT-SAFETY.md). firmware/stub/stub.lock records the version and hash of the stub that is meant to ship."""
+    STB.mkdir(parents=True, exist_ok=True)
+    src = FW / "stub"
+    tc_all(("cc", "-Ifirmware/stub", "-c", src / "crt0_stub.S", "-o", STB / "crt0_stub.o"),
+           ("cc", *CFLAGS, "-Ifirmware/stub", "-c", src / "stub.c", "-o", STB / "stub.o"))
+    elf = STB / "stub.elf"
+    tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", src / "stub.ld",
+       STB / "crt0_stub.o", STB / "stub.o", "-o", elf)
+    (STB / "stub.bin").unlink(missing_ok=True)
+    _, dis, hdr, syms = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, STB / "stub.bin"),
+                               ("common/bin/objdump", "-d", elf),
+                               ("common/bin/objdump", "-h", elf),
+                               ("common/bin/objdump", "-t", elf))
+    (STB / "stub.dis").write_text(dis)
+    img = (STB / "stub.bin").read_bytes()
+    for ln in hdr.splitlines():     # no .data, no .bss: nothing but .text may have a size
+        p = ln.split()
+        if len(p) > 3 and p[0].isdigit() and p[1].startswith(".") and int(p[2], 16) and \
+                p[1] not in (".text", ".shstrtab", ".symtab", ".strtab"):
+            raise SystemExit(f"stub: section {p[1]} holds {int(p[2], 16)} B; the stub is code and constants only")
+    m = re.search(r"^([0-9a-f]+) .*\s_start$", syms, re.M)
+    if not m or int(m.group(1), 16) != STUB_XIP:
+        raise SystemExit(f"stub: _start is not at {STUB_XIP:#x}")
+    if img[:4] != bytes.fromhex("04818000"):
+        raise SystemExit(f"stub: starts with {img[:4].hex()}, not the entry the SPL expects (goto +4; rts)")
+    if not fm1pkg_make.has_stub(img + bytes(STUB_LEN)):
+        raise SystemExit("stub: no CRSTUB signature at offset 8")
+    if not img or len(img) > STUB_LEN - 256:     # keep a margin: a stub that grows to the brim cannot be fixed
+        raise SystemExit(f"stub: {len(img)} B does not fit {STUB_LEN} B with 256 B to spare")
+    for ln in dis.splitlines():     # nothing may call or load an address in the chip ROM (as the app's check)
+        mm = LINE.match(ln)
+        for v in (re.findall(r"= (-?\d+) <|call -?\d+ <[^:>]*: ([0-9a-f]+) >", mm.group(3)) if mm else ()):
+            val = (int(v[0]) & 0xFFFFFFFF) if v[0] else int(v[1], 16) & 0xFFFFFFFF
+            if 0xFFC00000 <= val < 0xFFD00000:
+                raise SystemExit(f"stub: reference to ROM address {val:#010x}")
+    used = len(img)
+    img += b"\xff" * (STUB_LEN - len(img))
+    ver, sha = fm1pkg_make.stub_version(img), hashlib.sha256(img).hexdigest()
+    print(f"stub: {used} B of {STUB_LEN} ({100 * used / STUB_LEN:.1f}%), version {ver}, sha256 {sha[:16]}")
+    lock = src / "stub.lock"
+    want = lock.read_text().split() if lock.exists() else []
+    if want != [str(ver), sha]:
+        if os.environ.get("FM1_STUB_LOCK") == "update":
+            lock.write_text(f"{ver} {sha}\n")
+            print(f"stub: {lock.relative_to(SRC)} updated")
+        else:
+            msg = (f"the boot stub differs from {lock.relative_to(SRC)} ({' '.join(want)[:20] or 'none'}..): installing "
+                   "this build rewrites sector 0x4000, the one window an interruption is not rescued in. If the "
+                   "change is meant: bump STUB_VERSION (firmware/stub/stub_core.h), rebuild with "
+                   "FM1_STUB_LOCK=update, and say so in the release notes")
+            raise SystemExit("build: " + msg)
+    return img
 
 
 # ---- app
@@ -188,7 +251,7 @@ def ld_regions():
     return regs
 
 
-def build_app():
+def build_app(stub=b""):
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
@@ -233,9 +296,11 @@ def build_app():
                    "-c", vendor / f"{s}.c", "-o", extra[i]) for i,s in enumerate(sources)],
                ("cc", *vf, "-c", FW / "src" / "ko_mp3.c", "-o", extra[-1]))
         linker = OUT / "app_ko.ld"
-        linker.write_text((FW / "app.ld").read_text().replace("LENGTH = 0x8DFBC",f"LENGTH = {fm1pkg_make.KO_APP_SLOT:#x}")
+        linker.write_text((FW / "app.ld").read_text().replace("LENGTH = 0x8DFBC",f"LENGTH = {fm1pkg_make.BODY_MAX:#x}" if stub else f"LENGTH = {fm1pkg_make.KO_APP_SLOT:#x}")
                           .replace("LENGTH = 72K","LENGTH = 64K").replace("ORIGIN = 0x01C1A000","ORIGIN = 0x01C18000")
-                          .replace("LENGTH = 0x5A000","LENGTH = 0x5C000"))
+                          .replace("LENGTH = 0x5A000","LENGTH = 0x5C000")
+                          .replace("ORIGIN = 0x02000120", "ORIGIN = 0x02001000" if stub else "ORIGIN = 0x02000120")
+                          .replace("ORIGIN = 0x01C7C000, LENGTH = 0x3D50", "ORIGIN = 0x01C7C020, LENGTH = 0x3D30" if stub else "ORIGIN = 0x01C7C000, LENGTH = 0x3D50"))
     tc("pi32v2/bin/ld", *(["--gc-sections"] if extra else []), "-T", linker,
        OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o", OUT / "felucca.o", *extra, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
@@ -258,11 +323,12 @@ def build_app():
             raise SystemExit(f"{lname} {load:#x} is not word aligned")
         blob = (OUT / sect).read_bytes() if (OUT / sect).exists() else b""
         if blob:
-            if load - APP_XIP < len(img):
+            if load - (0x02001000 if stub else APP_XIP) < len(img):
                 raise SystemExit(f"{lname} overlaps the image")
-            img += b"\xff" * (load - APP_XIP - len(img))
+            img += b"\xff" * (load - (0x02001000 if stub else APP_XIP) - len(img))
             img += blob
     img += b"\xff" * (-len(img) % 4)
+    img = bytearray(stub) + img
     (OUT / "felucca.bin").write_bytes(img)
     return bytes(img), syms, dis, rt
 
@@ -270,7 +336,7 @@ def build_app():
 def check(img, syms, dis, rt):
     errors, notes = [], []
     m = re.search(r"^([0-9a-f]+) .*\s_start$", syms, re.M)
-    if not m or int(m.group(1), 16) != APP_XIP:
+    if not m or int(m.group(1), 16) != (0x02001000 if fm1pkg_make.has_stub(img) else APP_XIP):
         errors.append(f"_start is not at {APP_XIP:#x}")
     if img[:4] != bytes.fromhex("04818000"):
         errors.append(f"image starts with {img[:4].hex()}, not the entry stub")
@@ -376,7 +442,8 @@ def main():
         gen, ldr = ex.submit(generate), ex.submit(build_loader)
         gen.result()
         ota = ldr.result()
-    img, syms, dis, rt = build_app()
+    stub = build_stub() if os.environ.get("FELUCCA_SAMPLER_ONLY") == "1" else b""
+    img, syms, dis, rt = build_app(stub)
     errors, notes = check(img, syms, dis, rt)
     hal_err = mmio_check()
     errors += hal_err

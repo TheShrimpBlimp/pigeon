@@ -67,7 +67,8 @@ class FakeFM1:
     """a MIDI backend with one FM-1 on it"""
 
     def __init__(self, image, identity="FM-1_015", name="FM-1", unplug_after=None, after_write="FM-1_900",
-                 stall_after=None, bad_addr=None):
+                 stall_after=None, bad_addr=None, info=None):
+        self.info = info
         self.image, self.unplug_after, self.after_write = image, unplug_after, after_write
         self.stall_after, self.bad_addr = stall_after, bad_addr
         self.served = self.bad = self.upgrades = 0
@@ -101,6 +102,10 @@ class FakeFM1:
         if d == I.HS_QUERY:
             t = self.identity.encode()
             self.tx(b"\xF0" + I.pack7(bytes([0, 0x59, 0x11, 0, 0, 0]) + t + bytes(28 - len(t))) + b"\xF7")
+        elif d == bytes([240,125,70,76,1,247]):
+            if self.info is not None:
+                text=self.info.encode()[:24].ljust(24,b"\0")
+                self.tx(bytes([240,125,70,76,1])+text+bytes([247]))
         elif d == I.UPGRADE:
             self.upgrades += 1
             first = self.bad_addr if self.bad_addr is not None else 0
@@ -306,6 +311,27 @@ def official():
     ok(rc == 2 and "official V15" in err and dev.sent == [], "a modified V15 is still refused (no MIDI)")
 
 
+def compatibility():
+    cases=[("FM-1_015",None,"allow"),("FM-1_000",None,"refuse"),
+           ("FM-1_900","Pigeon 0.1-dev","allow"),("FM-1_910","FELUCCA v1.0","allow"),
+           ("FM-1_909","FELUCCA 0.9-BETA","refuse"),("FM-1_920","FELUCCA SLOOP 2.2","refuse"),
+           ("FM-1_920","ChoralRoot 0.18","allow"),("FM-1_900","MELODEE v0.11.1","allow"),
+           ("FM-1_920",None,"refuse"),("FM-1_900","Other v1.0","refuse")]
+    for ident,info,want in cases:
+        ok(I.classify_firmware(ident,info)[0]==want,f"compatibility: {ident} / {info}: {want}")
+    p=pkgfile("guard.fwsc",package());image=I.logical_image(package())
+    for ident,info in [("FM-1_000",None),("FM-1_900","FELUCCA SLOOP 2.2"),("FM-1_909","FELUCCA 0.9-BETA"),("FM-1_900",None),("FM-1_900","Other v1.0")]:
+        dev=FakeFM1(image,identity=ident,info=info)
+        rc,out,err=cli([p,"--yes"],dev)
+        ok(rc==8 and dev.upgrades==0 and "Return to the official V15" in err,"unsupported source refused before UPGRADE: "+str(info))
+    dev=FakeFM1(image,identity="FM-1_900",info="Pigeon 0.1-dev")
+    rc,out,err=cli([p,"--yes"],dev)
+    ok(rc==0 and dev.upgrades==2,"Pigeon dev identity accepted only with read-only INFO")
+    dev=FakeFM1(image,identity="FM-1_900",info="FELUCCA SLOOP 2.2")
+    rc,out,err=cli([p,"--yes","--force"],dev)
+    ok(rc==0 and dev.upgrades==2,"explicit CLI --force overrides unsupported-source guard")
+
+compatibility()
 wire()
 installs()
 errors()

@@ -11,7 +11,9 @@ Node.js must be on PATH for full web/codec checks. The script builds the sampler
 profile, checks target CPU budgets, optionally repeats the build and compares
 both binary and package SHA-256 hashes, and runs `tests/run_pigeon_tests.sh`: product controls, compatibility, recovery,
 malformed data, 92 inherited golden audio renders, sanitizers, dual-song storage
-and GUI codec checks. It copies firmware, checksums, target memory metrics, test logs and control
+and GUI codec checks. With `--run-tests`, it also runs
+`tests/run_pigeon_recovery_tests.sh` for the pinned boot stub, commit ordering,
+interrupted writes, and installer compatibility refusals. It copies firmware, checksums, target memory metrics, test logs and control
 documentation into `build/releases/pigeon-0.1-beta-candidate/`. It never contacts
 hardware, flashes, creates a release/tag, or publishes a website.
 

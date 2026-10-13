@@ -25,11 +25,22 @@ build.py --release do).
 import argparse
 import os
 import struct
+import zlib
 from pathlib import Path
 
 APP_SLOT = 0x8DFBC
 KO_APP_HI = 0x78000
 KO_APP_SLOT = APP_SLOT - (0x93000 - KO_APP_HI)
+# Pigeon boot-stub layout, adapted from ChoralRoot FM-1 (GPL-3.0-only).
+STUB_LEN = 0xEE0
+STUB_SIG = b"CRSTUB"
+BODY_MAX = 0x71000  # body 0x5000..0x75fff; last whole slot sector is 0x76000
+MARK_OFF = 0x76FE0 - 0x4120
+MARK_MAGIC = 0x4D425243
+MARK_FORMAT = 1
+COMP_OFF = MARK_OFF + 20
+APP_CRC_FIXED = 0x4352
+
 FLASH_SIZE = 0x93000
 KEY = 0x980F
 # flash header: JieLi SDK defaults (burner_size 544, VID "0.01", flash_size 0xFF000,
@@ -106,6 +117,75 @@ def sdk_file(rel):
         raise SystemExit(f"fm1pkg_make: {path}: {e.strerror}. Set AC79_SDK to a JieLi AC79 SDK checkout.")
 
 
+# Copyright (C) 2026 ChoralRoot FM-1 contributors: commit-marker packing.
+def has_stub(app):
+    return len(app) >= STUB_LEN and app[8:8 + len(STUB_SIG)] == STUB_SIG
+
+
+def stub_version(app):
+    return struct.unpack_from("<H", app, 8 + len(STUB_SIG))[0] if has_stub(app) else None
+
+
+def marker(body):
+    """the 20-byte commit marker of a body (app.bin from STUB_LEN, padded to words)"""
+    m = struct.pack("<IIII", MARK_MAGIC, MARK_FORMAT, len(body), zlib.crc32(body))
+    return m + struct.pack("<I", zlib.crc32(m))
+
+
+def compensate(app, off, want):
+    """4 bytes for app[off:off + 4] (zero on entry) that make crc16(app) == want.
+
+    The CRC-16 (init 0, no final xor) is linear over GF(2): crc(a ^ b) = crc(a) ^ crc(b) for equal lengths. So
+    crc(app with bytes v at off) = crc(app) ^ E(v), E(v) = crc(v + zeros to the end): 16 equations in 32 unknown
+    bits, solved by elimination over the 32 basis vectors (the free bits stay 0)."""
+    tail = bytes(len(app) - off - 4)
+    need = crc16(app) ^ want
+    rows = []                                           # (E(bit k), 1 << k), reduced as they come
+    for k in range(32):
+        e, m = crc16((1 << k).to_bytes(4, "little") + tail), 1 << k
+        for pe, pm in rows:
+            if e ^ pe < e:                              # pe's top bit is set in e
+                e, m = e ^ pe, m ^ pm
+        if e:
+            rows.append((e, m))
+            rows.sort(reverse=True)
+    v = 0
+    for pe, pm in rows:
+        if need ^ pe < need:
+            need, v = need ^ pe, v ^ pm
+    if need:
+        raise SystemExit("fm1pkg_make: no compensation bytes give the fixed CRC-16")
+    return v.to_bytes(4, "little")
+
+
+def crc16_slow(data):
+    """bit by bit, no table: the check of compensate() and of both directory CRCs"""
+    c = 0
+    for b in data:
+        c ^= b << 8
+        for _ in range(8):
+            c = ((c << 1) ^ 0x1021) & 0xFFFF if c & 0x8000 else c << 1
+    return c
+
+
+def commit(app, marker_of=marker):
+    """a stub app padded to the slot, with its marker and compensation bytes (marker_of: tools/make_stub_test_pkg.py
+    packs a deliberately wrong one)"""
+    body = app[STUB_LEN:]
+    body += b"\xFF" * (-len(body) % 4)
+    if len(body) > BODY_MAX:
+        raise SystemExit(f"the app body is {len(body)} B, the room below the marker's sector is {BODY_MAX} B")
+    if not body:
+        raise SystemExit("the app has a stub and no body")
+    a = bytearray(app[:STUB_LEN] + body + b"\xFF" * (KO_APP_SLOT - STUB_LEN - len(body)))
+    a[MARK_OFF:MARK_OFF + 20] = marker_of(body)
+    a[COMP_OFF:COMP_OFF + 4] = bytes(4)
+    a[COMP_OFF:COMP_OFF + 4] = compensate(bytes(a), COMP_OFF, APP_CRC_FIXED)
+    if crc16_slow(a) != APP_CRC_FIXED:
+        raise SystemExit("fm1pkg_make: the compensated app.bin CRC-16 is wrong")
+    return bytes(a)
+
+
 def flash_image(app, key, ko_storage=False):
     spl = sdk_file("uboot.boot")                         # SDK SPL, BANKCB-encoded as in the SDK
     cfg_tool = sdk_file("cfg_tool.bin")
@@ -131,7 +211,9 @@ def flash_image(app, key, ko_storage=False):
     app_slot = KO_APP_SLOT if ko_storage else APP_SLOT
     if len(app) > app_slot:
         raise SystemExit(f"app is {len(app)} B, the slot is {app_slot} B")
-    app = app + b"\xFF" * (app_slot - len(app))
+    if has_stub(app) and not ko_storage:
+        raise SystemExit("Pigeon boot stub requires the KOPOOL2 layout")
+    app = commit(app) if has_stub(app) else app + b"\xFF" * (app_slot - len(app))
     blk = 0x120 + app_slot + len(cfg_tool)              # app_area_head block size
     area = bytearray(b"\xFF" * blk)
     area[0x120:0x120 + app_slot] = app

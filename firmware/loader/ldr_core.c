@@ -20,8 +20,9 @@
  *      and flash: 4K boundary - 256 between 0x93000 and 0xFC000, outside
  *      Felucca's store, where only user data lives) so the SPL boots the new
  *      app, and resets.
- * Power loss during 3: the record is still there, the SPL runs the loader
- * again on the next power-on and the host can resume.
+ * With a Pigeon boot stub: invalidate its marker before any changed sector,
+ * write the marker sector last. An incomplete body boots the staged loader.
+ * Legacy firmware without a stub has no cold-boot recovery guarantee.
  *
  * Hooks from the platform (loader.c, ldr_test.c):
  *   ldr_fread(off, p, n)  ldr_erase(off)  ldr_prog(off, p, n)   flash, 0 = ok
@@ -106,12 +107,60 @@ static int ldr_check(uint32_t fl_off, uint32_t fl_size, uint32_t want, uint16_t 
     return crc == want ? 0 : -12;
 }
 
+#define PIGEON_MARK_SEC 0x76000u
+#define PIGEON_MARK_OFF 0x76FE0u
+/* Copyright (C) 2026 ChoralRoot FM-1 contributors: commit-last recovery. */
+/* CRC-32 (zlib's), bit by bit: the marker's own 16 bytes only */
+static uint32_t ldr_crc32(const uint8_t *p, uint32_t n)
+{
+    uint32_t c = 0xFFFFFFFFu, i;
+    while (n--) {
+        c ^= *p++;
+        for (i = 0; i < 8u; i++)
+            c = c & 1u ? (c >> 1) ^ 0xEDB88320u : c >> 1;
+    }
+    return ~c;
+}
+
+/* does the package carry the stub's commit marker? (the 512 bytes that hold it, decrypted in place) */
+static int ldr_pkg_marker(uint32_t fl_off, uint8_t *b, uint32_t key)
+{
+    const uint8_t *m = b + (PIGEON_MARK_OFF & 0x1FFu);
+    if (ota_read(fl_off + (PIGEON_MARK_OFF & ~0x1FFu), b, 512))
+        return -7;
+    ldr_sfc(b, 512, (PIGEON_MARK_OFF & ~0x1FFu) - LDR_APP_LO, key);
+    return ota_rd32(m) == 0x4D425243u && ota_rd32(m + 4) == 1u && ota_rd32(m + 16) == ldr_crc32(m, 16);
+}
+
+/* the marker's sector erased, once, before the first write elsewhere: from here to the marker's own write the
+ * stub refuses the body. Left alone when it is blank already (a resumed install) */
+static int ldr_uncommit(uint8_t *cur, uint32_t *open)
+{
+    uint32_t i, tries;
+    if (*open)
+        return 0;
+    for (tries = 0; tries < 3u; tries++) {
+        if (ldr_fread(PIGEON_MARK_SEC, cur, 0x1000u))
+            return -8;
+        for (i = 0; i < 0x1000u && cur[i] == 0xFFu; i++)
+            ;
+        if (i == 0x1000u) {
+            *open = 1;
+            return 0;
+        }
+        if (tries < 2u && ldr_erase(PIGEON_MARK_SEC))
+            return -9;
+    }
+    return -12;                                          /* it does not erase: nothing else was touched */
+}
+
 static int ldr_session(void)
 {
     static uint8_t hdr[0x400], sec[0x1000], cur[0x1000];
     static uint16_t sc[LDR_NSEC];
     uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, want = ~0u, done = 0, ko_layout = 0;
-    int rc;
+    int rc, mark = 0;
+    uint32_t open = 0;
     /* 1. UFW header + entry list (ota.c; it leaves the entries decoded in hdr) */
     if ((rc = ota_ufw(hdr, &fl_off, &fl_size, &ota_off, &ota_len)) != 0)
         return rc;
@@ -142,8 +191,15 @@ static int ldr_session(void)
     }
     if (ldr_fread(0xA0000u,cur,4)) return -8;
     if (!ko_layout && ota_rd32(cur) == KO_BANK_MAGIC) return -15; /* export/erase bank before downgrade */
+    if (ko_layout && (mark = ldr_pkg_marker(fl_off, sec, key)) < 0) return mark;
     /* 3. app area, sector by sector */
-    for (s = LDR_APP_LO; s < LDR_APP_HI; s += 0x1000u) {
+    for (uint32_t order = 0; order < LDR_NSEC; order++) {
+        s = LDR_APP_LO + order * 0x1000u;
+        /* Commit sector last; the intervening KOPOOL2 sectors remain untouched. */
+        if (mark) {
+            if (order == LDR_NSEC - 1u) s = PIGEON_MARK_SEC;
+            else if (s >= PIGEON_MARK_SEC) s += 0x1000u;
+        }
         if (ko_layout && s >= KO_APP_HI && s < KO_APP_DATA_HI) {
             done += 0x1000u; ldr_progress(done,LDR_APP_HI-LDR_APP_LO); continue;
         }
@@ -160,6 +216,7 @@ static int ldr_session(void)
         if (ldr_fread(s, cur, 0x1000u))
             return -8;
         if (!ota_memeq(sec, cur, 0x1000u)) {
+            if (mark && s != PIGEON_MARK_SEC && (rc = ldr_uncommit(cur, &open)) != 0) return rc;
             uint32_t tries;
             for (tries = 0; tries < 2u; tries++) {
                 if (ldr_erase(s))
@@ -182,6 +239,7 @@ static int ldr_session(void)
     for (i = 0; i < 4u; i++)
         if (!ota_read(0xF0000000u, sec, 8))
             break;
+    if (i == 4u) return -16; /* No successful finish: retain recovery state. */
     ldr_record_clear();
     for (s = LDR_REC_HI; s > LDR_REC_LO; s -= 0x1000u) {   /* flash records: 4K boundary - 256 */
         uint8_t r[80];

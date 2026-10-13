@@ -75,12 +75,13 @@ static void ota_frame_done(void) { rx_full = 0; }
 static uint32_t ota_now_ms(void) { return now_ms; }
 static void ota_idle(void) { now_ms++; }
 static int ota_erase(uint32_t off) { (void)off; return -1; }
-static int ota_prog(uint32_t off, const void *p, uint32_t n) { (void)off; (void)p; (void)n; return -1; }
+static int ota_prog(uint32_t off, const void *p, uint32_t n) { if (off < 0xE0000u || off+n > 0xE5000u) return -1; memcpy(nor+off,p,n); return 0; }
 static int ota_fread(uint32_t off, void *p, uint32_t n) { memcpy(p, nor + off, n); return 0; }
 static void ota_show(uint32_t step, int32_t code) { (void)step; (void)code; }
 static void ota_commit(const uint8_t *parm) { (void)parm; }
 #include "../firmware/src/ota.c"
 
+static void (*flash_audit)(uint32_t) = NULL;
 static int ldr_fread(uint32_t off, void *p, uint32_t n) { memcpy(p, nor + off, n); return 0; }
 static int ldr_erase(uint32_t off)
 {
@@ -88,6 +89,7 @@ static int ldr_erase(uint32_t off)
     if (off < 0x4000u) { printf("ERASE IN THE HEAD %#x\n", off); exit(1); }
     erases++;
     memset(nor + off, 0xFF, 0x1000);
+    if (flash_audit) flash_audit(off | 1u);
     return 0;
 }
 static int ldr_prog(uint32_t off, const void *p, uint32_t n)
@@ -96,6 +98,7 @@ static int ldr_prog(uint32_t off, const void *p, uint32_t n)
     uint32_t i;
     if (off < 0x4000u || off + n > 0x93000u || ((off & 0xFFu) + n) > 256u) bad_range++;
     for (i = 0; i < n; i++) nor[off + i] &= s[i];
+    if (flash_audit) flash_audit(off);
     return 0;
 }
 static void ldr_record_clear(void) { record_cleared++; }

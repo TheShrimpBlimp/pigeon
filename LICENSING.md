@@ -143,3 +143,14 @@ modified only to set the output sample rate explicitly. Original corresponding
 source, attribution, and LGPL/GPL texts are shipped in that directory and with
 the generated website. See [encoder provenance](web/pigeon/vendor/README.md).
 This browser dependency is separate from the firmware image.
+
+## ChoralRoot recovery and installer safeguards
+
+Pigeon's boot stub (`firmware/stub/`), commit-marker packing, commit-last loader
+ordering, staged-loader retention, and installer source-firmware classification
+are adapted from [ChoralRoot FM-1](https://github.com/Quixotic7/ChoralRootFM1)
+by Quixotic7 and the ChoralRoot FM-1 contributors, under GPL-3.0-only.
+Reference revision: `aa5875af20e3046ee161f988c5d91d3ae66d0c74`.
+Their copyright notices are retained. Pigeon uses its own KOPOOL2 flash layout;
+see [recovery details](docs/PIGEON_RECOVERY.md). The linked Felucca and ChoralRoot
+credits in the tools follow ChoralRoot's explicit foundation attribution.

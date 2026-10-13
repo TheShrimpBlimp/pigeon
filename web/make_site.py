@@ -104,7 +104,7 @@ def main(pkg, version, out):
     shutil.copy(HERE / "site" / "site.css",out / "site.css")
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
     guide=out / "guide";guide.mkdir(exist_ok=True)
-    for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
+    for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
     # Matching working source, excluding user audio, build artifacts, and hosting state.
     root=HERE.parent
     tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")

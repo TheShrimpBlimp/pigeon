@@ -70,6 +70,7 @@ Felucca. Back up your instrument before installing or replacing sample banks.
 - [Sample storage and transfers](docs/KO_STORAGE.md)
 - [Sample library and complete archives](tools/pigeon_library.py)
 - [Contributing](CONTRIBUTING.md)
+- [Update safeguards and recovery](docs/PIGEON_RECOVERY.md)
 - [Licensing and attribution](LICENSING.md)
 
 ## Human authorship and AI assistance

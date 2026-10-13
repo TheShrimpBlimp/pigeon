@@ -197,8 +197,8 @@ int main(int argc, char **argv)
                      (p[6] | p[7] << 8) == 0x5441 && ota_rd32(p + 72) == 0xE0000);
         bad += check("nothing written outside 0xE0000..0xE4FFF", bad_erase == 0);
     }
-    /* boot cleanup erases it */
-    bad += check("boot cleanup erases the area", ota_boot_cleanup() == 1 && area_erased());
+    /* A valid staged loader survives for cold-boot rescue; only its record goes. */
+    bad += check("boot cleanup retains the staged loader", ota_boot_cleanup() == 2 && ota_staged() != 0);
     bad += check("second boot: nothing to do", ota_boot_cleanup() == 0);
 
     /* host disappears in the middle */

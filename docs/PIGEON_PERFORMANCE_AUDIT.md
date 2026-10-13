@@ -1,6 +1,6 @@
 # Pigeon performance and compatibility audit
 
-Source audit and host validation, 2026-10-12. No device writes or flashes.
+Source audit and host validation, updated 2026-10-13. No device writes or flashes.
 
 ## Audio and display
 
@@ -29,8 +29,9 @@ The pattern queue label now follows the configured bar/pattern-end boundary.
 
 ## Budgets and limits
 
-The candidate builds with a 407,160-byte application, leaving 63,812 bytes
-inside the existing application slot. Target RAM/pool totals are
+The recovery candidate builds with a 391,104-byte image, including its 3,808-byte
+boot-stub slot. The 387,296-byte app body leaves 75,552 bytes below the reserved
+commit-marker sector. Target RAM/pool totals are
 recorded in the candidate manifest; the build requires at least 4 KiB RAM and
 8 KiB pool headroom. Those are static allocation margins, not measured stack or
 runtime CPU margins. The encoded bank still has 408 KiB shared by both songs,
@@ -80,3 +81,26 @@ retaining audio/storage compatibility checks and adding `pigeon_screen_test.c`
 for actual Pigeon pages: 815 text draws across all three tracks, zero fixed-label
 clipping failures. This clipping check does not prove every layout is visually
 ideal or replace a physical screen review.
+
+## Recovery candidate validation (2026-10-13)
+
+The ChoralRoot-derived Pigeon stub v4 is pinned by SHA-256 in
+`firmware/stub/stub.lock`; the built image matches that pin. Target compilation
+and memory checks passed. The complete Pigeon product suite, JS transport tests,
+Python installer simulations, browser install-refusal test, and desktop/mobile
+website checks passed. All 92 golden renders remain unchanged.
+
+The recovery suite passes 16,143 stub checks. Flash-operation auditing covers
+1,684 erase/program steps for a synthetic first install and 35 steps for a
+same-stub update with another body. Interrupted snapshots resume to the expected
+flash image. The first-install stub-write window is 16 flash operations; the
+same-stub update has none. AddressSanitizer and UndefinedBehaviorSanitizer pass
+on the stub and recovery tests. Existing tests confirm all reclaimed sample
+extents are preserved, and a legacy downgrade with an active bank is refused.
+
+Hardware verification is pending. Docker stopped because the development Mac
+ran low on disk; the target package had already built successfully. A subsequent
+standalone stub rebuild was interrupted. This candidate's complete target rebuild
+reproducibility has not been reverified after that interruption.
+
+See [recovery details and limits](PIGEON_RECOVERY.md).
