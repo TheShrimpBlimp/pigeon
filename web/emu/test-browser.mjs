@@ -22,24 +22,58 @@ try{
  assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'000001');
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
  assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 408 KiB');
+ await page.locator('#song1-file').setInputFiles({name:'editable.wav',mimeType:'audio/wav',buffer:wav(2)});
+ await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
+ assert.equal(await page.locator('#song1-name').textContent(),'Empty','choosing a file must not load it before editing');
+ await page.locator('#song1-editor canvas').scrollIntoViewIfNeeded();
+ const wave=await page.locator('#song1-editor canvas').boundingBox();
+ await page.mouse.move(wave.x+wave.width*.2,wave.y+wave.height/2);await page.mouse.down();await page.mouse.move(wave.x+wave.width*.7,wave.y+wave.height/2);await page.mouse.up();
+ assert(Number(await page.locator('#song1-editor .trim-start').inputValue())>0);
+ await page.locator('#song1-editor .trim-zoom').fill('2');await page.locator('#song1-editor .trim-scroll').fill('300');
+ await page.locator('#song1-editor .trim-start').fill('0.25');await page.locator('#song1-editor .trim-end').fill('1');
+ await page.locator('#song1-editor .trim-start').focus();await page.keyboard.press('ArrowUp');assert.equal(await page.locator('#song1-editor .trim-start').inputValue(),'0.26');await page.locator('#song1-editor .trim-start').fill('0.25');
+ await page.locator('#song1-editor .loop-preview select').selectOption('1');await page.locator('#song1-editor .preview-section').click();
+ await page.locator('#song1-editor .preview-stop:not([disabled])').waitFor();await page.locator('#song1-editor .preview-stop').click();
+ await page.locator('#song1-editor .trim-end').fill('3');await page.locator('#song1-editor .apply-section').click();
+ await page.getByText('Choose valid start and end points inside the audio.',{exact:true}).waitFor();assert.equal(await page.locator('#song1-name').textContent(),'Empty');
+ await page.locator('#song1-editor .trim-end').fill('1');await page.locator('#song1-editor .apply-section').click();
+ await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
+ const trimmedCount=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-emulator-samples',1);q.onsuccess=()=>r(q.result);});const value=await new Promise(r=>{const q=db.transaction('samples').objectStore('samples').get('current');q.onsuccess=()=>r(q.result);});db.close();return new DataView(value.image.buffer,value.image.byteOffset,value.image.byteLength).getUint32(24,true);});
+ assert.equal(trimmedCount,16538,'encoded song must contain the selected region only');
+ await page.reload();await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#song1-editor .trim-start').inputValue(),'0.25');assert.equal(await page.locator('#song1-editor .trim-end').inputValue(),'1');
+ assert.equal(await page.locator('#song1-editor .edit-source').textContent(),'Selected: editable.wav · 2.00 s');
+
  await page.locator('#song1-file').setInputFiles({name:'my-song.wav',mimeType:'audio/wav',buffer:wav(1)});
+ await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
+ await page.locator('#song1-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
  await page.locator('#song2-file').setInputFiles({name:'second.wav',mimeType:'audio/wav',buffer:wav(0.5)});
+ await page.getByText('Song 2 selected. Edit the section, then press Apply to Song 2.',{exact:true}).waitFor();
+ await page.locator('#song2-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  await page.locator('#kit-files').setInputFiles([{name:'pad.wav',mimeType:'audio/wav',buffer:wav(.1)}]);
+ await page.getByText('Drum files selected. Edit each pad, then press Apply drum kit.',{exact:true}).waitFor();
+ await page.locator('#pad-editors .trim-end').fill('0.05');
+ await page.locator('#apply-kit').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#kit-name').textContent(),'pad.wav');
  const used64=await page.locator('#sample-meter').getAttribute('value');
  await page.locator('#song1-quality').selectOption('24');
+ await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  await page.locator('#song1-file:not([disabled])').waitFor();
  const used24=await page.locator('#sample-meter').getAttribute('value');assert(Number(used24)<Number(used64),'lower bitrate must save space');
- await page.locator('#song1-quality').selectOption('64');await page.locator('#song1-file:not([disabled])').waitFor();
+ await page.locator('#song1-quality').selectOption('64');await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'too-long.wav',mimeType:'audio/wav',buffer:wav(65)});
+ await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
+ await page.locator('#song1-editor .apply-section').click();
  await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('408 KiB'));
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
  await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'compressed.wav',mimeType:'audio/wav',buffer:wav(65)});
+ await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
+ await page.locator('#song1-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'compressed.wav');
  assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=417792);
@@ -48,7 +82,7 @@ try{
  await page.locator('#storage-mode').selectOption('fm1');await page.locator('#song1-file:not([disabled])').waitFor();
  assert.equal(await page.locator('#storage-mode').inputValue(),'fm1');assert(await page.locator('#song1-quality').isVisible());
  await page.reload();await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
- await page.getByText('Anonymous browser trials',{exact:true}).waitFor();assert.equal(trialIds.size,1);assert(trialPosts>=2);
+ await page.getByText('Anonymous browser trials',{exact:true}).waitFor();assert.equal(trialIds.size,1);assert(trialPosts>=3);
  assert.equal(await page.locator('#song1-name').textContent(),'compressed.wav');
  assert.equal(await page.locator('#song1-quality').inputValue(),'24');
  assert.equal(await page.locator('#storage-mode').inputValue(),'fm1');
@@ -68,8 +102,9 @@ try{
  for(const width of [1280,390]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`build/pigeon-emulator-${width}.png`,fullPage:true});}
  for(const route of ['/', '/webapp/emu/', '/webapp/pigeon/', '/webapp/installer/', '/webapp/editor/', '/firmware/LICENSES/']){
   await page.goto(`http://127.0.0.1:${server.address().port}${route}`);
+  if(route==='/'){const callout=page.locator('.browser-trial-callout');assert(await callout.isVisible());assert.equal(await callout.locator('a').getAttribute('href'),'webapp/emu/');assert((await callout.boundingBox()).y<500);}
   const coffee=page.locator('.coffee-link');assert.equal(await coffee.count(),1);assert.equal(await coffee.getAttribute('href'),'https://buymeacoffee.com/theshrimpb1');
   const box=await coffee.boundingBox();assert(box&&box.y<350,`coffee link near top on ${route}`);
  }
- assert.deepEqual(errors,[]);console.log('Browser: empty boot, own audio, song/kit loading, both storage modes, persistence, MIDI-only connection, clearing, lit.chr, desktop/mobile passed.');
+ assert.deepEqual(errors,[]);console.log('Browser: empty boot, own audio, waveform drag, numeric trim, preview/loop, invalid trim refusal, trimmed playback metadata, editor persistence, song/kit loading, both storage modes, persistence, MIDI-only connection, clearing, lit.chr, desktop/mobile passed.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

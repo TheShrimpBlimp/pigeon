@@ -74,6 +74,7 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 .sample-grid>.sample-slot{padding:16px;background:var(--body);min-width:0}.sample-slot label{padding:0;background:none}.compression-controls{margin:14px 0}.compression-controls label{font-size:13px;margin-bottom:6px}.compression-controls select{width:100%}.compression-controls[hidden]{display:none}
 
 .support-row{max-width:1160px;margin:0 auto;padding:12px 0;text-align:right}.coffee-link{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid #526546;background:#1a2116;color:#b9ef77!important;text-decoration:none;font-size:13px;line-height:1.4;letter-spacing:.025em}.coffee-link:hover{border-color:#b9ef77;background:#283321}.coffee-link:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}
+.sample-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sample-slot:last-child{grid-column:1/-1}.file-wave{display:block;width:100%;height:140px;background:#11150f;border:1px solid var(--rule);margin:14px 0}.file-editor{margin-top:18px}.trim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.trim-fields label{font-size:13px}.trim-fields input{display:block;width:100%;min-width:0;margin-top:6px}.trim-estimate,.edit-source{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.edit-actions button{font-size:13px}.loop-preview{font-size:13px}.loop-preview select{margin-left:8px}#pad-editors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#pad-editors details{border:1px solid var(--rule);padding:14px;min-width:0}#pad-editors summary{cursor:pointer;overflow-wrap:anywhere}#apply-kit{margin-top:18px}@media(max-width:650px){.sample-grid,#pad-editors{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -99,9 +100,9 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 <section class="sample-loader" aria-labelledby="samples-heading"><p class="eyebrow">YOUR SOUNDS</p><h2 id="samples-heading">Add your samples.</h2>
 <label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 408 KiB</option><option value="unlimited">Unlimited storage</option></select>
 <p id="storage-help">The real FM1 shares 408 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.</p>
-<div class="sample-grid"><div class="sample-slot"><label for="song1-file">Song 1</label><input id="song1-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song1-quality">MP3 quality</label><select id="song1-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song1-name">Empty</span></div><div class="sample-slot"><label for="song2-file">Song 2</label><input id="song2-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song2-quality">MP3 quality</label><select id="song2-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song2-name">Empty</span></div><div class="sample-slot"><label for="kit-files">Drum kit · up to 16 files</label><input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span></div></div>
+<div class="sample-grid"><div class="sample-slot"><label for="song1-file">Song 1</label><input id="song1-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song1-quality">MP3 quality</label><select id="song1-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song1-name">Empty</span><div id="song1-editor" class="file-editor"></div></div><div class="sample-slot"><label for="song2-file">Song 2</label><input id="song2-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song2-quality">MP3 quality</label><select id="song2-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song2-name">Empty</span><div id="song2-editor" class="file-editor"></div></div><div class="sample-slot"><label for="kit-files">Drum kit · up to 16 files</label><input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span><p class="fine">Choose files, edit each pad below, then apply the kit.</p><div id="pad-editors"></div><button id="apply-kit" type="button" disabled>Apply drum kit</button></div></div>
 <p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="417792" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 408 KiB</p><button id="clear-samples" type="button" disabled>Clear samples</button>
-<p class="fine">Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
+<p class="fine">Choosing a file stages it for editing. Press Apply to load your selected section; applied files and trim boundaries save in this browser. Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
 <section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Use the on-screen knobs and buttons to edit. Sound comes from your computer.</p></section>
 <section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
 <section class="credits" aria-labelledby="credits-heading"><p class="eyebrow">EMULATOR CREDITS</p><h2 id="credits-heading">Built on open-source work.</h2><p>The browser emulator is adapted from <a href="https://github.com/charlesvestal/fm1-x0x">Charles Vestal’s FM1 X0X emulator</a>: its <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/x0x_web.c">simulated FM1 and WebAssembly wrapper</a>, <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/worklet.js">AudioWorklet audio runtime</a>, and <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/index.html">interactive browser panel</a> underpin this version.</p><p>Felucca’s browser adaptation and firmware are by Leo Kuroshita and Hügelton Instruments. PIGEON is created and directed by The Shrimp Blimp. The emulator runs PIGEON’s firmware against a simulated FM1.</p><p><a href="https://github.com/TheShrimpBlimp/pigeon/tree/main/web/emu">PIGEON emulator source</a> · <a href="../../firmware/LICENSE">GPL-3.0 licence</a> · lit.chr / Little Character Regular by S M Astrid Bin, <a href="fonts/LittleCharacter-OFL.txt">SIL OFL 1.1</a></p></section>
@@ -349,7 +350,7 @@ const KEYMAP = {};
 Object.assign(KEYMAP, { BracketLeft: { btn: B["OCT-"] }, BracketRight: { btn: B["OCT+"] } });
 const ARROWS = { ArrowUp: [EN.SELECT, 1], ArrowDown: [EN.SELECT, -1], ArrowRight: [EN.ALGORITHM, 1], ArrowLeft: [EN.ALGORITHM, -1] };
 addEventListener("keydown", (e) => {
-  if (!node || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.(".hit.knob")) return;
+  if (!node || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, button, [contenteditable="true"], .file-editor, .hit.knob')) return;
   if (ARROWS[e.code]) { const [r, n] = ARROWS[e.code]; turn(knobs.find((k) => k.role === r), n); e.preventDefault(); return; }
   const m = KEYMAP[e.code];
   if (!m) return;
@@ -462,16 +463,21 @@ let shownTrials=0;
 function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,String(total).padStart(6,'0'));trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
 trialTotal().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
 window.addEventListener('online',()=>{if(loaderReady)recordTrial().then(showTrials).catch(()=>{});});
+import {FileEditor} from './file-editor.js';
 import {prepareBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
 let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,bitrates:[64,64],image:null},bankId=0;
+let qualityDraft=[64,64];
+const songEditors=[],padEditors=[];
 const bankRequests=new Map(), sampleStatus=document.getElementById('sample-status'), mode=document.getElementById('storage-mode');
 function refreshSamples(){
-  for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples','song1-quality','song2-quality'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
+  for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples','song1-quality','song2-quality','apply-kit'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
   document.getElementById('song1-name').textContent=samples.songs[0]?.name||'Empty';
   document.getElementById('song2-name').textContent=samples.songs[1]?.name||'Empty';
   document.getElementById('kit-name').textContent=samples.pads.length?samples.pads.map(p=>p.name).join(', '):'Empty';
   document.querySelectorAll('.compression-controls').forEach(e=>e.hidden=samples.unlimited);
-  for(let i=0;i<2;i++)document.getElementById(`song${i+1}-quality`).value=(samples.bitrates||[64,64])[i];
+  for(let i=0;i<2;i++)document.getElementById(`song${i+1}-quality`).value=qualityDraft[i];
+  for(const editor of [...songEditors,...padEditors]){editor.setBusy(!loaderReady||loaderBusy);editor.estimate();}
+  document.getElementById('apply-kit').disabled=!loaderReady||loaderBusy||!padEditors.length;
   const used=samples.image? samples.image.length-HEAD:0;
   const meter=document.getElementById('sample-meter');meter.max=samples.unlimited?Math.max(used,1):FM1_POOL-HEAD;meter.value=used;
   document.getElementById('sample-usage').textContent=`${(used/1024).toFixed(1)} KiB`+(samples.unlimited?' · unlimited mode': ' / 408 KiB');
@@ -496,23 +502,58 @@ async function changeSamples(operation){
   }catch(e){mode.value=samples.unlimited?'unlimited':'fm1';sampleStatus.textContent=e.message;}
   finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
 }
-for(let slot=0;slot<2;slot++)document.getElementById(`song${slot+1}-file`).onchange=e=>{
-  const file=e.target.files[0];if(!file)return;e.target.value='';changeSamples(async()=>{
+function applySong(slot){
+  songEditors[slot].stop();
+  return changeSamples(async()=>{
     if(slot===1&&!samples.songs[0])throw Error('Load Song 1 before Song 2.');
-    const songs=samples.songs.slice();songs[slot]=await decodeSample(file,audioContext);return {...samples,songs};
+    const songs=samples.songs.slice();songs[slot]=songEditors[slot].selection();
+    const editSources=(samples.editSources||samples.songs).slice(),trimRanges=(samples.trimRanges||[null,null]).slice();
+    editSources[slot]=songEditors[slot].source;trimRanges[slot]=songEditors[slot].range();
+    return {...samples,songs,editSources,trimRanges,bitrates:qualityDraft.slice()};
   });
-};
-document.getElementById('kit-files').onchange=e=>{
-  const files=[...e.target.files];if(!files.length)return;e.target.value='';changeSamples(async()=>{
-    if(!samples.songs[0])throw Error('Load Song 1 before adding a drum kit.');if(files.length>16)throw Error('Choose up to 16 drum samples.');
-    const pads=[];for(const file of files)pads.push(await decodeSample(file,audioContext));return {...samples,pads};
+}
+for(let slot=0;slot<2;slot++){
+  songEditors[slot]=new FileEditor(document.getElementById(`song${slot+1}-editor`),{label:`Song ${slot+1}`,context:()=>audioContext,onApply:()=>applySong(slot),onStatus:text=>sampleStatus.textContent=text,settings:()=>({unlimited:samples.unlimited,bitrate:qualityDraft[slot]})});
+  document.getElementById(`song${slot+1}-file`).onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;e.target.value='';
+  loaderBusy=true;refreshSamples();sampleStatus.textContent='Reading your audio locally…';
+  try{songEditors[slot].set(await decodeSample(file,audioContext));sampleStatus.textContent=`Song ${slot+1} selected. Edit the section, then press Apply to Song ${slot+1}.`;}
+  catch(e){sampleStatus.textContent=e.message;}
+  finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
+  };
+}
+function setPadEditors(sources,ranges=[]){
+  for(const editor of padEditors)editor.stop();padEditors.length=0;const holder=document.getElementById('pad-editors');holder.replaceChildren();
+  sources.forEach((source,index)=>{
+    const details=document.createElement('details'),summary=document.createElement('summary'),container=document.createElement('div');
+    details.open=sources.length===1;summary.textContent=`Pad ${index+1} · ${source.name}`;details.append(summary,container);holder.append(details);
+    const editor=new FileEditor(container,{label:`Pad ${index+1}`,context:()=>audioContext,onStatus:text=>sampleStatus.textContent=text,settings:()=>({unlimited:samples.unlimited,bitrate:0}),drum:true});editor.set(source,ranges[index]);padEditors.push(editor);
   });
+}
+function restoreEditors(){
+  qualityDraft=(samples.bitrates||[64,64]).slice();
+  songEditors.forEach((editor,slot)=>editor.set((samples.editSources||samples.songs)[slot],samples.trimRanges?.[slot]));
+  setPadEditors(samples.padSources||samples.pads,samples.padRanges);
+}
+document.getElementById('kit-files').onchange=async e=>{
+  const files=[...e.target.files];if(!files.length)return;e.target.value='';
+  if(files.length>16){sampleStatus.textContent='Choose up to 16 drum samples.';return;}
+  loaderBusy=true;refreshSamples();sampleStatus.textContent='Reading your drum samples locally…';
+  try{const sources=[];for(const file of files)sources.push(await decodeSample(file,audioContext));setPadEditors(sources);sampleStatus.textContent='Drum files selected. Edit each pad, then press Apply drum kit.';}
+  catch(e){sampleStatus.textContent=e.message;}
+  finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
 };
+document.getElementById('apply-kit').onclick=()=>changeSamples(async()=>{
+  if(!samples.songs[0])throw Error('Load Song 1 before adding a drum kit.');
+  for(const editor of padEditors)editor.stop();
+  return {...samples,pads:padEditors.map(e=>e.selection()),padSources:padEditors.map(e=>e.source),padRanges:padEditors.map(e=>e.range())};
+});
 for(let slot=0;slot<2;slot++)document.getElementById(`song${slot+1}-quality`).onchange=e=>{
-  const bitrate=Number(e.target.value);changeSamples(async()=>{const bitrates=(samples.bitrates||[64,64]).slice();bitrates[slot]=bitrate;return {...samples,bitrates};});
+  const bitrate=Number(e.target.value);qualityDraft[slot]=bitrate;songEditors[slot].estimate();
+
 };
 mode.onchange=()=>changeSamples(async()=>({...samples,unlimited:mode.value==='unlimited'}));
-document.getElementById('clear-samples').onclick=()=>changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',bitrates:samples.bitrates||[64,64],image:null}));
+document.getElementById('clear-samples').onclick=async()=>{await changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',bitrates:qualityDraft.slice(),image:null}));const message=sampleStatus.textContent;restoreEditors();refreshSamples();sampleStatus.textContent=message;};
 
 // ------------------------------------------------------------------ switching on
 const status = document.getElementById("status");
@@ -564,7 +605,7 @@ async function switchOn() {
     syncKeys();
     send({ type: "visible", on: !document.hidden });
     midiConnect.disabled=false;
-    loaderReady=true;refreshSamples();
+    loaderReady=true;restoreEditors();refreshSamples();
     recordTrial().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
   } catch (err) {
     node = null;
