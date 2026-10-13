@@ -21,8 +21,13 @@
 #include <stdint.h>
 
 #define FELUCCA_WEB 1
+#define FELUCCA_KO 1
+#define FELUCCA_KO_DUAL 1
+#define FELUCCA_SAMPLER_ONLY 1
+#define FELUCCA_KO_STORAGE 1
+#define KO_BANK_XIP(off) ((const uint8_t *)nor + (off))
 #ifndef FELUCCA_CDC
-#define FELUCCA_CDC 1                    /* as src/felucca.c: MENU > USB SERIAL is there (nothing behind it) */
+#define FELUCCA_CDC 0                    /* as src/felucca.c: MENU > USB SERIAL is there (nothing behind it) */
 #endif
 #define FELUCCA_FLASH 1
 #define FELUCCA_OTA 0
@@ -240,6 +245,7 @@ static void cdc_task(void) {}
 #define usb_retry(ms) ((void)(ms))
 #define usb_detach() ((void)0)
 #include "../../firmware/src/master.c"
+static uint32_t lcd_audio_last, lcd_audio_enabled;
 #include "../../firmware/src/main.c"
 #undef usb_poll
 #undef usb_start
@@ -249,9 +255,34 @@ static void cdc_task(void) {}
 /* --------------------------------------------------------- the device --- */
 static uint32_t web_booted, web_boot_ms, web_last_frame;
 
+/* Seed only an empty browser instrument with the bundled CC0 factory audio.
+ * Existing saves always win. No imported user recordings are shipped. */
+#include "web_demo.h"
+static void web_demo_samples(void)
+{
+    for (uint32_t slot = 0; slot < 3; slot++) {
+        uint8_t *p = nor + SMP_USER_BASE + slot * SMP_USER_SIZE;
+        if (*(uint32_t *)p != 0xFFFFFFFFu) continue;
+        smp_user_hdr_t *h = (smp_user_hdr_t *)p;
+        memset(h, 0, sizeof *h);
+        h->magic = SMP_USER_MAGIC; h->version = 1; h->nz = slot == 1 ? 16 : 1;
+        h->data_len = 16384;
+        memcpy(p + SMP_USER_DATA, WEB_DEMO_DATA, h->data_len);
+        h->crc = st_crc32(p + SMP_USER_DATA, h->data_len);
+        for (uint32_t j = 0; j < h->nz; j++) {
+            smp_zone_t *z = &h->zone[j];
+            z->off = slot == 1 ? j * 1024 : 0;
+            z->n = slot == 1 ? 2048 : 32768; z->le = z->n - 1;
+            z->rate = 32768; z->root16 = (60 + (slot == 1 ? j : 0)) * 16;
+            z->lo = slot == 1 ? 60 + j : 0; z->hi = slot == 1 ? 60 + j : 127;
+        }
+    }
+}
+
 /* main.c fm1_main's boot, up to the main loop (no USB, no UART, no panel setup) */
 static void web_power_on(void)
 {
+    web_demo_samples();
     persist_boot();
     settings_init();
     usb_serial_apply();
@@ -268,6 +299,11 @@ static void web_power_on(void)
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
+    song.g[G_ROUTE] = 1; /* MIDI keyboard plays the selected browser track. */
+    ko.on = 1;
+    ko_palette_on = 1; palette_set(settings.palette);
+    ko_prepare();
+    if (!ko_ready()) ko_setup();
     web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
 }
@@ -279,6 +315,7 @@ static void web_frame(void)
     if (b > 0)
         song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
     master_poll();
+    ko_pcm_poll();
     felucca_dbg.ui_frames++;
     ui_input();
     settings_poll();
@@ -322,6 +359,7 @@ static void web_ms(void)
         web_last_frame = fm1_ms;
         web_frame();
     } else {
+        ko_pcm_poll();
         ui_input();                                       /* main.c's wait loop */
     }
 }

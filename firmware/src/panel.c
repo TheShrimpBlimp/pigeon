@@ -56,6 +56,8 @@ static uint32_t panel_btn_of(uint32_t matrix_id)        /* label of a matrix but
 }
 
 /* steps of a role, + = clockwise */
+static uint32_t panel_controller_master=700;
+static int (*panel_controller_poll)(void); /* temporary browser controller lease */
 static uint8_t panel_moved;                     /* a knob turned since ui.c scr_input last looked (SCREEN OFF) */
 static int32_t panel_enc(uint32_t role)
 {

@@ -3,6 +3,8 @@
   "type": "module",
   "scripts": {
     "test:pigeon": "node pigeon/test.mjs",
-    "test:pigeon:browser": "node pigeon/test-browser.mjs"
+    "test:pigeon:browser": "node pigeon/test-browser.mjs",
+    "test:emu": "node emu/pigeon_test.mjs",
+    "test:emu:browser": "node emu/test-browser.mjs"
   }
 }

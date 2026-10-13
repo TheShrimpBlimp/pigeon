@@ -96,7 +96,7 @@ at the note's pitch instead, and the screen says NO SAMPLE.
 
 ```
 ./build.sh
-web/emu/build.sh
+sh web/emu/build.sh
 python3 -m http.server -d build/emu 8790     # open http://localhost:8790/
 ```
 
@@ -185,3 +185,10 @@ After building, run `PYTHON=.venv/bin/python tests/run_pigeon_recovery_tests.sh`
 and the existing product checks. The recovery suite generates synthetic host
 fixtures under `build/pigeon-tests/recovery/`; never install those on hardware.
 Intended stub changes require a version bump and `FM1_STUB_LOCK=update`.
+
+The Pigeon browser trial includes bundled CC0 demo samples. Verify it with
+`node web/emu/pigeon_test.mjs` and `node web/emu/test-browser.mjs` (the latter
+uses the repository-local Playwright setup described in web/pigeon/README.md).
+Firmware controller lease tests: compile `tests/browser_controller_test.c` with
+`-Ibuild/gen -Ifirmware/src -lm`. Full panel USB control requires the updated
+Pigeon firmware; physical-device verification remains pending.

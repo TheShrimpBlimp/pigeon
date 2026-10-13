@@ -384,9 +384,32 @@ static void ed_motion_reply(uint32_t k, uint32_t rc, uint32_t kinds, uint32_t fu
             j++;
         }
 }
+/* Browser controller: RAM-only, expires without a keepalive. No flash writes. */
+static uint32_t ed_controller_until, ed_controller_last, ed_controller_buttons, ed_controller_keys, ed_controller_master;
+static int ed_controller_poll(void)
+{
+    if ((int32_t)(fm1_ms-ed_controller_until)>=0) {
+        panel_controller_poll=0; kb_boot_hold=0; return 0;
+    }
+    if (fm1_ms-ed_controller_last<15u) return 1;
+    ed_controller_last=fm1_ms;
+    uint32_t buttons=0, keys=fm1_in.notes, master=panel_controller_master, moved=0;
+    int32_t enc[NE];
+    for (uint32_t b=0;b<NB;b++) buttons|=((fm1_in.buttons>>panel.btn[b])&1u)<<b;
+    for (uint32_t e=0;e<NE;e++) {enc[e]=clamp(panel_enc(e),-63,63);moved|=enc[e]!=0;}
+    if (!moved && buttons==ed_controller_buttons && keys==ed_controller_keys && master==ed_controller_master) return 1;
+    ed_controller_buttons=buttons;ed_controller_keys=keys;ed_controller_master=master;
+    ed_begin(111); ed_b(1);
+    ed_b(buttons);ed_b(buttons>>7);
+    for (uint32_t j=0;j<4;j++) ed_b(keys>>(j*7));
+    for (uint32_t e=0;e<NE;e++) ed_b(enc[e]+64);
+    ed_b(master);ed_b(master>>7);ed_send();
+    return 1;
+}
 static int ed_args_ok(uint32_t cmd, const uint8_t *a, uint32_t n)
 {
     switch (cmd) {
+    case 110: return n==1u && a[0]<=1u;
     case ED_INFO: case ED_DUMP: case ED_SMP_INFO: case ED_PING:
     case ED_UI_STATE: case ED_UI_PALETTES: case ED_LEARN_GET:
         return !n;
@@ -437,6 +460,18 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         (cmd >= ED_FM6B_BEGIN && cmd <= ED_FM6B_END))
         autosave_hold();                                /* (a transfer: no autosave meanwhile, project.c) */
     ed_begin(cmd);
+    if (cmd==110) {
+        if (na!=1u || a[0]>1u) {ed_b(1);ed_send();return;}
+        if (a[0]) {
+            if (!panel_controller_poll) {
+                seq_stop();for(uint32_t k=0;k<NTRK;k++) trk_all_off(&trk[k]);
+                kb_boot_hold=1;ed_controller_buttons=ed_controller_keys=ed_controller_master=~0u;
+                panel_controller_poll=ed_controller_poll;
+            }
+            ed_controller_until=fm1_ms+1500u;
+        } else {panel_controller_poll=0;kb_boot_hold=0;}
+        ed_b(0);ed_b(1);ed_send();return;
+    }
 #if FELUCCA_KO_STORAGE
     if (ko_bank_handle(cmd,a,na)) { ed_send(); return; }
     if ((ko_bank_active || ko_upload_total) && cmd >= ED_SMP_BEGIN && cmd <= ED_SMP_ERASE) {

@@ -1125,3 +1125,19 @@ device gone at ~0.3 s, the MIDI port gone at ~0.57 s and back at ~1.15 s; ON -> 
 at ~0.6 s while the MIDI port was not seen to disappear at all (so do not wait for a disconnect event: after
 a real change, wait ~1.5 s and open again). What the editor sends in that window is lost, `WATCH` ends with the
 bus reset (send `INFO` and `WATCH` again after reconnecting), and a backup in progress answers rc 5 (stale).
+
+### Temporary browser controller (110 / 111)
+
+Request `F0 7D 46 4C 6E enabled F7` with enabled 0 or 1. Reply is command
+110, status 0, protocol version 1. Enabling pauses local transport and suppresses
+local keys/UI while streaming the physical panel; it never writes flash. Send a
+keepalive every 500 ms. After 1500 ms without one, or enabled=0, normal local
+control returns. Older firmware does not acknowledge this command.
+
+Push command 111 contains: version=1, buttons (2 little-endian 7-bit bytes,
+B_FX..B_OCTUP), keys (4 little-endian 7-bit bytes, 27 physical key bits), seven
+relative encoders (EN_SELECT..EN_K4, each signed detents +64), MASTER (2
+little-endian 7-bit bytes, 0..1023). Total framed length is 22 bytes. Snapshots
+are sent when controls change, at most once per 15 ms. Encoder deltas are limited
+to -63..63 per snapshot. Disconnecting the browser releases its virtual held
+controls; the hardware lease expires even if the tab crashes.

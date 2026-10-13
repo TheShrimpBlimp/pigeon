@@ -96,6 +96,11 @@ def main(pkg, version, out):
                     ignore=shutil.ignore_patterns("test*.mjs"))
     for dependency in ("fm1backup.js", "ko_bank.js", "fm1pkg.js", "fm1ota.js"):
         shutil.copy(HERE / dependency, out / "webapp" / dependency)
+    emulator = HERE.parent / "build" / "emu"
+    if not (emulator / "felucca.wasm").is_file():
+        raise SystemExit("Build the Pigeon browser emulator first: web/emu/build.sh")
+    shutil.copytree(emulator, out / "webapp" / "emu", dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("native_check", "*.f32"))
     safe_version=re.sub(r'[^A-Za-z0-9.-]', '-', version)
     landing=(HERE / "site" / "index.html").read_text()
     tokens={"VERSION":safe_version,"BUILD_DATE":datetime.now(ZoneInfo("America/Toronto")).strftime("%B %d, %Y"),"PACKAGE_BYTES":f"{len(raw):,}","SHA256":hashlib.sha256(raw).hexdigest()}

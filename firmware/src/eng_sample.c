@@ -78,7 +78,12 @@ static inline uint32_t smp_byte(uint32_t off)
 #if FELUCCA_KO_STORAGE
     if (off & KO_VOFF) return ko_bank_byte(off & ~KO_VOFF);
 #endif
+#ifdef FELUCCA_WEB
+    /* User sample offsets address the simulated NOR, beyond the factory array. */
+    return *(const volatile uint8_t *)((uintptr_t)SMP_DATA + off);
+#else
     return SMP_DATA[off];
+#endif
 }
 /* Paired KO song: two independently encoded chunks in USR1 / USR3.
  * Existing headers remain version 1; reserved words bind the pair. No partition moves. */

@@ -33,7 +33,7 @@
 #if FELUCCA_KO_STORAGE && !FELUCCA_KO
 #error "KO storage requires FELUCCA_KO=1"
 #endif
-#if FELUCCA_KO_STORAGE && ((defined(FELUCCA_FLASH) && !FELUCCA_FLASH) || (defined(FELUCCA_OTA) && !FELUCCA_OTA))
+#if FELUCCA_KO_STORAGE && !defined(FELUCCA_WEB) && ((defined(FELUCCA_FLASH) && !FELUCCA_FLASH) || (defined(FELUCCA_OTA) && !FELUCCA_OTA))
 #error "KO storage requires flash storage and the editor upload protocol"
 #endif
 #if FELUCCA_KO && defined(FELUCCA_SLICE) && !FELUCCA_SLICE
