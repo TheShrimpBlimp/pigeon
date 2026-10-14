@@ -2,6 +2,20 @@
 /* Main-loop pattern editing; project slots A-D retain the existing FUNA ABI. */
 static chain_pattern_t ko_clipboard __attribute__((section(".pool")));
 static uint8_t ko_clip_valid;
+static uint32_t ko_saved_fingerprint,ko_discard_fingerprint;
+static uint8_t ko_fingerprint_valid,ko_discard_target=255;
+static uint32_t ko_hash_bytes(uint32_t h,const void *data,uint32_t bytes){const uint8_t *p=data;while(bytes--)h=(h^*p++)*16777619u;return h;}
+static uint32_t ko_phrase_fingerprint(void){
+ uint32_t h=2166136261u;
+ for(uint32_t k=0;k<SAMPLER_PARTS;k++){
+  h=ko_hash_bytes(h,trk[k].step,sizeof trk[k].step);
+  for(uint32_t j=0;j<4;j++){int16_t v=motion_base_value(&trk[k],P_SLEN+j);h=ko_hash_bytes(h,&v,sizeof v);}
+  h=ko_hash_bytes(h,&trk[k].p[P_SQNT],sizeof trk[k].p[P_SQNT]);
+ }
+ h=ko_hash_bytes(h,&motion,sizeof motion);return ko_hash_bytes(h,&chain_config,sizeof chain_config);
+}
+static void ko_phrase_clean(void){ko_saved_fingerprint=ko_phrase_fingerprint();ko_fingerprint_valid=1;ko_discard_target=255;}
+static int ko_phrase_dirty(void){return !ko_fingerprint_valid || ko_saved_fingerprint!=ko_phrase_fingerprint() || !(ko_pattern_mask&(1u<<ko_pattern_sel));}
 static void ko_pattern_refresh(void)
 {
     if(transport_busy()) return;
@@ -45,7 +59,7 @@ static void ko_pattern_poll(void)
     uint32_t slot=ko_pattern_commit;
     if(slot<4 && !transport_busy()) {
         ko_pattern_commit=255;ko_pattern_sel=(uint8_t)slot;
-        ko_pattern_apply(&chain.source[slot]);pat_from_set(slot+1u);
+        ko_pattern_apply(&chain.source[slot]);pat_from_set(slot+1u);ko_phrase_clean();
     }
 }
 static int ko_pattern_select(uint32_t slot)
@@ -59,7 +73,16 @@ static int ko_pattern_select(uint32_t slot)
     }
     ko_pattern_sel=(uint8_t)slot;
     if(!project_used(slot) || !chain_copy_source(slot)) {ui.force=1;ui_message("EMPTY / SAVE TO STORE");return 0;}
-    ko_pattern_apply(&chain.source[slot]);pat_from_set(slot+1u);ui_message("PATTERN SELECTED");return 1;
+    ko_pattern_apply(&chain.source[slot]);pat_from_set(slot+1u);ko_phrase_clean();ui_message("PATTERN SELECTED");return 1;
+}
+/* UI-only guard: internal launch/restore paths keep their existing behavior. */
+static int ko_pattern_request(uint32_t slot){
+ if(slot>=4)return 0;
+ if(!transport_busy() && (ko_pattern_mask&(1u<<slot)) && ko_phrase_dirty()){
+  uint32_t fingerprint=ko_phrase_fingerprint();
+  if(ko_discard_target!=slot || ko_discard_fingerprint!=fingerprint){ko_discard_target=slot;ko_discard_fingerprint=fingerprint;ui_message("UNSAVED: AGAIN TO LOAD");ui.force=1;return 0;}
+ }
+ ko_discard_target=255;return ko_pattern_select(slot);
 }
 static void ko_pattern_copy(void)
 {
@@ -76,7 +99,7 @@ static void ko_pattern_save(void)
 {
     if(transport_busy()) {ui_message("STOP TO SAVE");return;}
     if(voices_busy()) {ui_message("RELEASE PADS TO SAVE");return;}
-    if(!project_save(ko_pattern_sel)) {ko_pattern_refresh();char label[]="SAVED ALL TRACKS TO A";label[sizeof label-2]=(char)('A'+ko_pattern_sel);ui_message(label);}
+    if(!project_save(ko_pattern_sel)) {ko_pattern_refresh();ko_phrase_clean();char label[]="SAVED ALL TRACKS TO A";label[sizeof label-2]=(char)('A'+ko_pattern_sel);ui_message(label);}
     ui.force=1;
 }
 static void ko_pattern_paste(void)
@@ -122,7 +145,7 @@ static void ko_arrange_turn(uint32_t k,int32_t steps)
         ui.force=1;return;
     }
     if(ko.view==8) {
-        if(!k) ko_pattern_select((uint32_t)clamp((int32_t)ko_pattern_sel+steps,0,3));
+        if(!k) ko_pattern_request((uint32_t)clamp((int32_t)ko_pattern_sel+steps,0,3));
         else if(k==1) {
             if(transport_busy()) {ui_message("STOP TO COPY");return;}
             uint32_t slot=(uint32_t)clamp((ko_copy_slot<4?ko_copy_slot:0)+steps,0,3);
@@ -146,7 +169,7 @@ static void ko_pattern_keys(uint32_t notes)
 {
     for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {
         int32_t pad=ko_pad(key);if(pad<0 || pad>3) continue;
-        if(ko.view==9) ko_section_add((uint32_t)pad);else ko_pattern_select((uint32_t)pad);
+        if(ko.view==9) ko_section_add((uint32_t)pad);else ko_pattern_request((uint32_t)pad);
     }
 }
 static int ko_pattern_start(int arrangement)

@@ -97,13 +97,17 @@ try {
   const wav = { name: "hit.wav", mimeType: "audio/wav", buffer: raw };
   await page.locator('#file0').setInputFiles([wav,{...wav,name:'second.wav'}]);
   await page.waitForFunction(()=>document.querySelectorAll('#clips0 .clip-row').length===2);
-  await page.locator('#songs .clip-builder').first().evaluate(e=>e.open=true);
+  await page.locator('#merge0:not([disabled])').waitFor({state:'attached'});
+  await page.locator('#songs .clip-builder summary').first().click();
   await page.getByLabel('Clip 1 end',{exact:true}).fill('0.1');
+  await page.getByLabel('Clip 1 gainDb',{exact:true}).fill('-6');await page.getByLabel('Clip 2 gainDb',{exact:true}).fill('-6');
   await page.locator('#clips0 .clip-row').last().getByText('Move up',{exact:true}).click();
   assert((await page.locator('#clips0 .clip-row p').first().textContent()).includes('second.wav'));
   await page.locator('#merge0').click();await page.locator('#apply0').click();
   await page.waitForFunction(()=>document.getElementById('status').textContent.startsWith('Song 1 imported'));
   const joined=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const b=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {songChops}=await import('/pigeon/editing.js');return songChops(b,1);});
+  const gainPeak=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);}),bank=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {component}=await import('/pigeon/bank.js'),c=component(bank,1),ac=new AudioContext(),audio=await ac.decodeAudioData(c.song.slice((c.h[12]+1)*4).buffer);let peak=0;for(const n of audio.getChannelData(0))peak=Math.max(peak,Math.abs(n));await ac.close();return peak;});
+  assert(gainPeak<.35 && gainPeak>.05,'encoding must preserve clip attenuation instead of normalizing it away');
   assert.equal(joined.length,2);assert.equal(joined[0].a,0);assert.equal(joined[0].b,joined[1].a);assert(joined[1].b>joined[1].a);
   await page.locator('#clips0 .clip-row').first().getByText('Remove',{exact:true}).click();assert.equal(await page.locator('#clips0 .clip-row').count(),1);
   await page.locator("#file0").setInputFiles(wav);

@@ -23,5 +23,12 @@ int main(void){
  for(uint32_t p=0;p<SAMPLER_PARTS;p++)step_clear(&trk[p].step[0]);
  ko_pattern_select(1);int restored=1;for(uint32_t p=0;p<SAMPLER_PARTS;p++)restored &= trk[p].step[0].n==1 && trk[p].step[0].note[0]==60+p;
  bad+=check("saved phrase restores sequences on all three tracks",restored);
+ ko_phrase_clean();trk[0].step[0].note[0]=72;
+ bad+=check("phrase edits set unsaved state",ko_phrase_dirty());
+ bad+=check("first occupied-slot request preserves unsaved notes",!ko_pattern_request(1) && trk[0].step[0].note[0]==72);
+ bad+=check("second matching request deliberately discards edits",ko_pattern_request(1) && trk[0].step[0].note[0]==60 && !ko_phrase_dirty());
+ trk[0].step[0].note[0]=73;ko_pattern_request(1);trk[0].step[0].note[0]=74;
+ bad+=check("edits after a warning require a fresh confirmation",!ko_pattern_request(1) && trk[0].step[0].note[0]==74);
+ ko_pattern_sel=2;bad+=check("empty destination stays unsaved",ko_phrase_dirty());
  return bad?1:0;
 }

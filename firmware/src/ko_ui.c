@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* HOME is the KO editor; standard SEQ, SAVE, layers and menu remain available. */
+static int ko_phrase_dirty(void);
 static void ko_pattern_refresh(void);
 static void ko_pattern_poll(void);
 static int ko_pattern_select(uint32_t slot);

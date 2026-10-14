@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
 import {inspect,crc} from '../pigeon/bank.js';
-import {validateArchive} from '../pigeon/device.js';
-import {project} from '../pigeon/editing.js';
+import {b64,validateArchive} from '../pigeon/device.js';
+import {project,editStep,readStep} from '../pigeon/editing.js';
 import {songChops} from '../pigeon/editing.js';
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -19,7 +19,7 @@ try{
  await page.route('**/api/trials',route=>{const request=route.request();if(request.method()==='POST'){trialPosts++;trialIds.add(request.postDataJSON().id);}return route.fulfill({json:{total:trialIds.size}});});
  await page.goto(`http://127.0.0.1:${server.address().port}/webapp/emu/`);
  await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
- await page.waitForFunction(()=>Number(document.getElementById("screen").dataset.deviceTime)>1000);
+ try{await page.waitForFunction(()=>Number(document.getElementById("screen").dataset.deviceTime)>1000);}catch(e){console.log(await page.evaluate(()=>({status:document.getElementById("status").textContent,clock:document.getElementById("screen").dataset.deviceTime})),errors);throw e;}
 
  await page.getByText('Anonymous browser trials',{exact:true}).waitFor();
  assert.equal(trialIds.size,1);assert.equal(await page.locator('#trial-total .nixie-unlit b').count(),60);
@@ -118,6 +118,25 @@ try{
  await page.evaluate(()=>window.testInput.onmidimessage({data:Uint8Array.from([144,60,100])}));
  await page.evaluate(()=>window.testInput.onmidimessage({data:Uint8Array.from([128,60,0])}));
  await page.locator('#midi-disconnect').click();assert(await page.evaluate(()=>window.testInput.onmidimessage===null));
+ // Import a bank and a session, then prove pattern/audio round trips and reload persistence.
+ await page.locator('#import-session').setInputFiles({name:'saved.kob',mimeType:'application/octet-stream',buffer:Buffer.from(bank)});
+ await page.getByText('Bank imported with chop settings. Current patterns are preserved.',{exact:true}).waitFor();
+ const custom=structuredClone(session),runtime=editStep(validated.objects[0].bytes,0,0,{chop:4,velocity:77,probability:66}),savedA=editStep(validated.objects[0].bytes,0,0,{chop:7,velocity:88});
+ for(const [id,bytes] of [[0,runtime],[2,savedA]])custom.objects[id]={id,size:bytes.length,crc:crc(bytes),data:b64(bytes)};
+ const incoming={name:'saved.pigeon',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(custom))};
+ await page.locator('#import-session').setInputFiles(incoming);
+ await page.getByText('Session imported: current sequence, A–D patterns, settings and samples.',{exact:true}).waitFor();
+ async function checkImported(){const pending=page.waitForEvent('download');await page.locator('#save-session').click();const d=await pending,a=validateArchive(JSON.parse(await fs.readFile(await d.path(),'utf8')));assert.deepEqual(a.bank,validated.bank);const current=readStep(project(a.objects[0].bytes),0,0),saved=readStep(project(a.objects[2].bytes),0,0);assert.equal(current.notes[0],63);assert.equal(current.velocity,77);assert.equal(current.probability,66);assert.equal(saved.notes[0],66);}
+ await checkImported();
+ await page.reload();await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});await checkImported();
+ await page.locator('#import-session').setInputFiles({name:'bank-only.kob',mimeType:'application/octet-stream',buffer:Buffer.from(bank)});
+ await page.getByText('Bank imported with chop settings. Current patterns are preserved.',{exact:true}).waitFor();await checkImported();
+ const invalid=structuredClone(custom);invalid.bank_crc^=1;
+ await page.locator('#import-session').setInputFiles({name:'invalid.pigeon',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(invalid))});
+ await page.getByText('Import failed: Sample bank checksum mismatch',{exact:true}).waitFor();await checkImported();
+ const badObject=structuredClone(custom),badBytes=runtime.slice();badBytes.fill(0,0,4);badObject.objects[0]={id:0,size:badBytes.length,crc:crc(badBytes),data:b64(badBytes)};
+ await page.locator('#import-session').setInputFiles({name:'bad-object.pigeon',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(badObject))});
+ await page.getByText('Import failed: Invalid session object 0.',{exact:true}).waitFor();await checkImported();
  await page.locator('#clear-samples').click();await page.getByText('Samples cleared.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
  await page.evaluate(()=>document.fonts.ready);

@@ -39,7 +39,7 @@ static void ko_arrange_draw(int force)
     if(ko.view==8) {
         ko_line(29,"PIGEON / PATTERNS A-D",T_THEME);
         str_cpy(text,"SELECT ",sizeof text);uint32_t n=str_len(text);text[n]=(char)('A'+ko_pattern_sel);text[n+1]=0;
-        str_cpy(text+str_len(text),(ko_pattern_mask&(1u<<ko_pattern_sel))?" / SAVED":" / EMPTY",sizeof text-str_len(text));
+        str_cpy(text+str_len(text),ko_phrase_dirty()?" / UNSAVED":(ko_pattern_mask&(1u<<ko_pattern_sel))?" / SAVED":" / EMPTY",sizeof text-str_len(text));
         if(ko_copy_slot<4) {str_cpy(text+str_len(text)," / CLIP ",sizeof text-str_len(text));n=str_len(text);text[n]=(char)('A'+ko_copy_slot);text[n+1]=0;}
         ko_line(52,text,T_THEME);
         if(ko_launch_pending<4) {str_cpy(text,chain_config.rsv[0]==1?"PATTERN END: ":"NEXT BAR: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_launch_pending);text[n+1]=0;}

@@ -62,3 +62,15 @@ export async function prepareBank(songs,pads,unlimited,bitrates=[64,64],onProgre
   if(!unlimited)for(let i=0;i<2;i++)if(prepared[i])prepared[i]=await compressSong(prepared[i],bitrates[i],p=>onProgress(i,p));
   return {songs:prepared,image:buildBank(prepared,pads,unlimited)};
 }
+// Decode only for editing; imported encoded bytes remain the active bank unchanged.
+export async function decodeBank(image,context){
+ const {inspect,padAudio}=await import('../pigeon/bank.js'),info=inspect(image),songs=[null,null],pads=[];
+ for(let i=0;i<info.songs.length;i++){
+  const c=component(image,i+1),h=c.h;let pcm;
+  if(h[4]===1){const {imaDecode}=await import('../pigeon/bank.js');const raw=imaDecode(c.song,h[6]);pcm=raw;if(h[5]!==22050){const source=context.createBuffer(1,pcm.length,h[5]);source.copyToChannel(pcm,0);const o=new OfflineAudioContext(1,Math.ceil(pcm.length*22050/h[5]),22050),n=o.createBufferSource();n.buffer=source;n.connect(o.destination);n.start();pcm=(await o.startRendering()).getChannelData(0).slice();}}
+  else{const decoded=await context.decodeAudioData(c.song.slice((h[12]+1)*4).buffer),o=new OfflineAudioContext(1,Math.ceil(decoded.duration*22050),22050),n=o.createBufferSource();n.buffer=decoded;n.connect(o.destination);n.start();const raw=(await o.startRendering()).getChannelData(0);pcm=new Float32Array(h[6]);pcm.set(raw.subarray(h[13],h[13]+h[6]));}
+  const song={name:info.songs[i].name,pcm};if(h[4]===2)song.compressed={data:c.song,frames:h[12],skip:h[13],bitrate:[0,8,16,24,32,40,48,56,64][c.song[(h[12]+1)*4+2]>>>4]};songs[i]=song;
+ }
+ for(let i=0;i<info.pads;i++){const a=padAudio(image,i);pads.push({name:'Pad '+(i+1),pcm:a});}
+ return {songs,pads,image:image.slice(),unlimited:false,bitrates:songs.map(s=>s?.compressed?.bitrate||64),importedBank:true};
+}

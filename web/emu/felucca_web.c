@@ -518,9 +518,11 @@ EXPORT uint8_t *web_upload_buffer(uint32_t bytes)
 }
 EXPORT uint32_t web_load_bank(uint32_t bytes,uint32_t unlimited,uint32_t restore)
 {
-    if (!web_upload_memory || bytes<4096u || bytes>web_upload_capacity || (!unlimited && bytes>0x67000u)) return 1;
+    if (!web_upload_memory || bytes<4096u || bytes>web_upload_capacity || (!unlimited && bytes>0x68000u)) return 1;
     ko_bank_hdr_t *h=(ko_bank_hdr_t *)web_upload_memory;
-    if(h->used!=bytes) return 1;
+    uint32_t metadata=bytes==h->used+4096u;
+    if((h->used!=bytes && !metadata) || h->used<4096u || (!unlimited && h->used>0x67000u))return 1;
+    bytes=h->used;
     uint8_t *old=web_bank_memory;uint32_t old_capacity=web_bank_capacity;
     web_bank_memory=web_upload_memory;web_bank_capacity=unlimited?bytes:0x67000u;
     ko_bank_hdr_t second={0};if(h->version==3)memcpy(&second,web_upload_memory+sizeof *h,sizeof second);
@@ -537,8 +539,9 @@ EXPORT uint32_t web_load_bank(uint32_t bytes,uint32_t unlimited,uint32_t restore
         }
     }
     memcpy(nor+SMP_USER_BASE,web_upload_memory,4096u);
-    if(!restore)memset(nor+SMP_USER_BASE+SLC_REC_OFF,255,4096u);
-    ko_bank_scan();memset(ko_states,0,sizeof ko_states);ko.on=1;ko_setup();
+    if(metadata)memcpy(nor+SMP_USER_BASE+SLC_REC_OFF,web_upload_memory+bytes,4096u);
+    else if(!restore)memset(nor+SMP_USER_BASE+SLC_REC_OFF,255,4096u);
+    ko_bank_scan();memset(ko_states,0,sizeof ko_states);ko.on=1;if(!restore || !ko_ready())ko_setup();
     ko_prepare();ui.force=1;web_flash_writes++;
     return ko_bank_active?0:3;
 }
@@ -576,6 +579,30 @@ EXPORT const uint8_t *web_session_object(uint32_t id)
     }
     if(id==9) {if(upf_valid(&upf))web_session_length=sizeof upf;return (const uint8_t *)&upf;}
     return 0; /* retired object 8 is empty, matching the hardware archive */
+}
+/* Restore archive objects only into the emulator's simulated NOR. */
+EXPORT uint32_t web_restore_object(uint32_t id,uint32_t bytes){
+ if(bytes>3840u || !web_upload_memory || bytes>web_upload_capacity)return 1;
+ flash_ok=1; /* simulated flash is always available */
+ const uint8_t *raw=web_upload_memory;uint32_t object;
+ if(id==0 || (id>=2 && id<=5)){
+  if(!bytes && id==0)return 2;
+  if(bytes && !proj_import(&proj_scratch,raw,bytes))return 2;
+  if(bytes && !proj_pack(&proj_wire,&proj_scratch))return 2;
+  raw=(const uint8_t *)&proj_wire;bytes=bytes?sizeof proj_wire:0;
+  object=id==0?OBJ_AUTOSAVE:OBJ_PROJECT0+id-2;
+ }else if(id==1){const persist_t *p=(const persist_t *)raw;if(bytes!=sizeof *p || !settings_import(p,bytes))return 2;object=OBJ_SETTINGS;
+ }else if(id==6 || id==7){const up_bank_t *p=(const up_bank_t *)raw;if(bytes && (bytes!=sizeof *p || p->magic!=UP_BANK_MAGIC || p->rsize!=sizeof(up_rec_t) || p->nslot!=UP_PER_BANK))return 2;object=OBJ_UPRESET0+id-6;
+ }else if(id==8)return bytes?2:0;
+ else if(id==9){const upf_t *p=(const upf_t *)raw;if(bytes && (bytes!=sizeof *p || !upf_valid(p)))return 2;object=OBJ_UPFM6;
+ }else return 1;
+ return st_save(object,raw,bytes)?3:0;
+}
+EXPORT uint32_t web_apply_session(void){
+ int n=st_load(OBJ_AUTOSAVE,&proj_wire,sizeof proj_wire);
+ if(n<=0 || !proj_import(&proj_scratch,(const uint8_t *)&proj_wire,n) || project_restore_runtime(&proj_scratch))return 1;
+ if(song.sel>=SAMPLER_PARTS)song.sel=0;
+ ko.on=1;ko_prepare();ko_fingerprint_valid=0;ui.force=1;return 0;
 }
 EXPORT uint32_t web_samples_loaded(void) { return ko_bank_active; }
 EXPORT uint32_t web_sample_pool_size(void) { return web_bank_capacity; }

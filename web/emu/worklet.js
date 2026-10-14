@@ -46,8 +46,8 @@ if (typeof registerProcessor === "function") {
       this.port.onmessage = (e) => this.onMessage(e.data);
     }
 
-    loadBank(image,unlimited,restore=false) {
-      const ex=this.ex,bytes=new Uint8Array(image),ptr=ex.web_upload_buffer(bytes.length);
+    loadBank(image,unlimited,restore=false,ex=this.ex) {
+      const bytes=new Uint8Array(image),ptr=ex.web_upload_buffer(bytes.length);
       if(!ptr)throw Error('The browser has no more sample memory available.');
       new Uint8Array(ex.memory.buffer,ptr,bytes.length).set(bytes);
       if(ex.web_load_bank(bytes.length,unlimited?1:0,restore?1:0))throw Error('The sample bank could not be loaded.');
@@ -56,6 +56,7 @@ if (typeof registerProcessor === "function") {
     async onMessage(m) {
       if (m.type === "load") {
         try {
+          this.wasm=m.wasm;
           const { instance } = await WebAssembly.instantiate(m.wasm, {});
           const ex = instance.exports;
           ex._initialize();
@@ -78,6 +79,24 @@ if (typeof registerProcessor === "function") {
       else if(m.type==='bank') {
         try{this.loadBank(m.image,m.unlimited);this.port.postMessage({type:'bank-loaded',id:m.id});}
         catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
+      }
+      else if(m.type==='import-session') {
+        try{
+          let objects=m.objects;
+          if(!objects){objects=[];for(let id=0;id<10;id++){const p=ex.web_session_object(id),size=ex.web_session_size();objects.push({id,bytes:new Uint8Array(ex.memory.buffer,p,size).slice()});}}
+          const {instance}=await WebAssembly.instantiate(this.wasm,{}),next=instance.exports;
+          next._initialize();next.web_nor_erase();
+          if(objects)for(const o of [...objects.slice(2),objects[1],objects[0]]){
+            const p=next.web_upload_buffer(Math.max(4096,o.bytes.length));if(!p)throw Error('Not enough memory to import session.');
+            new Uint8Array(next.memory.buffer,p,o.bytes.length).set(o.bytes);
+            if(next.web_restore_object(o.id,o.bytes.length))throw Error('Invalid session object '+o.id+'.');
+          }
+          next.web_master(m.master??700);next.web_boot();this.loadBank(m.image,false,true,next);
+          if(objects && next.web_apply_session())throw Error('Session patterns could not be restored.');
+          this.ex=next;this.queue=[];this.nextOk=0;this.sentDraws=-1;this.sentWrites=-1;
+          const sectors=storeSectors(new Uint8Array(next.memory.buffer,next.web_nor(),next.web_nor_size()));
+          this.port.postMessage({type:'bank-loaded',id:m.id,sectors});
+        }catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
       }
       else if(m.type==='bank-metadata') {
         try{const ptr=ex.web_bank_metadata();if(!ptr)throw Error('No sample bank is loaded.');const metadata=new Uint8Array(ex.memory.buffer,ptr,4096).slice();const objects=[];if(m.session)for(let id=0;id<10;id++){const p=ex.web_session_object(id),size=ex.web_session_size();if((id<2&&!p)||size>3840)throw Error('Session capture failed.');objects.push({id,bytes:new Uint8Array(ex.memory.buffer,p,size).slice()});}this.port.postMessage({type:'bank-metadata',id:m.id,metadata,objects},[metadata.buffer,...objects.map(o=>o.bytes.buffer)]);}
