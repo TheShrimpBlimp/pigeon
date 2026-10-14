@@ -282,7 +282,7 @@ static void web_power_on(void)
     ko_palette_on = 1; palette_set(settings.palette);
     ko_prepare();
     if (!ko_ready()) ko_setup();
-    web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
+    web_boot_ms = fm1_ms + 3000u;        /* PIGEON splash: three seconds, matching hardware. */
     web_booted = 1;
 }
 

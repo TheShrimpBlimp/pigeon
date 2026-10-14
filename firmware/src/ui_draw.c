@@ -1251,15 +1251,23 @@ static void draw_splash(void)
 {
 #if FELUCCA_KO && BRAND_SPLASH_AVAILABLE
     lcd_fill(0, 0, 240, 240, T_BG);
-    draw_text_box(0, 2, 240, &AF_M, FW_DISPLAY_NAME, T_THEME, 1);
     /* Reuse the existing canvas one row at a time; no extra RAM buffer. */
     for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
         cv_begin(BRAND_SPLASH_W, 1, T_BG);
         for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
             cv_px[x] = swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
-        cv_blit((240u-BRAND_SPLASH_W)/2u, 26u+y);
+        cv_blit((240u-BRAND_SPLASH_W)/2u, y);
     }
-    draw_text_box(0, 220, 240, &AF_S, FW_DISPLAY_VERSION, T_MID, 1);
+    /* The branded splash keeps its green text even with a monochrome UI palette. */
+    uint8_t splash_mono = ux.mono;
+    ux.mono = 0;
+    /* Centre the credits in the open space between the wings. */
+    draw_text_line(0, 24, 168, &AF_M, "PIGEON V0.5", 0x87ed, 0, 1);
+    draw_text_line(0, 49, 168, &AF_S, "By The Shrimp Blimp", 0x87ed, 0, 1);
+    draw_text_line(0, 68, 168, &AF_S, "Based on Felucca V1.5.1", 0x87ed, 0, 1);
+    draw_text_line(0, 87, 168, &AF_S, "Logo by Dendy0097", 0x87ed, 0, 1);
+    draw_text_line(0, 106, 168, &AF_S, "Font by Disastrid", 0x87ed, 0, 1);
+    ux.mono = splash_mono;
     lcd_sync();
 #else
     int32_t h = SPL_PAD - AF_M_CAP_Y + SPL_PITCH + AF_M.h;     /* a band: its two lines, the descenders in */

@@ -58,12 +58,12 @@ int KO_TEST_MAIN(void)
                  !strcmp(FW_DISPLAY_NAME, "PIGEON") && !strcmp(SPLASH_LINES[0], "PIGEON"));
 #if BRAND_SPLASH_AVAILABLE
     draw_splash();
-    int photo_ok = BRAND_SPLASH_W <= 208 && BRAND_SPLASH_H <= 192;
+    int photo_ok = BRAND_SPLASH_W == 240 && BRAND_SPLASH_H == 240;
     for (uint32_t y = 0; y < BRAND_SPLASH_H; y++)
         for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
-            photo_ok &= host_screen[(26u+y)*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
+            if (y < 24 || y >= 123 || x >= 168) photo_ok &= host_screen[y*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
                         swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
-    bad += check("photo splash preserves every indexed pixel and LCD byte order", photo_ok);
+    bad += check("logo splash preserves artwork outside the text area and LCD byte order", photo_ok);
 #endif
     slc_store_boot(); fixture(0, 0); fixture(1, 1);
     step_t saved[NSTEP]; memcpy(saved, trk[0].step, sizeof saved);

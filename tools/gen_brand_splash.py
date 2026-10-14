@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Encode the supplied splash photograph as a compact indexed LCD asset."""
+"""Encode the supplied splash logo as a compact indexed LCD asset."""
 from pathlib import Path
 import sys
 from PIL import Image, ImageOps
@@ -9,12 +9,12 @@ source = ROOT / 'assets/branding/splash.png'
 target = Path(sys.argv[1])
 target.parent.mkdir(parents=True, exist_ok=True)
 if not source.exists():
-    target.write_text('/* No local splash photo supplied. */\n#define BRAND_SPLASH_AVAILABLE 0\n')
+    target.write_text('/* No local splash logo supplied. */\n#define BRAND_SPLASH_AVAILABLE 0\n')
     print('splash: no assets/branding/splash.png; using text splash')
 else:
     with Image.open(source) as original:
         photo = ImageOps.exif_transpose(original).convert('RGB')
-        photo.thumbnail((208, 192), Image.Resampling.LANCZOS)
+        photo.thumbnail((240, 240), Image.Resampling.LANCZOS)
         # No crop: preserve the entire supplied portrait.
         indexed = photo.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
     palette = indexed.getpalette()

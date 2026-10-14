@@ -1,6 +1,6 @@
 # PIGEON licensing
 
-The sampler uses a PIGEON text splash; no photograph is distributed.
+The sampler splash uses the PIGEON logo by Dendy0097 and Little Character by Disastrid.
 See `assets/branding/README.md` for branding details.
 
 PIGEON is a derivative of Felucca 1.5.1, developed as an independent FM1
