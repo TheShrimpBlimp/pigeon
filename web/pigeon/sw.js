@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Bump this version whenever a shipped runtime asset changes.
-const CACHE = "pigeon-library-v18";
+const CACHE = "pigeon-library-v19";
 const ASSETS = [
   "./",
   "index.html",
@@ -8,8 +8,9 @@ const ASSETS = [
   "style.css",
   "fonts/LittleCharacterRegular.ttf",
   "fonts/LittleCharacter-OFL.txt",
-  "app.js",
+  "app.js?v=19",
   "bank.js",
+  "bank-handoff.js",
   "device.js",
   "editing.js",
   "editors.js",

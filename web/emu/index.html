@@ -101,7 +101,7 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 <label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 408 KiB</option><option value="unlimited">Unlimited storage</option></select>
 <p id="storage-help">The real FM1 shares 408 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.</p>
 <div class="sample-grid"><div class="sample-slot"><label for="song1-file">Song 1</label><input id="song1-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song1-quality">MP3 quality</label><select id="song1-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song1-name">Empty</span><div id="song1-editor" class="file-editor"></div></div><div class="sample-slot"><label for="song2-file">Song 2</label><input id="song2-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song2-quality">MP3 quality</label><select id="song2-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song2-name">Empty</span><div id="song2-editor" class="file-editor"></div></div><div class="sample-slot"><label for="kit-files">Drum kit · up to 16 files</label><input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span><p class="fine">Choose files, edit each pad below, then apply the kit.</p><div id="pad-editors"></div><button id="apply-kit" type="button" disabled>Apply drum kit</button></div></div>
-<p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="417792" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 408 KiB</p><button id="clear-samples" type="button" disabled>Clear samples</button>
+<p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="417792" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 408 KiB</p><button id="save-bank" disabled>Save bank (.kob)</button> <button id="open-loader" disabled>Open bank in sample loader ↗</button> <button id="clear-samples" type="button" disabled>Clear samples</button>
 <p class="fine">Choosing a file stages it for editing. Press Apply to load your selected section; applied files and trim boundaries save in this browser. Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
 <section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Use the on-screen knobs and buttons to edit. Sound comes from your computer.</p></section>
 <section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
@@ -463,6 +463,8 @@ let shownTrials=0;
 function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,counterDigits(total));trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
 trialTotal().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
 window.addEventListener('online',()=>{if(loaderReady)recordTrial().then(showTrials).catch(()=>{});});
+import {inspect,join} from '../pigeon/bank.js';
+import {stageBank} from '../pigeon/bank-handoff.js';
 import {FileEditor} from './file-editor.js';
 import {prepareBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
 let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,bitrates:[64,64],image:null},bankId=0;
@@ -471,6 +473,7 @@ const songEditors=[],padEditors=[];
 const bankRequests=new Map(), sampleStatus=document.getElementById('sample-status'), mode=document.getElementById('storage-mode');
 function refreshSamples(){
   for(const id of ['song1-file','song2-file','kit-files','storage-mode','clear-samples','song1-quality','song2-quality','apply-kit'])document.getElementById(id).disabled=!loaderReady||loaderBusy;
+  for(const id of ['save-bank','open-loader'])document.getElementById(id).disabled=!loaderReady||loaderBusy||!samples.image;
   document.getElementById('song1-name').textContent=samples.songs[0]?.name||'Empty';
   document.getElementById('song2-name').textContent=samples.songs[1]?.name||'Empty';
   document.getElementById('kit-name').textContent=samples.pads.length?samples.pads.map(p=>p.name).join(', '):'Empty';
@@ -502,6 +505,20 @@ async function changeSamples(operation){
   }catch(e){mode.value=samples.unlimited?'unlimited':'fm1';sampleStatus.textContent=e.message;}
   finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
 }
+async function exportBank(openLoader){
+  if(loaderBusy||!samples.image)return;
+  if(samples.image.length>FM1_POOL){sampleStatus.textContent='This unlimited bank is too large for an FM1. Switch to limited storage mode and reduce the audio or MP3 quality before exporting.';return;}
+  loaderBusy=true;refreshSamples();
+  try{
+    const metadata=await new Promise((resolve,reject)=>{const id=++bankId,timer=setTimeout(()=>{bankRequests.delete(id);reject(Error('Bank export timed out. Try again.'));},10000);bankRequests.set(id,{resolve,reject,timer});node.port.postMessage({type:'bank-metadata',id});});
+    const image=join([samples.image,metadata]);inspect(image);
+    if(openLoader){const id=await stageBank(image);location.href='../pigeon/?from=emulator#emulator-bank='+id;}
+    else{const url=URL.createObjectURL(new Blob([image],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download='pigeon-emulator-bank.kob';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);sampleStatus.textContent='Bank saved with samples and chop settings. Open it in the sample loader to send it to your FM1. Sequencer patterns stay in the emulator.';}
+  }catch(e){sampleStatus.textContent=e.message;}
+  finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
+}
+document.getElementById('save-bank').onclick=()=>exportBank(false);
+document.getElementById('open-loader').onclick=()=>exportBank(true);
 function applySong(slot){
   songEditors[slot].stop();
   return changeSamples(async()=>{
@@ -582,8 +599,8 @@ async function switchOn() {
         const m = e.data;
         if (m.type === "ready") res();
         else if (m.type === "error") rej(new Error(m.message));
-        else if(m.type==='bank-loaded'||m.type==='bank-error'){
-          const pending=bankRequests.get(m.id);if(pending){bankRequests.delete(m.id);clearTimeout(pending.timer);m.type==='bank-loaded'?pending.resolve():pending.reject(Error(m.message));}
+        else if(m.type==='bank-loaded'||m.type==='bank-error'||m.type==='bank-metadata'){
+          const pending=bankRequests.get(m.id);if(pending){bankRequests.delete(m.id);clearTimeout(pending.timer);m.type==='bank-error'?pending.reject(Error(m.message)):pending.resolve(m.metadata);}
         }
         else if (m.type === "frame") {
           document.getElementById("screen").dataset.deviceTime=m.now;

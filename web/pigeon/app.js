@@ -1,3 +1,4 @@
+import {readBank,finishBank} from './bank-handoff.js';
 import { sha256hex } from '../fm1pkg.js';
 import { recordInstall } from './install-count.js';
 // SPDX-License-Identifier: GPL-3.0-only
@@ -791,6 +792,18 @@ try {
   );
 }
 
+const emulatorLink=/^#emulator-bank=(.+)$/.exec(location.hash);
+if(emulatorLink){
+ try{
+  const imported=await readBank(emulatorLink[1]);
+  archive=null;
+  await updateBank(imported);
+  await store('session',null);
+  sources.fill(null);pendingPads.fill(null);kitReplaceAll=false;render();
+  await finishBank(emulatorLink[1]);history.replaceState(null,'',location.pathname+location.search);
+  status('Emulator bank ready, including chop settings. Connect your FM1, then press Send bank to FM1. This replaces its sample bank.');
+ }catch(e){status(`Emulator bank could not be opened: ${e.message}`,true);}
+}
 const offlineReady = await caching;
 initializing = false;
 controls();

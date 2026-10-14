@@ -542,6 +542,14 @@ EXPORT uint32_t web_load_bank(uint32_t bytes,uint32_t unlimited,uint32_t restore
     ko_prepare();ui.force=1;web_flash_writes++;
     return ko_bank_active?0:3;
 }
+/* Snapshot current edits through the real firmware serializer; only simulated NOR is written. */
+EXPORT const uint8_t *web_bank_metadata(void)
+{
+    if(!ko_bank_active) return 0;
+    int rc=ko_store_sector(1);
+    if(rc==1 || rc==2) return 0;
+    return nor+SMP_USER_BASE+SLC_REC_OFF;
+}
 EXPORT uint32_t web_samples_loaded(void) { return ko_bank_active; }
 EXPORT uint32_t web_sample_pool_size(void) { return web_bank_capacity; }
 

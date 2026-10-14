@@ -79,6 +79,10 @@ if (typeof registerProcessor === "function") {
         try{this.loadBank(m.image,m.unlimited);this.port.postMessage({type:'bank-loaded',id:m.id});}
         catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
       }
+      else if(m.type==='bank-metadata') {
+        try{const ptr=ex.web_bank_metadata();if(!ptr)throw Error('No sample bank is loaded.');const metadata=new Uint8Array(ex.memory.buffer,ptr,4096).slice();this.port.postMessage({type:'bank-metadata',id:m.id,metadata},[metadata.buffer]);}
+        catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
+      }
       else if (m.type === "buttons" || m.type === "keys") this.queue.push(m);
       else if (m.type === "enc") ex.web_enc(m.role, m.n | 0);
       else if (m.type === "master") ex.web_master(m.value | 0);

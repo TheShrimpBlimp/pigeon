@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
+import {inspect,crc} from '../pigeon/bank.js';
+import {songChops} from '../pigeon/editing.js';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -20,6 +22,7 @@ try{
  await page.getByText('Anonymous browser trials',{exact:true}).waitFor();
  assert.equal(trialIds.size,1);assert.equal(await page.locator('#trial-total .nixie-unlit b').count(),60);
  assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'000001');
+ assert(await page.locator('#save-bank').isDisabled());assert(await page.locator('#open-loader').isDisabled());
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
  assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 408 KiB');
  await page.locator('#song1-file').setInputFiles({name:'editable.wav',mimeType:'audio/wav',buffer:wav(2)});
@@ -59,6 +62,19 @@ try{
  await page.locator('#apply-kit').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#kit-name').textContent(),'pad.wav');
+ const downloadPromise=page.waitForEvent('download');await page.locator('#save-bank').click();const download=await downloadPromise;
+ assert.equal(download.suggestedFilename(),'pigeon-emulator-bank.kob');
+ const bank=new Uint8Array(await fs.readFile(await download.path())),info=inspect(bank);
+ assert.equal(info.songs.length,2);assert.equal(info.pads,1);assert.equal(bank.length,info.used+4096);
+ for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x314f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
+ assert(songChops(bank,1).length>0);assert(songChops(bank,2).length>0);
+ const emulatorURL=page.url();await page.locator('#open-loader').click();
+ await page.waitForURL('**/webapp/pigeon/**');await page.locator('#transfer-status').filter({hasText:'Emulator bank ready'}).waitFor();
+ const handed=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const bytes=await new Promise(r=>{const q=db.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});db.close();return Array.from(bytes);});
+ assert.deepEqual(handed,Array.from(bank));assert.equal(new URL(page.url()).hash,'');
+ await page.reload();await page.getByText('Restored your last local bank.',{exact:true}).first().waitFor();
+ await page.goto(emulatorURL);await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
+
  const used64=await page.locator('#sample-meter').getAttribute('value');
  await page.locator('#song1-quality').selectOption('24');
  await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
@@ -79,6 +95,7 @@ try{
  assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=417792);
  await page.locator('#storage-mode').selectOption('unlimited');await page.locator('#song1-file:not([disabled])').waitFor();
  assert(await page.locator('#song1-quality').isHidden());
+ await page.locator('#save-bank').click();await page.getByText('This unlimited bank is too large for an FM1. Switch to limited storage mode and reduce the audio or MP3 quality before exporting.',{exact:true}).waitFor();
  await page.locator('#storage-mode').selectOption('fm1');await page.locator('#song1-file:not([disabled])').waitFor();
  assert.equal(await page.locator('#storage-mode').inputValue(),'fm1');assert(await page.locator('#song1-quality').isVisible());
  await page.reload();await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});

@@ -130,3 +130,7 @@ license texts are in `vendor/`.
 
 The GUI uses Little Character Regular by S M Astrid Bin, under SIL OFL 1.1.
 The unmodified font and original license are bundled in `fonts/` and cached offline.
+
+## Emulator banks
+
+The emulator can save its applied sample bank as `.kob`, including current chop and playback metadata. Open that file here, or use **Open bank in sample loader** in the hosted emulator to carry it here locally. Connect the FM1 and use **Send bank to FM1** to review and upload it. This replaces the device sample bank; it does not install firmware. Emulator sequencer patterns are not part of a `.kob` bank. Unlimited banks must fit the hardware storage limit before export.
