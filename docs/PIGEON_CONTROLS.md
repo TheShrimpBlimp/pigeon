@@ -44,4 +44,4 @@ SCL opens Patterns. Choose A–D, stop playback and release the pads, then press
 
 ## Installing from another firmware
 
-From zp12, Sloop or an unrecognized custom firmware, use that firmware’s documented procedure to return to official M-VAVE V15, then install PIGEON. Felucca is not a required intermediate step. A factory-stock spare FM1 is a suitable starting point while keeping the existing setup intact. Back up first; physical hardware verification of this beta remains pending.
+Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; physical hardware verification of this beta remains pending.
