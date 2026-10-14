@@ -1,3 +1,5 @@
+import {assemble,trimmedSegments} from './audio-assembly.js';
+import {saveChops} from './editing.js';
 import {readBank,finishBank} from './bank-handoff.js';
 import { sha256hex } from '../fm1pkg.js';
 import { recordInstall } from './install-count.js';
@@ -36,7 +38,7 @@ const sources = [null, null],
 let labels = {};
 let kitReplaceAll = false,
   editors = null;
-const trimWaves = [null, null];
+const trimWaves = [null, null], clipLists=[[],[]];
 const db = new Promise((resolve, reject) => {
   const r = indexedDB.open("pigeon-library", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("files");
@@ -301,7 +303,7 @@ function render() {
 for (let i = 0; i < 2; i++) {
   const section = document.createElement("article");
   section.className = "song";
-  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio<input id="file${i}" type="file" accept="audio/*"></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="source-name${i}"></p><div class="edit-fields"><label>Zoom<input id="trim-zoom${i}" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="trim-scroll${i}" type="range" min="0" max="1000" value="0"></label><label>Loop preview<select id="trim-loop${i}"><option value="0">Off</option><option value="1">On</option></select></label><button id="trim-stop${i}">Stop preview</button></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Apply to local Song ${i + 1}</button></div>`;
+  section.innerHTML = `<div class="song-header"><p class="eyebrow">SONG ${i + 1}</p><strong class="song-name" id="name${i}">Empty</strong></div><p class="song-info" id="info${i}"></p><canvas class="wave" id="wave${i}" aria-label="Song ${i + 1} waveform"></canvas><label>Choose audio files<input id="file${i}" type="file" accept="audio/*" multiple></label><div class="trim"><label>Start (seconds)<input id="start${i}" type="number" min="0" step="0.01" value="0"></label><label>End (seconds)<input id="end${i}" type="number" min="0" step="0.01" value="0"></label><label>Quality<select id="rate${i}">${[24, 32, 40, 48, 56, 64].map((n) => `<option value="${n}" ${n === 64 ? "selected" : ""}>${n} kbps</option>`).join("")}</select></label></div><p id="source-name${i}"></p><details class="clip-builder"><summary>Cut and merge clips</summary><p>Files join in the order below. Trim each clip, reorder or remove it, then rebuild. Each clip becomes a chop, up to 32.</p><div id="clips${i}"></div><label>Add files<input id="append${i}" type="file" accept="audio/*" multiple></label><button id="merge${i}">Rebuild song from clips</button></details><div class="edit-fields"><label>Zoom<input id="trim-zoom${i}" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="trim-scroll${i}" type="range" min="0" max="1000" value="0"></label><label>Loop preview<select id="trim-loop${i}"><option value="0">Off</option><option value="1">On</option></select></label><button id="trim-stop${i}">Stop preview</button></div><p id="estimate${i}">Choose a file to trim and estimate its size.</p><div class="song-actions"><button id="preview${i}" class="secondary">Preview section</button><button id="stored${i}" class="secondary" data-bank>Preview stored song</button><button id="apply${i}">Apply to local Song ${i + 1}</button></div>`;
   $("songs").append(section);
   trimWaves[i] = new WaveEditor($(`wave${i}`), (a, b) => {
     $(`start${i}`).value = (a / 22050).toFixed(5);
@@ -326,17 +328,29 @@ for (let i = 0; i < 2; i++) {
   };
   for (const k of ["start", "end", "rate"])
     $(`${k}${i}`).addEventListener("input", estimate);
-  $(`file${i}`).onchange = () =>
-    run(async () => {
-      const source = await readAudio($(`file${i}`).files[0]);
-      sources[i] = source;
-      $(`source-name${i}`).textContent = $(`file${i}`).files[0].name;
-      $(`start${i}`).value = 0;
-      $(`end${i}`).value = source.duration.toFixed(3);
-      estimate();
-      render();
-      status(`Selected ${source.name}. Trim the section, then import it.`);
-    });
+  function drawClips(){
+    const container=$(`clips${i}`);container.replaceChildren();
+    clipLists[i].forEach((clip,index)=>{
+      const row=document.createElement('div');row.className='clip-row';
+      const title=document.createElement('p');title.textContent=`${index+1}. ${clip.filename}`;row.append(title);
+      for(const field of ['start','end']){const label=document.createElement('label');label.textContent=field==='start'?'Start (s)':'End (s)';const input=document.createElement('input');input.type='number';input.min=0;input.step='.001';input.value=clip[field];input.setAttribute('aria-label',`Clip ${index+1} ${field}`);input.oninput=()=>clip[field]=Number(input.value);label.append(input);row.append(label);}
+      for(const [text,action] of [['Preview',()=>run(async()=>{const merged=assemble([clip]);await play(merged.pcm,22050);})],['Move up',()=>{if(index){[clipLists[i][index-1],clipLists[i][index]]=[clipLists[i][index],clipLists[i][index-1]];drawClips();}}],['Move down',()=>{if(index+1<clipLists[i].length){[clipLists[i][index+1],clipLists[i][index]]=[clipLists[i][index],clipLists[i][index+1]];drawClips();}}],['Remove',()=>{clipLists[i].splice(index,1);drawClips();}]]){const button=document.createElement('button');button.textContent=text;button.onclick=action;row.append(button);}
+      container.append(row);
+    });controls();
+  }
+  function rebuild(){
+    sources[i]=assemble(clipLists[i]);$(`source-name${i}`).textContent=sources[i].filename;
+    $(`start${i}`).value=0;$(`end${i}`).value=sources[i].duration.toFixed(5);estimate();render();
+  }
+  async function chooseFiles(files,append){
+    if(!files.length)return;if(files.length+(append?clipLists[i].length:0)>32)throw Error('Choose at most 32 clips per song.');
+    const selected=[];for(const file of files){const source=await readAudio(file);selected.push({...source,start:0,end:source.duration});}
+    clipLists[i]=append?[...clipLists[i],...selected]:selected;rebuild();drawClips();
+    status(`Selected ${sources[i].filename}. Trim the section, then import it.`);
+  }
+  $(`file${i}`).onchange=()=>run(()=>chooseFiles(Array.from($(`file${i}`).files),false));
+  $(`append${i}`).onchange=()=>run(()=>chooseFiles(Array.from($(`append${i}`).files),true));
+  $(`merge${i}`).onclick=()=>run(async()=>{rebuild();status('Clips merged locally. Preview, then Apply to local Song '+(i+1)+'.');});
   function sectionPcm() {
     const s = sources[i],
       a = Number($(`start${i}`).value),
@@ -369,12 +383,16 @@ for (let i = 0; i < 2; i++) {
   $(`apply${i}`).onclick = () =>
     run(async () => {
       if (!image && i === 1) throw Error("Import Song 1 first");
-      const encoded = await encode(
+      let encoded = await encode(
         sectionPcm(),
         Number($(`rate${i}`).value),
         sources[i].name,
       );
-      await updateBank(image ? repack(image, encoded, i + 1) : encoded);
+      let mergedChops=null;
+      if(sources[i].segments?.length>1){const start=Math.floor(Number($(`start${i}`).value)*22050),end=start+sectionPcm().length,chops=trimmedSegments(sources[i].segments,start,end);if(chops.length)mergedChops=chops;}
+      let next=image ? repack(image, encoded, i + 1) : encoded;
+      if(mergedChops)next=saveChops(next,i+1,mergedChops);
+      await updateBank(next);
       if (pendingPads.some(Boolean)) await applyPendingKit();
       await remember(
         "song:" + crc(component(image, i + 1).song),

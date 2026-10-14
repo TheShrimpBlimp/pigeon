@@ -1667,6 +1667,9 @@ static void ui_input(void)
         if (!((pressed >> id) & 1u))
             continue;
         b = panel_btn_of(id);
+        #if FELUCCA_KO
+        if(b==B_SAVE && ko_home()){ko_pattern_save();continue;}
+        #endif
         switch (b) {
         case B_PLAY:
 #if FELUCCA_KO

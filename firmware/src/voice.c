@@ -79,6 +79,9 @@ static void track_lfo_tick(track_t *t)
 /* voices the engine may use (POLY and UNISON): its cap, else all of them */
 static uint32_t trk_nvoice(const track_t *t)
 {
+#if FELUCCA_KO
+    if(ko_kit(t)) return 4u; /* dedicated drum budget, without larger voice arrays */
+#endif
     uint32_t c = ENGINES[t->engine]->poly;
     return c && c < NVOICE ? c : NVOICE;
 }
@@ -102,6 +105,25 @@ static uint32_t voices_busy(void)                       /* sounding voices of al
     return n;
 }
 
+/* PIGEON isolates four drum voices from the eight shared song voices. */
+static uint32_t voice_group(const track_t *t)
+{
+#if FELUCCA_KO
+    if(ko_kit(t))return 1u;
+    if(ko_song(t))return 2u;
+#endif
+    return 0;
+}
+static uint32_t voice_budget(const track_t *t) {return voice_group(t)==1u?4u:NVOICE;}
+static uint32_t voice_group_busy(const track_t *t)
+{
+    uint32_t group=voice_group(t),n=0;
+    if(!group)return voices_busy();
+    for(uint32_t p=0;p<NPART;p++)if(voice_group(&trk[p])==group)
+        for(uint32_t i=0;i<NVOICE;i++)n+=trk[p].v[i].active && trk[p].v[i].stage!=4u;
+    return n;
+}
+
 static uint32_t lowest_held(const track_t *t)           /* index of the lowest held note (the bass), NVOICE = none */
 {
     uint32_t i, low = NVOICE;
@@ -119,6 +141,7 @@ static uint32_t voice_victim(const track_t *self, int soft, track_t **pp)
     uint32_t p, i, best = NVOICE, cat = 4;
     for (p = 0; p < NPART; p++) {
         track_t *t = &trk[p];
+        if(voice_group(self) && voice_group(t)!=voice_group(self))continue;
         uint32_t mode = trk_vmode(t);
         uint32_t low = mode == V_POLY ? lowest_held(t) : NVOICE;
         if (soft && t == self)
@@ -159,7 +182,7 @@ static int voice_room(track_t *t, int soft)
 {
     track_t *vp = 0;
     uint32_t k;
-    if (voices_busy() < NVOICE)
+    if (voice_group_busy(t) < voice_budget(t))
         return 1;
     k = voice_victim(t, soft, &vp);
     if (k == NVOICE)
@@ -198,7 +221,7 @@ static voice_t *voice_alloc(track_t *t, uint32_t note)
             return voice_reuse(t, &t->v[i]);
         nfree += !t->v[i].active;
     }
-    if (nfree && voices_busy() >= NVOICE) {
+    if (nfree && voice_group_busy(t) >= voice_budget(t)) {
         track_t *vp = 0;
         uint32_t k = voice_victim(t, 0, &vp);
         if (k < np && vp == t)

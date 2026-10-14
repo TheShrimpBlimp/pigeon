@@ -92,8 +92,7 @@ if audio bytes resemble an OTA record. No additional physical flash is assumed.
 
 MP3 uses a fixed-point libmad decoder with preallocated state and no heap. One
 decoder runs in the main loop; the audio interrupt reads two 576-sample PCM
-buffers per song voice plus a 192-sample bridge at each loop start. Samples remain in flash. Eight voices remain shared
-across all tracks. Seek jobs decode up to three frames to recover synthesis
+buffers per song voice plus a 192-sample bridge at each loop start. Samples remain in flash. Eight song voices are shared between Song 1 and Song 2; the kit has four additional voices. Seek jobs decode up to three frames to recover synthesis
 history, or up to four for a bridge spanning two frames. Jobs yield between
 frames so each service call decodes at most one MP3 frame; an incomplete buffer
 is not published, and voice/bank changes cancel pending work. Cache misses output

@@ -25,7 +25,7 @@ ALGORITHM selects SONG 1, DRUM KIT, or SONG 2 (tracks 1, 2, 3). The standalone b
 - USR1: one mono song sample. Transient detection produces up to 32 initial chops. All 27 keyboard
   keys trigger song chops (the existing white keys retain chops 1..16, black keys add 17..27); PRESETS selects a chop and switches banks as necessary.
 - USR2: up to sixteen independent drum files, each on one exact note, 60..75. Empty pads are silent.
-  Release does not cut a hit short. Eight voices are shared across tracks; stealing fades old hits.
+  Release does not cut a hit short. The songs share eight voices, with four separate kit voices; stealing fades old hits.
 - USR3: continuation of a longer song. Internal resampling is not implemented in v0.1.
 
 Existing slots remain 80 KiB each, mono IMA ADPCM at the uploader's 22.05 kHz: about 7.38 seconds
@@ -157,7 +157,7 @@ OCT+ on its setup prompt initializes only Song 2, keeping the other two sounds
 and patterns. Both song tracks use the same K1–K4 and OCT controls, with
 independent chop tables, waveform positions, zoom, loop/latch flags, pitch and
 compression. Sequencer patterns and locks use the existing third project slot.
-All three tracks share eight sounding voices and the existing FX buses.
+The two songs share eight sounding voices; the kit has four dedicated voices. All three use the existing FX buses.
 
 ### Performance shortcuts and edit undo
 

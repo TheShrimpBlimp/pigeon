@@ -95,6 +95,17 @@ try {
     raw.writeInt16LE(Math.round(12000 * Math.sin(i * 0.2)), 46 + i * 4);
   }
   const wav = { name: "hit.wav", mimeType: "audio/wav", buffer: raw };
+  await page.locator('#file0').setInputFiles([wav,{...wav,name:'second.wav'}]);
+  await page.waitForFunction(()=>document.querySelectorAll('#clips0 .clip-row').length===2);
+  await page.locator('#songs .clip-builder').first().evaluate(e=>e.open=true);
+  await page.getByLabel('Clip 1 end',{exact:true}).fill('0.1');
+  await page.locator('#clips0 .clip-row').last().getByText('Move up',{exact:true}).click();
+  assert((await page.locator('#clips0 .clip-row p').first().textContent()).includes('second.wav'));
+  await page.locator('#merge0').click();await page.locator('#apply0').click();
+  await page.waitForFunction(()=>document.getElementById('status').textContent.startsWith('Song 1 imported'));
+  const joined=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const b=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {songChops}=await import('/pigeon/editing.js');return songChops(b,1);});
+  assert.equal(joined.length,2);assert.equal(joined[0].a,0);assert.equal(joined[0].b,joined[1].a);assert(joined[1].b>joined[1].a);
+  await page.locator('#clips0 .clip-row').first().getByText('Remove',{exact:true}).click();assert.equal(await page.locator('#clips0 .clip-row').count(),1);
   await page.locator("#file0").setInputFiles(wav);
   await page.waitForFunction(() =>
     document.getElementById("status").textContent.startsWith("Selected hit"),

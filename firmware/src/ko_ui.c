@@ -486,7 +486,7 @@ static void ko_draw(void)
     } else if(ko.view==18) {
         ko_line(52,chain_config.rsv[0]==1?"K1 LAUNCH: PATTERN END":"K1 LAUNCH: NEXT BAR",T_THEME);
         ko_value(1,"SECTION ",ko_section+1);ko_line(96,"K2 MOVE SECTION LEFT/RIGHT",T_THEME);
-        ko_line(118,"K3 RIGHT DUPLICATE SECTION",T_THEME);ko_line(199,"REC SAVE / ENV VARIATIONS",T_MID);
+        ko_line(118,"K3 RIGHT DUPLICATE SECTION",T_THEME);ko_line(199,"SAVE ALL / ENV VARIATIONS",T_MID);
     } else if(ko.view==16) {
         ko_pad_params_t *p=&ko_kit_params[ko_kit_pad];ko_value(0,"PAD ",ko_kit_pad+1);
         ko_value(1,"K1 PITCH ",p->pitch);ko_value(2,"K2 LEVEL ",p->level);

@@ -134,3 +134,7 @@ The unmodified font and original license are bundled in `fonts/` and cached offl
 ## Emulator banks
 
 The emulator can save its applied sample bank as `.kob`, including current chop and playback metadata. Open that file here, or use **Open session in sample loader** in the hosted emulator to carry it here locally. Connect the FM1 and use **Send bank to FM1** to review and upload it. This replaces the device sample bank; it does not install firmware. A `.kob` contains samples and chop settings. Use **Save session (.pigeon)** or **Open session in sample loader** to include the current sequence, saved A–D patterns, settings and user presets. In the loader, **Restore session to FM1** restores all of these together and replaces the device projects, settings and sample bank; its existing recovery backup and verification steps apply. Unlimited banks must fit the hardware storage limit before export.
+
+## Joining samples into a song
+
+Choose multiple audio files for either song, or add files under Cut and merge clips. Trim each clip, preview it, move it up/down or remove it. Rebuild song from clips updates the combined waveform; Apply imports it into the local bank. Each included clip becomes a chop (up to 32); cropping the combined waveform adjusts those boundaries. Encoding and storage checks still happen before the local bank is replaced.

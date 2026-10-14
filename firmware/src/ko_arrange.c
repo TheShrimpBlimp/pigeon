@@ -58,7 +58,7 @@ static int ko_pattern_select(uint32_t slot)
         ui.force=1;ui_message(chain_config.rsv[0]==1?"QUEUED: PATTERN END":"QUEUED: NEXT BAR");return 1;
     }
     ko_pattern_sel=(uint8_t)slot;
-    if(!project_used(slot) || !chain_copy_source(slot)) {ui.force=1;ui_message("EMPTY / REC TO SAVE");return 0;}
+    if(!project_used(slot) || !chain_copy_source(slot)) {ui.force=1;ui_message("EMPTY / SAVE TO STORE");return 0;}
     ko_pattern_apply(&chain.source[slot]);pat_from_set(slot+1u);ui_message("PATTERN SELECTED");return 1;
 }
 static void ko_pattern_copy(void)
@@ -76,7 +76,7 @@ static void ko_pattern_save(void)
 {
     if(transport_busy()) {ui_message("STOP TO SAVE");return;}
     if(voices_busy()) {ui_message("RELEASE PADS TO SAVE");return;}
-    if(!project_save(ko_pattern_sel)) ko_pattern_refresh();
+    if(!project_save(ko_pattern_sel)) {ko_pattern_refresh();char label[]="SAVED ALL TRACKS TO A";label[19]=(char)('A'+ko_pattern_sel);ui_message(label);}
     ui.force=1;
 }
 static void ko_pattern_paste(void)

@@ -1,3 +1,4 @@
+import "./test-assembly.mjs";
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from "node:assert/strict";
 import fs from "node:fs";

@@ -31,9 +31,17 @@ reference; it follows project BPM within 50–200% speed. Changing chop boundari
 does not recapture the reference until a sync control is adjusted. SPEED % shows
 the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
 
-Both songs and the kit share 408 KiB and eight sounding voices. White song keys
+Both songs and the kit share 408 KiB. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
 cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
 Drums have 16 one-shot pads. Held loops default on, latch defaults off.
 
 Save banks and full recovery archives in the sample tool before replacement.
 The full workflow and format details are in [KO_MODE.md](KO_MODE.md).
+
+## Saving a phrase
+
+SCL opens Patterns. Choose A–D, stop playback and release the pads, then press SAVE. This saves all three tracks’ sequences, timing, automation and arrangement together. The screen confirms the destination. REC on Patterns/Arrangement remains a save shortcut; on the sequencer it arms recording. Samples and chop layouts belong to the shared sample bank, so switching A–D does not replace them. In the browser, Save session (.pigeon) includes the current phrase, saved A–D patterns and the sample bank; Save bank (.kob) contains samples and chop settings only.
+
+## Installing from another firmware
+
+From zp12, Sloop or an unrecognized custom firmware, use that firmware’s documented procedure to return to official M-VAVE V15, then install PIGEON. Felucca is not a required intermediate step. A factory-stock spare FM1 is a suitable starting point while keeping the existing setup intact. Back up first; physical hardware verification of this beta remains pending.

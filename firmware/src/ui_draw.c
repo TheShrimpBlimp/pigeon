@@ -870,6 +870,7 @@ static void draw_columns(void)
     (void)motion_mask(song.sel, card_mot_mask);       /* (PLAY OFF: no scan) */
     if (ui.home) {
         for (c = 0; c < 4u; c++) {
+            if(home_levels() && c>=UI_TRACK_COUNT){draw_column(c,"","","",T_DIM,-1,ICON_NONE);continue;}
             int16_t *vp;
             const param_desc_t *d = home_param(c, &vp);
             param_format(d, *vp, val, &unit);

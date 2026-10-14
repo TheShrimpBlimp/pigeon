@@ -175,6 +175,8 @@ run "KO: 16 steps, sample-end timing, recording LEDs and all-key chops" "$OUT/ko
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_ui_test" tests/pigeon_ui_test.c -lm
 run "PIGEON: partial drawing, playback follow, step divisions and K1 response" "$OUT/pigeon_ui_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_test.c -lm
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_voice_budget_test" tests/ko_voice_budget_test.c -lm
+run "PIGEON: eight song plus four drum voices, track selection and SAVE" "$OUT/ko_voice_budget_test"
 run "PIGEON: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
 run "PIGEON: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"

@@ -28,6 +28,7 @@
 #error "Two-song profile requires KO"
 #endif
 #define SAMPLER_PARTS (FELUCCA_KO_DUAL ? 3u : 2u)
+#define UI_TRACK_COUNT (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NTRK)
 #include "project_identity.h"
 #include "../hal/ko_layout.h"
 #if FELUCCA_KO_STORAGE && !FELUCCA_KO

@@ -106,3 +106,7 @@ pinned stub. SHA-256:
 - Package: `e66361f80bb03f64ac537b7797936c6c4a4805f88d53a2c5660c29cb0828930d`
 
 See [recovery details and limits](PIGEON_RECOVERY.md).
+
+## V0.1 feedback update: voice budgets
+
+PIGEON now isolates an eight-voice song pool from a four-voice drum pool. Existing per-track voice arrays and MP3 buffers are unchanged. Dedicated host tests verify 12 active voices, drum-only stealing, sharing between both songs, and SAVE to the selected phrase. Two-song MP3/ADPCM codec stress and the configured sanitizer checks pass. The target build retains the same 56,040-byte static RAM and 366,760-byte pool allocation. Compiled render-cost checks pass; these are not a physical FM1 real-time polyphony guarantee. The overload protection remains active.

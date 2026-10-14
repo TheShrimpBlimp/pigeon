@@ -50,7 +50,7 @@ static void ko_arrange_draw(int force)
         ko_line(136,"K1 SLOT / K2 COPY FROM",T_MID);
         ko_line(158,"K3 CHAIN ADD+ / REMOVE-",T_MID);
         ko_line(180,"K4 PASTE+ / COPY-",T_MID);
-        ko_line(202,"REC SAVE / PLAY LOOP",T_MID);
+        ko_line(202,"SAVE ALL / PLAY LOOP",T_MID);
         ko_line(224,"SCL ARRANGE / EDIT BACK",T_MID);
     } else {
         ko_line(29,"PIGEON / ARRANGEMENT",T_THEME);
@@ -66,7 +66,7 @@ static void ko_arrange_draw(int force)
         } else {ko_line(96,"KEYS 1-4 APPEND A-D",T_MID);ko_line(118,"K3 REPEATS / EMPTY",T_MID);}
         ko_line(147,"K4 INSERT+ / DELETE-",T_MID);
         ko_line(169,"KEYS 1-4 APPEND A-D",T_MID);
-        ko_line(199,"REC SAVE / PLAY SONG",T_MID);
+        ko_line(199,"SAVE ALL / PLAY SONG",T_MID);
         ko_line(220,"SCL WAVE / EDIT BACK",T_MID);
     }
 }

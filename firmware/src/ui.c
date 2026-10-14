@@ -1567,7 +1567,7 @@ static const param_desc_t *home_param(uint32_t k, int16_t **vp)
 /* select track i (KNOB 1 on TRACKS, the editor): its sound, pages and pattern from now on */
 static void track_select(uint32_t i)
 {
-    if (i >= NTRK || i == song.sel)
+    if (i >= UI_TRACK_COUNT || i == song.sel)
         return;
 #if FELUCCA_KO
     int sampler_seq_page=ko.on && ui.home && (ko.view==7 || ko.view==14 || ko.view==15);
