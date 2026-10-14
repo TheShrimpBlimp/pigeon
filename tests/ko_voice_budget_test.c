@@ -19,6 +19,7 @@ int main(void){
  for(uint32_t p=0;p<SAMPLER_PARTS;p++){step_clear(&trk[p].step[0]);trk[p].step[0].time=ST_NOTE;trk[p].step[0].n=1;trk[p].step[0].note[0]=60+p;}
  press(B_SAVE);
  bad+=check("SAVE stores all tracks to selected B slot",project_used(1));
+ bad+=check("save confirmation names destination B",strstr(ui.msg,"TO B")!=0);
  for(uint32_t p=0;p<SAMPLER_PARTS;p++)step_clear(&trk[p].step[0]);
  ko_pattern_select(1);int restored=1;for(uint32_t p=0;p<SAMPLER_PARTS;p++)restored &= trk[p].step[0].n==1 && trk[p].step[0].note[0]==60+p;
  bad+=check("saved phrase restores sequences on all three tracks",restored);

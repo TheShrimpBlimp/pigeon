@@ -76,7 +76,7 @@ static void ko_pattern_save(void)
 {
     if(transport_busy()) {ui_message("STOP TO SAVE");return;}
     if(voices_busy()) {ui_message("RELEASE PADS TO SAVE");return;}
-    if(!project_save(ko_pattern_sel)) {ko_pattern_refresh();char label[]="SAVED ALL TRACKS TO A";label[19]=(char)('A'+ko_pattern_sel);ui_message(label);}
+    if(!project_save(ko_pattern_sel)) {ko_pattern_refresh();char label[]="SAVED ALL TRACKS TO A";label[sizeof label-2]=(char)('A'+ko_pattern_sel);ui_message(label);}
     ui.force=1;
 }
 static void ko_pattern_paste(void)
