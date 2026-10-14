@@ -796,12 +796,13 @@ const emulatorLink=/^#emulator-bank=(.+)$/.exec(location.hash);
 if(emulatorLink){
  try{
   const imported=await readBank(emulatorLink[1]);
+  const session=imported?.format==='pigeon-archive'?imported:null;
   archive=null;
-  await updateBank(imported);
-  await store('session',null);
+  await updateBank(session?validateArchive(session).bank:imported);
+  archive=session;await store('session',session);
   sources.fill(null);pendingPads.fill(null);kitReplaceAll=false;render();
   await finishBank(emulatorLink[1]);history.replaceState(null,'',location.pathname+location.search);
-  status('Emulator bank ready, including chop settings. Connect your FM1, then press Send bank to FM1. This replaces its sample bank.');
+  status(session?'Emulator session ready: current sequence, saved A–D patterns, settings, and samples. Connect your FM1, then use Restore session to FM1. This replaces its projects, settings, and sample bank.':'Emulator bank ready, including chop settings. Connect your FM1, then press Send bank to FM1. This replaces its sample bank.');
  }catch(e){status(`Emulator bank could not be opened: ${e.message}`,true);}
 }
 const offlineReady = await caching;

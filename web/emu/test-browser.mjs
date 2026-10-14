@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
 import {inspect,crc} from '../pigeon/bank.js';
+import {validateArchive} from '../pigeon/device.js';
+import {project} from '../pigeon/editing.js';
 import {songChops} from '../pigeon/editing.js';
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -68,9 +70,14 @@ try{
  assert.equal(info.songs.length,2);assert.equal(info.pads,1);assert.equal(bank.length,info.used+4096);
  for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x314f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
  assert(songChops(bank,1).length>0);assert(songChops(bank,2).length>0);
+ const sessionDownload=page.waitForEvent('download');await page.locator('#save-session').click();const sessionFile=await sessionDownload;
+ assert.equal(sessionFile.suggestedFilename(),'pigeon-emulator-session.pigeon');const session=JSON.parse(await fs.readFile(await sessionFile.path(),'utf8')),validated=validateArchive(session);
+ project(validated.objects[0].bytes);assert(validated.objects[1].size>0);assert.deepEqual(Array.from(validated.bank),Array.from(bank));
  const emulatorURL=page.url();await page.locator('#open-loader').click();
- await page.waitForURL('**/webapp/pigeon/**');await page.locator('#transfer-status').filter({hasText:'Emulator bank ready'}).waitFor();
+ await page.waitForURL('**/webapp/pigeon/**');await page.locator('#transfer-status').filter({hasText:'Emulator session ready'}).waitFor();
  const handed=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const bytes=await new Promise(r=>{const q=db.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});db.close();return Array.from(bytes);});
+ const handedSession=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const value=await new Promise(r=>{const q=db.transaction('files').objectStore('files').get('session');q.onsuccess=()=>r(q.result);});db.close();return value;});
+ validateArchive(handedSession);assert.deepEqual(handedSession.objects,session.objects);
  assert.deepEqual(handed,Array.from(bank));assert.equal(new URL(page.url()).hash,'');
  await page.reload();await page.getByText('Restored your last local bank.',{exact:true}).first().waitFor();
  await page.goto(emulatorURL);await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});

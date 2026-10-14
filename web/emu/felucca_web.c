@@ -550,6 +550,33 @@ EXPORT const uint8_t *web_bank_metadata(void)
     if(rc==1 || rc==2) return 0;
     return nor+SMP_USER_BASE+SLC_REC_OFF;
 }
+/* Same musical objects as editor_backup.c, captured between audio render blocks. */
+static persist_t web_session_settings;
+static uint32_t web_session_length;
+EXPORT uint32_t web_session_size(void) { return web_session_length; }
+EXPORT const uint8_t *web_session_object(uint32_t id)
+{
+    web_session_length=0;
+    if(id==0) {
+        project_capture(&proj_scratch);
+        if(!proj_pack(&proj_wire,&proj_scratch)) return 0;
+        web_session_length=sizeof proj_wire;return (const uint8_t *)&proj_wire;
+    }
+    if(id==1) {
+        web_session_settings=persist_saved;settings_export(&web_session_settings);
+        web_session_length=sizeof web_session_settings;return (const uint8_t *)&web_session_settings;
+    }
+    if(id>=2 && id<=5) {
+        if(project_used(id-2))web_session_length=sizeof proj_slot[0];
+        return (const uint8_t *)&proj_slot[id-2];
+    }
+    if(id==6 || id==7) {
+        if(up_bank[id-6].magic==UP_BANK_MAGIC)web_session_length=sizeof up_bank[0];
+        return (const uint8_t *)&up_bank[id-6];
+    }
+    if(id==9) {if(upf_valid(&upf))web_session_length=sizeof upf;return (const uint8_t *)&upf;}
+    return 0; /* retired object 8 is empty, matching the hardware archive */
+}
 EXPORT uint32_t web_samples_loaded(void) { return ko_bank_active; }
 EXPORT uint32_t web_sample_pool_size(void) { return web_bank_capacity; }
 

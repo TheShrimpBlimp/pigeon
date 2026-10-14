@@ -80,7 +80,7 @@ if (typeof registerProcessor === "function") {
         catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
       }
       else if(m.type==='bank-metadata') {
-        try{const ptr=ex.web_bank_metadata();if(!ptr)throw Error('No sample bank is loaded.');const metadata=new Uint8Array(ex.memory.buffer,ptr,4096).slice();this.port.postMessage({type:'bank-metadata',id:m.id,metadata},[metadata.buffer]);}
+        try{const ptr=ex.web_bank_metadata();if(!ptr)throw Error('No sample bank is loaded.');const metadata=new Uint8Array(ex.memory.buffer,ptr,4096).slice();const objects=[];if(m.session)for(let id=0;id<10;id++){const p=ex.web_session_object(id),size=ex.web_session_size();if((id<2&&!p)||size>3840)throw Error('Session capture failed.');objects.push({id,bytes:new Uint8Array(ex.memory.buffer,p,size).slice()});}this.port.postMessage({type:'bank-metadata',id:m.id,metadata,objects},[metadata.buffer,...objects.map(o=>o.bytes.buffer)]);}
         catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
       }
       else if (m.type === "buttons" || m.type === "keys") this.queue.push(m);
