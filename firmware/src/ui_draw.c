@@ -1262,7 +1262,7 @@ static void draw_splash(void)
     uint8_t splash_mono = ux.mono;
     ux.mono = 0;
     /* Centre the credits in the open space between the wings. */
-    draw_text_line(0, 24, 168, &AF_M, "PIGEON V0.5", 0x87ed, 0, 1);
+    draw_text_line(0, 24, 168, &AF_M, "PIGEON V0.1", 0x87ed, 0, 1);
     draw_text_line(0, 49, 168, &AF_S, "By The Shrimp Blimp", 0x87ed, 0, 1);
     draw_text_line(0, 68, 168, &AF_S, "Based on Felucca V1.5.1", 0x87ed, 0, 1);
     draw_text_line(0, 87, 168, &AF_S, "Logo by Dendy0097", 0x87ed, 0, 1);
