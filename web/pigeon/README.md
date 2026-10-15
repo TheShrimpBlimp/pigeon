@@ -1,8 +1,9 @@
-# PIGEON FM1 Sampler GUI
+# PIGEON Sample Loader 2.0
 
 A standalone browser tool for PIGEON on the FM1. The same files run on macOS,
 Windows, and Linux, locally or on an HTTPS website. There is no backend, account,
-CDN, analytics, or audio upload. Chrome or Edge is recommended for USB MIDI/SysEx.
+CDN dependency or audio upload. Successful firmware installs may report an
+anonymous completion count; samples and device identity are not included. Chrome or Edge is recommended for USB MIDI/SysEx.
 Other browsers may support local editing while lacking device connectivity.
 
 ## Open locally
@@ -21,21 +22,35 @@ or service workers correctly. No Python or download is needed on the hosted webs
 
 ## Workflow
 
-1. Open a `.kob` bank, open a `.pigeon` session, read the device, or import Song 1.
-2. Choose audio, enter start/end times, choose 24–64 kbps, preview, and import.
-   Song 2 requires Song 1. Capacity is checked before changing the working bank.
-3. Select up to 16 one-shots in pad order, preview them, then Replace kit.
-   Bulk selection replaces the entire kit. Individual pad selection updates that
-   pad and preserves the other pads. Gaps use tiny silent hits. Clear kit removes all pads.
-4. Save bank downloads a file. Send bank saves a full recovery session locally and
-   initiates a recovery download before writing; it verifies audio and metadata
-   by reading the device back. Back up full session includes all ten project and
-   settings objects plus both songs, drums, and chop metadata.
-5. Open a `.pigeon` session to enable Restore session. Restore validates every
-   checksum before writes, saves a recovery session first, restores current
-   music last, and verifies the resulting session. Object commits are separate:
-   interruption can leave a partially restored device. Recovery stays available
-   through Save recovery backup, including after reload.
+1. Open a `.kob` bank or `.pigeon` session, or use **Add audio files** under Song 1.
+   Each slot accepts several files; adding more appends them to that same song.
+2. Drag to select audio. Backspace/Delete removes the selection; **Keep selection**
+   removes everything outside it. Place the cursor and press S to split. Drag clip
+   chips to rearrange. Copy/cut/paste and Ctrl/Cmd+Z work on draft edits.
+3. Preview using Listen controls. Scroll to zoom; pan with Alt-drag or the overview.
+   Expand **Clip settings · trim, gain & fades** for precise per-clip processing.
+   Open **Export range & quality** for exact range and 24–64 kbps MP3 quality.
+   **Apply to local Song 1/2** encodes and commits the draft to the working bank.
+   Song 2 requires an applied Song 1. Each included clip becomes a chop, up to 32.
+4. Choose up to 16 drum one-shots in pad order. Bulk file selection applies the
+   kit locally; a single pad file replaces only that pad. Clear kit removes all pads.
+5. **Save bank** downloads `.kob`. **Try this bank in emulator** opens the applied
+   bank or loaded session in the hosted emulator; switch it on to load the content.
+   The published FM1 storage limit is **408 KiB shared** between both songs and kit.
+   The local v0.3 firmware candidate proposes 496 KiB; the web limit stays 408 KiB
+   until that firmware is published. Unlimited browser banks may not fit hardware.
+6. **Connect / back up** opens FM1 ports and backup tools. Connect matching ports,
+   back up the device separately, then **Send bank to FM1** and review the change.
+   Sending samples does not automatically make a full-session backup. It verifies
+   bank audio and metadata by reading back. Keep USB connected until finished.
+7. **Back up full session** includes projects, settings, both songs, drums and chop
+   metadata. Open `.pigeon` to enable **Restore session to FM1**. Restore validates
+   checksums, saves a recovery session first, restores current music last and
+   verifies the result. Object commits are separate, so interruption can leave a
+   partial restore. **Save recovery backup** retains recovery access after reload.
+
+For a complete first-song walkthrough and hardware controls, see
+[the tutorial](../../docs/KO_MODE.md) in the firmware repository.
 
 The working bank persists in IndexedDB. Audio-file previews and staged imports
 are temporary. Download bank/session files to keep durable backups. Replacing
@@ -69,7 +84,7 @@ mode, use the CLI installer recovery procedure.
 ## Offline and hosting
 
 Wait until **Offline ready** before disconnecting. The service worker caches the
-page, styles, JavaScript, worker, encoder, licenses, and source archive. Every
+page, styles, JavaScript, shared footer, worker, encoder and bundled licences. Every
 feature—including new imports and USB transfers—runs locally after caching.
 The open page needs no server connection. Its cached URL can reopen offline
 while site data is retained. The browser can clear/evict storage; first load or
@@ -83,7 +98,8 @@ Host `web/pigeon/` and its sibling modules `web/ko_bank.js`,
 Set a MIME type of `text/javascript` for `.js` files and allow Web MIDI with
 `Permissions-Policy: midi=(self)` if configuring that header. A same-origin page
 is preferable to an iframe; an embedded page also needs MIDI permission delegation.
-No website deployment has been performed.
+The hosted site also serves shared `footer.css` and `footer.js` at the site root.
+Keep those assets available when hosting; the loader caches them for offline use.
 
 ## Audio and verification
 
@@ -137,8 +153,37 @@ The emulator can save its applied sample bank as `.kob`, including current chop 
 
 ## Joining samples into a song
 
-Choose multiple audio files for either song, or add files under Cut and merge clips. Trim each clip, preview it, move it up/down or remove it. Rebuild song from clips updates the combined waveform; Apply imports it into the local bank. Each included clip becomes a chop (up to 32); cropping the combined waveform adjusts those boundaries. Encoding and storage checks still happen before the local bank is replaced.
+Use **Add audio files** for either song to select one or several files. More files
+append to the same slot. Split the timeline and drag clip chips into order;
+expand **Clip settings · trim, gain & fades** for per-clip adjustments and move
+buttons. **Rebuild song from clips** refreshes a preview after detailed changes;
+**Apply** commits encoded audio into the local bank. Each clip becomes a chop
+(up to 32); cropping the combined waveform adjusts those boundaries. Encoding
+and capacity checks happen before the bank is replaced.
 
 Clip gain ranges from −24 to +12 dB. Fade in/out defaults to 3 ms and can be set from 0 to 100 ms; processing happens when rebuilding. Gain is applied per clip and clipped to the valid audio range and its level is preserved during encoding. No chop naming is required.
 
 To copy a chop onto any existing key in the same song, select the destination in Chop, choose Copy from, and click Copy whole chop here. It overwrites boundaries and all playback settings, preserving chop count and every other key's assignment. Copy settings remains available separately.
+
+
+## Rearranging keys, undo and saved sessions
+
+Select a chop and choose the other key under Copy from. **Swap selected with Copy from** exchanges the two assignments; **Move selected to Copy from key** shifts intervening assignments without discarding chops. Existing pattern note numbers remain unchanged, so their triggered audio follows the new assignments.
+
+In Drum pad settings, select the source pad and a Copy to pad destination, then **Copy pad to key**. Audio and playback settings are copied together; unused intermediate keys become silent pads. Send the edited bank to use it on your physical FM1.
+
+**Undo** and **Redo** retain 20 committed workspace snapshots while this page is open, covering bank, chop, pad, label and pattern/session edits. Ctrl+Z / Cmd+Z undo; Ctrl+Shift+Z / Cmd+Shift+Z and Ctrl+Y redo. Text inputs keep their normal text undo. Draft audio has its own undo history while editing; uncommitted fields, device transfers and library deletions are outside workspace history. Reloading clears undo history but retains the current workspace.
+
+The **Saved session library** stores named banks and full sessions in this browser. Save, load, rename, delete or download entries. Loading is a local edit and can be undone. Download copies to preserve them outside browser storage. A bank contains samples and settings; a full session also carries patterns and supported device settings.
+
+
+## Sample loader 2.0 waveform controls
+
+Click the waveform to place its cursor; the white cursor head can be dragged. Drag the green S/E flags to trim, drag the song waveform to select a region (Shift-drag also selects); in the chop editor, drag inside its selection to move the complete region. Scroll over the waveform to zoom around the pointer, or use the optional Zoom slider. Drag the overview below the waveform to pan; Alt-drag or Shift-wheel also pans. Double-click resets the view. Arrow keys move the cursor; Home/End jump to the file edges. The cursor follows section and chop previews. Precise numeric start/end fields remain available.
+
+
+## Timeline editing
+
+The waveform uses the firmware’s 220-column envelope. Drag to select audio; Backspace/Delete removes it, Keep selection discards everything else, and S splits at the cursor. Drag clip chips to rearrange them or use their move buttons. Copy, cut and paste work at the cursor. Ctrl/Cmd+Z and redo also cover draft audio edits. Adding another file appends it to the current song. Apply commits the edited audio to the bank.
+
+Use **Try this bank in emulator** to open the current bank or full session directly in the hosted emulator. Switch the emulator on to load it. **Load bank / session** also accepts saved `.kob` banks and `.pigeon` sessions; sessions retain their patterns. Banks must fit the connected device’s reported capacity before transfer.

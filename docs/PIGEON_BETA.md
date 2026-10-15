@@ -14,7 +14,7 @@ malformed data, 92 inherited golden audio renders, sanitizers, dual-song storage
 and GUI codec checks. With `--run-tests`, it also runs
 `tests/run_pigeon_recovery_tests.sh` for the pinned boot stub, commit ordering,
 interrupted writes, and installer compatibility refusals. It copies firmware, checksums, target memory metrics, test logs and control
-documentation into `build/releases/pigeon-0.1-beta-candidate/`. It never contacts
+documentation into `build/releases/pigeon-0.3-beta-candidate/`. It never contacts
 hardware, flashes, creates a release/tag, or publishes a website.
 
 Without `--run-tests`, the manifest explicitly says the full host suite was not
@@ -28,7 +28,10 @@ recovery, two-song/drum playback with FX, sustained retriggers, tempo sync, LEDs
 recording and save/reboot. Browser-only tests cannot establish those outcomes.
 Keep the previous flashed package and a full project/sample recovery archive.
 
-The bank capacity and serialized FUNA parameter IDs/layout remain unchanged.
+The local v0.3 candidate expands the sample payload to 496 KiB by reclaiming
+legacy asset space. The published firmware and web tools remain at 408 KiB.
+Existing bank extents and boot-marker sectors retain their addresses; the new
+extent is appended logically. Serialized FUNA parameter IDs/layout remain unchanged.
 Extended conditions and pitch locks need current PIGEON firmware; older firmware
 may reject such projects. Imported audio and private recovery archives are not
 release assets. Label this build a candidate until hardware checks pass.
