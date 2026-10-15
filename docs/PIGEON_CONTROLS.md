@@ -31,8 +31,7 @@ reference; it follows project BPM within 50–200% speed. Changing chop boundari
 does not recapture the reference until a sync control is adjusted. SPEED % shows
 the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
 
-Published firmware and web tools share 408 KiB between both songs and the kit.
-The local v0.3 proposes 496 KiB; hardware verification remains pending. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
+v0.3 firmware and web tools share 496 KiB between both songs and the kit. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
 cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
 Drums have 16 one-shot pads. Held loops default on, latch defaults off.
 

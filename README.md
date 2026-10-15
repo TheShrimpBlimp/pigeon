@@ -32,7 +32,7 @@ Created and directed by **The Shrimp Blimp**. Current release: **v0.3**, with **
 - A green display with **Little Character** typography, buffered updates,
   waveform zoom, and playback following.
 
-The v0.3 candidate gives both songs eight shared voices plus four dedicated drum
+v0.3 gives both songs eight shared voices plus four dedicated drum
 voices. Sustained 8+4 playback still needs physical testing. Synth engines are
 unavailable in the PIGEON profile. Direct recording, resampling, and compressed
 reverse playback are outside the current release scope.
@@ -67,7 +67,7 @@ Outputs: `build/pigeon.fwsc` and `build/pigeon.bin`. Install this project's
 package with `tools/fm1_install.py`; upstream installers distribute upstream
 Felucca. Before installing from another custom firmware, back up, revert to
 official M-VAVE V15 using that firmware’s documented procedure, then install
-PIGEON. The local v0.3 candidate still needs physical verification.
+PIGEON. See the release notes for completed installation checks and remaining physical verification.
 
 - [Start-to-finish tutorial](docs/KO_MODE.md)
 - [Quick control reference](docs/PIGEON_CONTROLS.md)

@@ -4,7 +4,7 @@ The main release is v0.3, without the experimental screen reader. This package w
 
 ## Software acceptance
 
-- Clip assembly: trim, reorder, gain (−24 to +12 dB), and 0–100 ms fades; 3 ms default; each clip becomes a chop.
+- Clip assembly: trim, reorder, gain (−24 to +12 dB), and 0–100 ms fades; 3 ms default; whole clips occupy the first keys and automatic slices fill the remaining slots.
 - Patterns: selected A–D destination, unsaved indicator, deliberate confirmation before discarding phrase edits, SAVE for all three tracks.
 - Emulator: import/export `.kob` banks and `.pigeon` sessions, validate before replacing the workspace, retain encoded bank bytes and metadata, and preserve sessions across reload.
 - Loader: prepare banks/sessions locally, recovery backup before full restore, and verification after device transfer.
