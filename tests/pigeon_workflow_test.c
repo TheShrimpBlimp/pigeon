@@ -26,7 +26,11 @@ int main(void) {
  ko_context=0;int save=ko_store_sector(1);ko_kit_defaults();ko_store_load();ko_context=~0u;
  bad+=check("kit settings persist with sample metadata",save==3 && ko_kit_params[2].pitch==-3 && ko_kit_params[2].level==100 && ko_kit_params[2].choke==1);
  ko.view=1;trk[0].p[P_DLY]=20;btn_down(B_LFO);frame();turn(EN_K2,10);frame();int changed=trk[0].p[P_DLY]>20;btn_up(B_LFO);frame();
+#if FELUCCA_SAMPLER_ONLY
+ bad+=check("LFO navigates immediately and release keeps its page",!changed && trk[0].p[P_DLY]==20 && ko.view==4);
+#else
  bad+=check("held LFO FX tweaks restore on release",changed && trk[0].p[P_DLY]==20 && ko.view==1);
+#endif
 ko.view=18;chain_defaults(&chain_config);chain_config.count=2;chain_config.row[0]=chain_row_of(0,2);chain_config.row[1]=chain_row_of(1,3);ko_section=0;
  ko_arrange_turn(2,1);bad+=check("section duplication retains repeats and lane assignments",chain_config.count==3 && chain_config.row[1].repeat==2 && chain_config.row[1].slot[0]==0);
  ko_arrange_turn(1,1);bad+=check("moving section reorders without losing contents",ko_section==2 && chain_config.row[1].slot[0]==1 && chain_config.row[2].repeat==2);

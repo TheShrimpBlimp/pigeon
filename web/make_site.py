@@ -117,6 +117,11 @@ def main(pkg, version, out):
     root=HERE.parent
     tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")
     extra=["web/pigeon/install-count.js","web/pigeon-installer.html","tools/pigeon_site_ui.c","tests/pigeon_expansion_test.c","tests/pigeon_performance_test.c","docs/NEXT_WORK.md","web/pigeon/editing.js","web/pigeon/editors.js","web/pigeon/wave-editor.js","web/pigeon/test-editing.mjs","web/site/index.html","web/site/site.css"]
+    # The independently versioned website supplies templates and render assets.
+    extra += [str(p.relative_to(root)) for p in (HERE / "site").glob("*")
+              if p.is_file() and p.suffix in (".html", ".css", ".js", ".md")]
+    extra += [str(p.relative_to(root)) for p in (HERE / "site" / "ui").glob("*")
+              if p.is_file() and p.suffix != ".ppm"]
     with tarfile.open(fw / f"pigeon-source-{safe_version}.tar.gz","w:gz") as archive:
         for relative in sorted(set(tracked+extra)):
             path=root / relative

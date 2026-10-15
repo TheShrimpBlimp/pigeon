@@ -51,7 +51,7 @@ if (typeof registerProcessor === "function") {
       if(!ptr)throw Error('The browser has no more sample memory available.');
       new Uint8Array(ex.memory.buffer,ptr,bytes.length).set(bytes);
       const used=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(8,true);
-      if(!unlimited && used>0x67000)throw Error('This bank exceeds the 408 KiB sample limit.');
+      if(!unlimited && used>0x7D000)throw Error('This bank exceeds the 496 KiB sample limit.');
       if(ex.web_load_bank(bytes.length,unlimited?1:0,restore?1:0))throw Error('The sample bank could not be loaded.');
       this.sentDraws=-1;
     }

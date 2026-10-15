@@ -28,9 +28,9 @@ for(const bitrate of [24,32,40,48,56,64]){
  assert.equal(load(image),0,`MP3 ${bitrate} bank must load`);peak=0;e.web_keys(1);render(200);e.web_keys(0);render(80);assert(peak>0.001,`MP3 ${bitrate} must sound in real WASM firmware`);
 }
 const expanded=[{name:'expanded.wav',pcm:tone(900000)},null];
-const expandedBank=buildBank(expanded,[],true);assert(expandedBank.length>FM1_POOL && expandedBank.length<=0x7D000);assert.equal(load(expandedBank),0,'expanded hardware bank must play');
+const expandedBank=buildBank(expanded,[],true);assert(expandedBank.length>0x67000 && expandedBank.length<=FM1_POOL);assert.equal(load(expandedBank),0,'expanded hardware bank must play');
 const large=[{name:'long.wav',pcm:tone(1100000)},null];
-assert.throws(()=>buildBank(large),/408 KiB/);
+assert.throws(()=>buildBank(large),/496 KiB/);
 const unlimited=buildBank(large,[],true);assert(unlimited.length>FM1_POOL);
 assert.equal(load(unlimited),1,'hardware cap enforced in WASM');
 assert.equal(load(unlimited,true),0);assert.equal(e.web_sample_pool_size(),unlimited.length);
