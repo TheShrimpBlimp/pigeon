@@ -594,7 +594,7 @@ static int rec_tap(void)                                /* 1: the arming changed
     if(ko.on && ui.home && song.sel<SAMPLER_PARTS && song.sel!=1 && ko.view==20 && !ui.menu && !ui.confirm && !name_on() && (!ui.layer || ui.ly==LAYER_REC)){
         if(transport_busy() || voices_busy())ui_message("STOP / RELEASE TO COPY");
         else ui_message(ko_copy_full(ko_copy_chop)?"CHOP COPIED TO KEY":"CANNOT COPY CHOP");
-        ui.force=1;return 1;
+        ui.force=1;return 0; /* command handled: do not arm REC double-tap layer locking */
     }
     if(ko_home() && (ko.view==8 || ko.view==9 || ko.view==18 || ko.view==22)) {ko_pattern_save();return 1;}
 #endif
