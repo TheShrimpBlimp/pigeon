@@ -51,3 +51,9 @@ Before installing PIGEON from another custom firmware, revert to official M-VAVE
 Patterns shows UNSAVED when the current phrase differs from its saved state or the destination is empty. Selecting an occupied slot with unsaved work warns first; select the same slot again to discard those edits and load it. SAVE stores the phrase, timing, automation and arrangement to the selected A–D destination. Sample/chop settings remain in the shared bank.
 
 See [the first-song walkthrough and V0.5 release gate](PIGEON_V05_RELEASE.md) for the complete workflow and pending physical checks.
+
+## Copy a whole chop to another key
+
+Within the same song, EDIT opens chop settings and LFO opens chop operations. Stop playback and release pads. K1 selects the destination chop/key; K2 selects the source. Press REC to copy the source's complete boundaries, pitch, envelope, trigger/loop mode and choke group onto the destination. Existing keys keep their numbers and no extra audio storage is used. The existing chop undo can reverse the overwrite. K4 clockwise still copies settings only.
+
+In the sample loader Chop editor, select the destination with Chop, choose the source in Copy from, then press Copy whole chop here. Send the bank to apply the edited layout to hardware. This does not copy between different songs.

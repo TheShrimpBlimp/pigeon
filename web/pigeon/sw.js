@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Bump this version whenever a shipped runtime asset changes.
-const CACHE = "pigeon-library-v22";
+const CACHE = "pigeon-library-v23";
 const ASSETS = [
   "./",
   "index.html",
@@ -8,13 +8,13 @@ const ASSETS = [
   "style.css",
   "fonts/LittleCharacterRegular.ttf",
   "fonts/LittleCharacter-OFL.txt",
-  "app.js?v=22",
+  "app.js?v=23",
   "bank.js",
   "bank-handoff.js",
   "audio-assembly.js",
   "device.js",
   "editing.js",
-  "editors.js",
+  "editors.js?v=23",
   "wave-editor.js",
   "../fm1pkg.js",
   "../fm1ota.js",

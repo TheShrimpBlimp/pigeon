@@ -177,6 +177,14 @@ static int ko_duplicate(void)
     for(uint32_t k=d->n;k>j+1;k--)d->chop[k]=d->chop[k-1];
     d->chop[j+1]=d->chop[j];d->n++;ko_publish(1);ko_select(j+1);return 1;
 }
+/* Overwrite an existing destination without inserting or renumbering keys. */
+static int ko_copy_full(uint32_t source)
+{
+    if(source>=ko_table()->n || ko.selected>=ko_table()->n)return 0;
+    if(source==ko.selected)return 1;
+    ko_table_t *d=ko_edit();d->chop[ko.selected]=d->chop[source];
+    ko_publish(1);ko_select(ko.selected);return 1;
+}
 static int ko_copy_settings(uint32_t source)
 {
     if(source>=ko_table()->n || !ko_table()->n)return 0;

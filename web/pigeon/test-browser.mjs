@@ -183,6 +183,13 @@ try {
     () =>
       document.getElementById("status").textContent === "Chops updated locally",
   );
+  await page.locator('#chop-index').selectOption('1');await page.locator('#chop-pitch').fill('7');await page.locator('#chop-start').fill(String(Number(await page.locator('#chop-start').inputValue())+.005));await page.locator('#chop-attack').fill('0');await page.locator('#chop-apply').click();
+  await page.getByText('Chop updated locally',{exact:true}).first().waitFor();
+  const chopCountBeforeCopy=await page.locator('#chop-index option').count();
+  await page.locator('#chop-copy').selectOption('0');await page.locator('#chop-full').click();
+  await page.getByText('Chops updated locally',{exact:true}).first().waitFor();
+  const copied=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);}),image=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {songChops}=await import('/pigeon/editing.js');return songChops(image,1);});
+  assert.equal(copied.length,chopCountBeforeCopy);assert.deepEqual(copied[1],copied[0]);assert.equal(await page.locator('#chop-index').inputValue(),'1');assert.equal(await page.locator('#chop-pitch').inputValue(),'0');
   await page.locator("#pad-pitch").fill("5");
   await page.locator("#pad-label").fill("Kick");
   await page.locator("#pad-settings-apply").click();

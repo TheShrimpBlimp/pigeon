@@ -378,7 +378,7 @@ existing held-loop behavior. Explicit one-shot always plays once.
 LFO on the chop settings page opens chop operations: K1 selects a chop, K2 chooses a settings
 source, K3 clockwise duplicates / counterclockwise splits, and K4 clockwise
 copies settings / counterclockwise merges with the previous chop. Settings copy
-preserves boundaries. LFO returns to chop settings; EDIT returns to the waveform.
+preserves boundaries. To overwrite an existing key with the whole chop, choose the destination with K1 and the source with K2, then tap REC. This copies boundaries and all playback settings without inserting a chop or shifting any keys. Stop playback and release pads first. LFO returns to chop settings; EDIT returns to the waveform.
 
 On the grid, LFO opens timing; LFO again opens recording preferences. K1 chooses
 metronome OFF / REC / ON, K2 independently chooses count-in OFF / 1 bar / 2 bars,

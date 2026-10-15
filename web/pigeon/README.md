@@ -140,3 +140,5 @@ The emulator can save its applied sample bank as `.kob`, including current chop 
 Choose multiple audio files for either song, or add files under Cut and merge clips. Trim each clip, preview it, move it up/down or remove it. Rebuild song from clips updates the combined waveform; Apply imports it into the local bank. Each included clip becomes a chop (up to 32); cropping the combined waveform adjusts those boundaries. Encoding and storage checks still happen before the local bank is replaced.
 
 Clip gain ranges from −24 to +12 dB. Fade in/out defaults to 3 ms and can be set from 0 to 100 ms; processing happens when rebuilding. Gain is applied per clip and clipped to the valid audio range and its level is preserved during encoding. No chop naming is required.
+
+To copy a chop onto any existing key in the same song, select the destination in Chop, choose Copy from, and click Copy whole chop here. It overwrites boundaries and all playback settings, preserving chop count and every other key's assignment. Copy settings remains available separately.

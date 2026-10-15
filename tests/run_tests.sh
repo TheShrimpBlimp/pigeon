@@ -177,6 +177,8 @@ run "PIGEON: partial drawing, playback follow, step divisions and K1 response" "
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_test.c -lm
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_voice_budget_test" tests/ko_voice_budget_test.c -lm
 run "PIGEON: eight song plus four drum voices, track selection and SAVE" "$OUT/ko_voice_budget_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_copy_test" tests/ko_copy_test.c -lm
+run "PIGEON: whole chop overwrite and undo without key renumbering" "$OUT/ko_copy_test"
 run "PIGEON: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
 run "PIGEON: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"

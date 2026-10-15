@@ -469,8 +469,9 @@ static void ko_draw(void)
             ko_line(138,c->rsv&KO_NO_LOOP?"K4 LOOP OFF":"K4 LOOP ON",T_THEME);}
         ko_line(180,"RELEASE 0: TRACK DEFAULT",T_MID);ko_line(202,"ENV BACK / EDIT WAVE",T_MID);
     } else if(ko.view==20) {
-        ko_value(0,"K1 CHOP ",ko.selected+1);ko_value(1,"K2 COPY FROM ",ko_copy_chop+1);
+        ko_value(0,"K1 TARGET ",ko.selected+1);ko_value(1,"K2 COPY FROM ",ko_copy_chop+1);
         ko_line(116,"K3 DUPLICATE+ / SPLIT-",T_THEME);ko_line(138,"K4 SETTINGS+ / MERGE-",T_THEME);
+        ko_line(180,"REC COPY WHOLE CHOP",T_THEME);
         ko_line(202,"FX BANK/GROUP / EDIT WAVE",T_MID);
     } else if(ko.view==21) {
         static const char *const click[3]={"K1 METRONOME OFF","K1 METRONOME REC","K1 METRONOME ON"};
