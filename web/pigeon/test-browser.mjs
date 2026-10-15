@@ -108,7 +108,7 @@ try {
   const joined=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const b=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {songChops}=await import('/pigeon/editing.js');return songChops(b,1);});
   const gainPeak=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);}),bank=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {component}=await import('/pigeon/bank.js'),c=component(bank,1),ac=new AudioContext(),audio=await ac.decodeAudioData(c.song.slice((c.h[12]+1)*4).buffer);let peak=0;for(const n of audio.getChannelData(0))peak=Math.max(peak,Math.abs(n));await ac.close();return peak;});
   assert(gainPeak<.35 && gainPeak>.05,'encoding must preserve clip attenuation instead of normalizing it away');
-  assert.equal(joined.length,2);assert.equal(joined[0].a,0);assert.equal(joined[0].b,joined[1].a);assert(joined[1].b>joined[1].a);
+  assert.equal(joined.length,32);assert(joined.slice(2).every(c=>c.b-c.a>=64));assert.equal(joined[0].a,0);assert.equal(joined[0].b,joined[1].a);assert(joined[1].b>joined[1].a);
   await page.locator('#clips0 .clip-row').first().getByText('Remove',{exact:true}).click();assert.equal(await page.locator('#clips0 .clip-row').count(),1);
   await page.locator("#draft-clear0").click();
   await page.locator("#file0").setInputFiles(wav);
