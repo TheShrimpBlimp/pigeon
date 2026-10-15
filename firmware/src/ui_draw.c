@@ -308,6 +308,27 @@ static void head_group(void)
 }
 static void draw_head(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    char phrase[3], tempo[12];int has_phrase=head_slot(phrase);
+    uint32_t signature=song.sel*13131u+song.playing*3u+song.rec*7u+(uint32_t)song.g[G_BPM]*101u+
+        (uint32_t)batt_shown()*7777u+(has_phrase?str_hash(11u,phrase):0u)+
+        (ui.msg_t?str_hash(7u,ui.msg):ui.layer*7919u)+seq_counting()*17u;
+    if(!ui.force && signature==ui.head_sig)return;
+    ui.head_sig=signature;
+    cv_begin(240,H_HEAD,T_BG);
+    if(ui.msg_t)cv_text_fit(8,5,&AF_S,ui.msg,T_THEME,T_BG,204);
+    else if(ui.layer)cv_text_fit(8,5,&AF_S,layer_head(),T_THEME,T_BG,204);
+    else {
+        cv_text(8,5,&AF_S,song.sel==1?"KIT":song.sel==2?"S2":"S1",T_THEME);
+        if(has_phrase)cv_text(34,5,&AF_S,phrase,T_MID);
+        cv_text(64,5,&AF_S,seq_counting()?"COUNT":(song.rec&(1u<<song.sel))?song.playing?"REC":"ARMED":song.playing?"PLAY":"STOP",T_THEME);
+        fmt_int(tempo,song.g[G_BPM]);cv_text(124,5,&AF_S,tempo,T_THEME);cv_text(151,5,&AF_S,"BPM",T_MID);
+        if(ui_prefs&PREF_BPM_LOCK)cv_text(180,5,&AF_S,"L",T_MID);
+    }
+    draw_battery(HEAD_BAT_X);cv_rect(8,H_HEAD-1,224,1,T_MID);cv_blit(0,Y_HEAD);
+    return;
+#endif
+
     static int16_t metro_x = -1;                       /* the metronome's ink as drawn (-1: hidden), its beat */
     static int8_t metro_beat;
     char b[16];
@@ -849,6 +870,7 @@ static void draw_foot(void)
     cv_blit(0, Y_FOOT);
 }
 /* the EDIT layer's cards (ui_layer.c): ENG (the engine), No. (its sounds: KNOB 2's list), FAV, an empty card */
+#if !FELUCCA_SAMPLER_ONLY
 static void engine_columns(void)
 {
     uint32_t total, cur = eng_list_pos(&total), e = TSEL->eng_req % NENGINES;
@@ -862,8 +884,21 @@ static void engine_columns(void)
     draw_column(2, "FAV", preset_favorite() ? "ON" : "OFF", "", VAL(2u), -1, ICON_X_STAR);
     draw_column(3, "", "", "", T_THEME, -1, ICON_NONE);
 }
+#endif
 static void draw_columns(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    /* Only scale/chord and sequencer-tool quick layers use parameter cards. */
+    const page_t *pg=page_over;
+    for(uint32_t c=0;c<4;c++) {
+        if(!pg) {draw_column(c,"","","",T_DIM,-1,ICON_NONE);continue;}
+        uint32_t id=pg->id[c];char val[12];const char *unit;
+        const param_desc_t *desc=&TP[id];
+        param_format(desc,TSEL->p[id],val,&unit);
+        draw_column(c,desc->label,val,unit,VAL(c),RATIO(desc,TSEL->p[id]),param_icon(desc,TSEL->p[id]));
+    }
+#else
+
     uint32_t c;
     char val[12];
     const char *unit;
@@ -1040,7 +1075,7 @@ static void draw_columns(void)
         draw_act_column(3, "SAVE", T_THEME, ICON_AUTO);
         return;
     }
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (cur_page()->graph == GR_SLICES) {                /* SLICE POS, then SPLIT JOIN (ui_slice.c) */
         uint32_t n = slice_count(), j = slice_sel(), src, div, ok = slice_src(&src, &div) && src;
         char u[8];
@@ -1216,6 +1251,8 @@ static void draw_columns(void)
         draw_column(c, d->label, val, unit, VAL(c), d->fmt == F_ENUM && d->max < 2 ? -1 : RATIO(d, enum_rank(d, *vp)),
                     param_icon(d, *vp));
     }
+
+#endif
 }
 
 
@@ -1248,26 +1285,29 @@ static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l
     cv_text_on(SPL_PAD, ly + SPL_PITCH, &AF_M, l[1], T_TEXT, T_RAISE);
     cv_blit(SPL_X0, y);
 }
+#ifndef PIGEON_SPLASH_TITLE
+#define PIGEON_SPLASH_TITLE "PIGEON V0.3"
+#endif
 static void draw_splash(void)
 {
-#if FELUCCA_KO && BRAND_SPLASH_AVAILABLE
+#if FELUCCA_SAMPLER_ONLY && BRAND_SPLASH_AVAILABLE
     lcd_fill(0, 0, 240, 240, T_BG);
     /* Reuse the existing canvas one row at a time; no extra RAM buffer. */
     for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
         cv_begin(BRAND_SPLASH_W, 1, T_BG);
-        for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
-            cv_px[x] = swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
+        brand_splash_row(y, cv_px);
         cv_blit((240u-BRAND_SPLASH_W)/2u, y);
     }
     /* The branded splash keeps its green text even with a monochrome UI palette. */
     uint8_t splash_mono = ux.mono;
     ux.mono = 0;
     /* Centre the credits in the open space between the wings. */
-    draw_text_line(0, 24, 168, &AF_M, "PIGEON V0.1", 0x87ed, 0, 1);
+    draw_text_line(0, 24, 168, &AF_M, PIGEON_SPLASH_TITLE, 0x87ed, 0, 1);
     draw_text_line(0, 49, 168, &AF_S, "By The Shrimp Blimp", 0x87ed, 0, 1);
     draw_text_line(0, 68, 168, &AF_S, "Based on Felucca V1.5.1", 0x87ed, 0, 1);
-    draw_text_line(0, 87, 168, &AF_S, "Logo by Dendy0097", 0x87ed, 0, 1);
-    draw_text_line(0, 106, 168, &AF_S, "Font by Disastrid", 0x87ed, 0, 1);
+    draw_text_line(0, 87, 168, &AF_S, "Font by Disastrid", 0x87ed, 0, 1);
+    /* Prefix the original signature in the artwork; keep its pixels untouched. */
+    draw_text_line(20, 211, 44, &AF_S, "logo by", 0x87ed, 0, 0);
     ux.mono = splash_mono;
     lcd_sync();
 #else
@@ -1340,7 +1380,7 @@ static void draw_countin(void)
             cv_rrect(x, 0, 48, CI_H, 8, T_RULE, T_BG);
             cv_rrect(x + 1, 1, 46, CI_H - 2, 7, T_BG, T_RULE);
         } else
-            cv_rrect(x, 0, 48, CI_H, 8, fill, T_BG);
+            cv_rrect(x, 0, 48, CI_H, FELUCCA_SAMPLER_ONLY?0:8, fill, T_BG);
         GFX_HOOK_ALIGN(x, 0, x + 48, CI_H, AL_HV, "count-in beat centred in its cell");
         cv_text_in(x, CAP_IN(L, CI_H), 48, &AF_L, d, now ? T_INK : gone ? T_DIM : T_TEXT, fill);
     }
@@ -1416,6 +1456,22 @@ static void confirm_text(char *a, char *b)
 }
 static void draw_confirm(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    char question[24],detail[24];confirm_text(question,detail);
+    lcd_fill(0,H_HEAD,240,240-H_HEAD,T_BG);ui.head_sig=~0u;
+    cv_begin(DLG_W,DLG_H,T_BG);
+    cv_rect(0,0,DLG_W,1,T_MID);cv_rect(0,DLG_H-1,DLG_W,1,T_MID);
+    cv_rect(0,0,1,DLG_H,T_MID);cv_rect(DLG_W-1,0,1,DLG_H,T_MID);
+    cv_text(8,7,&AF_S,"CONFIRM",T_MID);
+    const aafont_t *face=text_w(&AF_M,question)<=DLG_W-16?&AF_M:&AF_S;
+    cv_text_in(8,30,DLG_W-16,face,question,T_THEME,T_BG);
+    cv_text_in(8,57,DLG_W-16,&AF_S,detail,T_MID,T_BG);
+    cv_rect(10,84,90,26,T_SURF);cv_rect(108,84,90,26,T_THEME);
+    cv_text_in(10,90,90,&AF_S,"OCT- NO",T_THEME,T_SURF);
+    cv_text_in(108,90,90,&AF_S,"OCT+ YES",T_BG,T_THEME);
+    cv_blit(DLG_X,DLG_Y);return;
+#endif
+
     char a[24], b[24];
     const aafont_t *tf = &AF_M;
     confirm_text(a, b);
@@ -1454,6 +1510,9 @@ static void draw_confirm(void)
 /* the stored STYLE (ui_style: the menu, a settings import, a restore) into gfx.c's copy: the tokens again, all redrawn */
 static void style_apply(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    ui_style=ST_FLAT;
+#endif
     if (ui_style > ST_LINE)                             /* 2, the retired PIXEL: LINE; unknown: FLAT */
         ui_style = ui_style == 2u ? ST_LINE : ST_FLAT;
     if (ux.style != ui_style) {
@@ -1483,6 +1542,7 @@ static void ui_draw(void)
 }
 static void ui_draw_page(uint32_t counting)
 {
+    pigeon_ui_guard();
 #if FELUCCA_KO
     if (!ko_home() || ui.uboot || counting) ko_ui_invalidate();
 #endif
@@ -1534,6 +1594,9 @@ static void ui_draw_page(uint32_t counting)
     if (ko_home()) { ko_draw(); return; }
     ko_ui_invalidate();
 #endif
+#if FELUCCA_SAMPLER_ONLY
+    ko_draw(); /* No generic renderer exists as a PIGEON fallback. */
+#else
     if (!ui.home && !page_visible(ui.page)) {          /* an OP page of a track that is not DIGITAL (without
                                                          * FELUCCA_FM4: any track): EDIT 1 */
         ui.page = (uint8_t)page_first(FAM_EDIT);
@@ -1562,4 +1625,5 @@ static void ui_draw_page(uint32_t counting)
     felucca_dbg.stage = 6;
     draw_foot();
     ui.force = 0;
+#endif
 }

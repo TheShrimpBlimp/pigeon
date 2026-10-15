@@ -158,7 +158,7 @@ static int ldr_session(void)
 {
     static uint8_t hdr[0x400], sec[0x1000], cur[0x1000];
     static uint16_t sc[LDR_NSEC];
-    uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, want = ~0u, done = 0, ko_layout = 0;
+    uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, want = ~0u, done = 0, ko_layout = 0, extra_layout = 0;
     int rc, mark = 0;
     uint32_t open = 0;
     /* 1. UFW header + entry list (ota.c; it leaves the entries decoded in hdr) */
@@ -189,9 +189,18 @@ static int ldr_session(void)
             ota_rd32(sec+8) != KO_APP_DATA_HI-KO_APP_HI) return -14;
         ko_layout = 1;
     }
-    if (ldr_fread(0xA0000u,cur,4)) return -8;
+    if (ota_read(fl_off+LDR_APP_LO+KO_EXTRA_ENTRY,sec,32)) return -7;
+    ldr_sfc(sec,32,KO_EXTRA_ENTRY,key);
+    if(ota_memeq(sec+16,(const uint8_t *)KO_EXTRA_NAME,8)) {
+        if(!ko_layout || ota_crc16(sec+2,30,0)!=ota_rd16(sec) || ota_rd32(sec+4)!=KO_EXTRA_LO ||
+           ota_rd32(sec+8)!=KO_EXTRA_HI-KO_EXTRA_LO) return -14;
+        extra_layout=1;
+    }
+    if (ldr_fread(0xA0000u,cur,12)) return -8;
     if (!ko_layout && ota_rd32(cur) == KO_BANK_MAGIC) return -15; /* export/erase bank before downgrade */
+    if(!extra_layout && ota_rd32(cur)==KO_BANK_MAGIC && ota_rd32(cur+8)>KO_BANK_BASE_SIZE) return -15;
     if (ko_layout && (mark = ldr_pkg_marker(fl_off, sec, key)) < 0) return mark;
+    if(extra_layout && (!mark || ota_rd32(sec+(PIGEON_MARK_OFF&0x1FFu)+8)>KO_EXTRA_LO-0x5000u))return -14;
     /* 3. app area, sector by sector */
     for (uint32_t order = 0; order < LDR_NSEC; order++) {
         s = LDR_APP_LO + order * 0x1000u;
@@ -202,6 +211,9 @@ static int ldr_session(void)
         }
         if (ko_layout && s >= KO_APP_HI && s < KO_APP_DATA_HI) {
             done += 0x1000u; ldr_progress(done,LDR_APP_HI-LDR_APP_LO); continue;
+        }
+        if(extra_layout && s>=KO_EXTRA_LO && s<KO_EXTRA_HI) {
+            done+=0x1000u;ldr_progress(done,LDR_APP_HI-LDR_APP_LO);continue;
         }
         uint32_t again;
         for (again = 0;; again++) {                      /* as checked in 2b, else read it again */

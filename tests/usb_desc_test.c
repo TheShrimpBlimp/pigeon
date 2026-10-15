@@ -156,6 +156,14 @@ static int same_as(const uint8_t *dev, const uint8_t *c, uint32_t n, const uint8
 
 int main(void)
 {
+#if FELUCCA_SAMPLER_ONLY && !defined(FELUCCA_LOADER)
+    static const uint8_t product[] = {14, 3, 'P', 0, 'I', 0, 'G', 0, 'E', 0, 'O', 0, 'N', 0};
+    const uint8_t *product_desc = 0;
+    uint16_t product_len = 0;
+    check("PIGEON USB product name is returned to the host",
+          get_desc(0x0302, &product_desc, &product_len) && product_len == sizeof product &&
+          !memcmp(product_desc, product, sizeof product));
+#endif
     const uint8_t *dev, *c;
     uint16_t dev_len, n;
     uint32_t off, i, nif = 0, niad = 0, eps_n = 0;

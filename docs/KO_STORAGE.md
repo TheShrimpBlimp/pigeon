@@ -1,16 +1,16 @@
-# Expanded KO sample storage
+# PIGEON sample storage
 
-An optional `FELUCCA_KO_STORAGE=1` profile keeps the existing Felucca engines,
-parameter IDs and FUNA projects, but replaces factory sample audio with a shared
-flash bank for one chopped song and up to sixteen drum one-shots. Standard
-Felucca and `FELUCCA_KO=1` without this flag retain their original storage layout.
-Factory sample sets retain their IDs and use Felucca's missing-sample fallback;
-projects that used those factory recordings therefore sound different in this profile.
+The current PIGEON profile uses two chopped songs and a 16-pad drum kit in a
+shared bank. Synth engines are excluded from the sampler profile, while
+serialized project and backup IDs remain compatible. For the user workflow,
+start with [the tutorial](KO_MODE.md).
 
-## Capacity and formats
+v0.3 adds an 88 KiB extent at `0x60000–0x76000`, bringing the shared payload to 496 KiB plus a 4 KiB header. Existing extents keep their physical addresses; boot-marker sectors `0x76000–0x78000` stay reserved. The package declares KOPOOL3 alongside KOPOOL2. Tools negotiate capacity before writing; older 408 KiB firmware rejects larger banks before erase. Storage/recovery simulation checks pass; full expanded-pool hardware endurance checks remain pending.
 
-The bank is 421,888 bytes (412 KiB). Its header sector takes 4 KiB, leaving
-417,792 bytes (408 KiB) shared by encoded audio, waveform and MP3 seek indices.
+## Published capacity and formats
+
+The bank is 512,000 bytes (500 KiB). Its header sector takes 4 KiB, leaving
+507,904 bytes (496 KiB) shared by encoded audio, waveform and MP3 seek indices.
 Drums use mono IMA ADPCM at 22.05 kHz. The song uses either:
 
 - Indexed mono MP3 at 22.05 kHz, 24–64 kbps; default 32 kbps. The importer disables
@@ -36,7 +36,7 @@ shorter kit. Neither MP3 nor lowered-rate ADPCM restores lost audio quality late
 ## Build and import
 
 ```sh
-FELUCCA_KO=1 FELUCCA_KO_STORAGE=1 PYTHON=.venv/bin/python ./build.sh
+PYTHON=.venv/bin/python ./build-sampler.sh
 python3 -m pip install --target build/codec-python lameenc
 python3 tools/ko_bank.py build beat.kob song.wav kick.wav snare.wav hat.wav
 ```
@@ -72,7 +72,7 @@ The updated loader rejects the downgrade while the KOB2 marker exists. Erase
 invalidates the bank and legacy slot headers; it does not securely erase audio.
 Older loaders and external full-flash tools do not know these protections.
 
-## Flash layout
+## Published flash layout
 
 | Physical range (end exclusive) | Bank allocation |
 |---|---:|
@@ -157,7 +157,7 @@ waveform position no longer requests a complete waveform redraw.
 
 ## Two independent songs (bank version 3)
 
-Both songs and up to sixteen drum hits share the same 408 KiB payload pool.
+On v0.3, both songs and up to sixteen drum hits share the same 496 KiB payload pool.
 The duration estimates above are combined song duration, not duration per
 song; the second song also has its own seek index and waveform. The default
 32 kbps encoding can hold roughly 90 seconds combined without drums, or
@@ -185,7 +185,7 @@ version 3 bank from the source files to replace its audio.
 ### Preview shared storage before uploading
 
 `tools/ko_bank.py preview BANK.kob` validates a bank locally and shows both songs'
-names, durations and codecs, kit usage, combined consumption of the **408 KiB**
+names, durations and codecs, kit usage, combined consumption of the **496 KiB**
 audio payload, and free space. The `upload` command prints the same preview before
 opening MIDI or writing flash. Preview requires no connected synth.
 

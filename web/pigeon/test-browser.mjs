@@ -6,7 +6,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { crc } from "./bank.js";
-import { b64 } from "./device.js";
+import { b64,validateArchive } from "./device.js";
 import { fileURLToPath } from "node:url";
 const { chromium } = await import(
   process.env.PIGEON_PLAYWRIGHT_MODULE ||
@@ -98,7 +98,7 @@ try {
   await page.locator('#file0').setInputFiles([wav,{...wav,name:'second.wav'}]);
   await page.waitForFunction(()=>document.querySelectorAll('#clips0 .clip-row').length===2);
   await page.locator('#merge0:not([disabled])').waitFor({state:'attached'});
-  await page.locator('#songs .clip-builder summary').first().click();
+  await page.locator('#songs .clip-builder').first().evaluate(el=>el.open=true);
   await page.getByLabel('Clip 1 end',{exact:true}).fill('0.1');
   await page.getByLabel('Clip 1 gainDb',{exact:true}).fill('-6');await page.getByLabel('Clip 2 gainDb',{exact:true}).fill('-6');
   await page.locator('#clips0 .clip-row').last().getByText('Move up',{exact:true}).click();
@@ -110,10 +110,30 @@ try {
   assert(gainPeak<.35 && gainPeak>.05,'encoding must preserve clip attenuation instead of normalizing it away');
   assert.equal(joined.length,2);assert.equal(joined[0].a,0);assert.equal(joined[0].b,joined[1].a);assert(joined[1].b>joined[1].a);
   await page.locator('#clips0 .clip-row').first().getByText('Remove',{exact:true}).click();assert.equal(await page.locator('#clips0 .clip-row').count(),1);
+  await page.locator("#draft-clear0").click();
   await page.locator("#file0").setInputFiles(wav);
   await page.waitForFunction(() =>
-    document.getElementById("status").textContent.startsWith("Selected hit"),
+    document.getElementById("status").textContent.startsWith("Files appended"),
   );
+  const canvas=page.locator('#wave0');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();
+  await canvas.click({position:{x:box.width*.4,y:box.height*.4}});
+  assert(Number(await canvas.getAttribute('data-cursor'))>0);assert(Number(await page.locator('#start0').inputValue())>.3,'click places an empty selection at the cursor');
+  await canvas.hover({position:{x:box.width*.4,y:box.height*.4}});await page.mouse.wheel(0,-180);
+  await page.waitForFunction(()=>Number(document.querySelector('#wave0').dataset.zoom)>0);
+  await canvas.click({position:{x:box.width*.85,y:box.height*.94}});
+  assert(Number(await canvas.getAttribute('data-scroll'))>0,'overview pans the zoomed view');
+  await canvas.dblclick({position:{x:box.width*.5,y:box.height*.4}});
+  assert.equal(Number(await canvas.getAttribute('data-zoom')),0);
+  await page.keyboard.down('Shift');await page.mouse.move(box.x+box.width*.2,box.y+box.height*.4);await page.mouse.down();await page.mouse.move(box.x+box.width*.6,box.y+box.height*.4,{steps:6});await page.mouse.up();await page.keyboard.up('Shift');
+  const trimStart=Number(await page.locator('#start0').inputValue()),trimEnd=Number(await page.locator('#end0').inputValue());assert(trimStart>.15&&trimEnd<.65);
+  await canvas.focus();await page.keyboard.press('Backspace');
+  await page.waitForFunction(()=>Number(document.getElementById('end0').value)<.7);
+  assert(Number(await page.locator('#end0').inputValue())>.5,'Backspace removes only the selection');
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.waitForFunction(()=>Number(document.getElementById('end0').value)>.99);
+  assert.equal(await canvas.getAttribute('data-wave-columns'),'220');
+  await page.locator('#start0').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
+  await page.locator('#start0').fill('0');await page.locator('#end0').fill('1');
   await page.locator("#apply0").click();
   await page.waitForFunction(
     () =>
@@ -135,8 +155,9 @@ try {
   await page.waitForFunction(() =>
     document
       .getElementById("status")
-      .textContent.startsWith("Selected offline"),
+      .textContent.startsWith("Files appended"),
   );
+  await page.locator('#rate1').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
   await page.locator("#rate1").selectOption("24");
   await page.locator("#apply1").click();
   await page.waitForFunction(
@@ -156,6 +177,30 @@ try {
       .getElementById("status")
       .textContent.startsWith("Drum kit replaced"),
   );
+  // Undo is a complete committed workspace snapshot, including keyboard shortcuts.
+  const bankBytes=()=>page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const b=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();return Array.from(b);});
+  const originalBank=await bankBytes();
+  await page.locator('#rename-song').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
+  await page.locator('#rename-song').fill('UNDO');await page.locator('#rename-apply').click();
+  await page.locator('#status').filter({hasText:'Song renamed locally'}).waitFor();
+  const renamedBank=await bankBytes();assert.notDeepEqual(renamedBank,originalBank);
+  await page.locator('h1').click();await page.keyboard.press('Control+z');
+  await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();assert.deepEqual(await bankBytes(),originalBank);
+  await page.keyboard.press('Control+Shift+z');await page.locator('#status').filter({hasText:'Local edit redone'}).waitFor();assert.deepEqual(await bankBytes(),renamedBank);
+  await page.keyboard.press('Meta+z');await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();assert.deepEqual(await bankBytes(),originalBank);
+  await page.keyboard.press('Control+y');await page.locator('#status').filter({hasText:'Local edit redone'}).waitFor();assert.deepEqual(await bankBytes(),renamedBank);
+  await page.locator('#undo').click();await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();
+  await page.locator('#library-name').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
+  await page.locator('#library-name').fill('Offline test');await page.locator('#library-save').click();
+  await page.locator('#status').filter({hasText:'Saved in this browser’s library'}).waitFor();
+  assert.equal(await page.locator('#library-list option').count(),1);
+  await page.locator('#rename-song').fill('ALTERED');await page.locator('#rename-apply').click();await page.locator('#status').filter({hasText:'Song renamed locally'}).waitFor();
+  await page.locator('#library-load').click();await page.locator('#status').filter({hasText:'Library entry loaded locally'}).waitFor();assert.deepEqual(await bankBytes(),originalBank);
+  await page.locator('#pad-copy-target').selectOption('15');await page.locator('#pad-copy').click();
+  await page.locator('#status').filter({hasText:'Kit updated locally'}).waitFor();
+  const padCopy=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const b=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {encodedPad,inspect}=await import('/pigeon/bank.js');return {count:inspect(b).pads,a:encodedPad(b,0),b:encodedPad(b,15)};});
+  assert.equal(padCopy.count,16);assert.deepEqual(padCopy.a,padCopy.b);
+  await page.locator('#undo').click();await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();assert.deepEqual(await bankBytes(),originalBank);
   await page.locator("#pad0").click();
   await page.waitForFunction(
     () => document.getElementById("status").textContent === "Playing pad 1",
@@ -170,6 +215,7 @@ try {
   await page.waitForFunction(() =>
     document.getElementById("status").textContent.startsWith("Loaded Song"),
   );
+  await page.locator('#chop-attack').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
   await page.locator("#chop-attack").fill("50");
   await page.locator("#chop-choke").fill("1");
   await page.locator("#chop-release").fill("200");
@@ -184,10 +230,20 @@ try {
       document.getElementById("status").textContent === "Chops updated locally",
   );
   await page.locator('#chop-index').selectOption('1');await page.locator('#chop-pitch').fill('7');await page.locator('#chop-start').fill(String(Number(await page.locator('#chop-start').inputValue())+.005));await page.locator('#chop-attack').fill('0');await page.locator('#chop-apply').click();
-  await page.getByText('Chop updated locally',{exact:true}).first().waitFor();
+  await page.locator('#status').filter({hasText:'Chop updated locally'}).waitFor();
   const chopCountBeforeCopy=await page.locator('#chop-index option').count();
+  const beforeReassign=await bankBytes();
+  for(const action of ['swap','move']) {
+    await page.locator('#chop-index').selectOption('1');await page.locator('#chop-copy').evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
+  await page.locator('#chop-copy').selectOption('0');await page.locator(`#chop-${action}`).click();
+    await page.locator('#status').filter({hasText:'Chops updated locally'}).waitFor();
+    assert.equal(await page.locator('#chop-index').inputValue(),'0');assert.equal(await page.locator('#chop-pitch').inputValue(),'7');
+    assert.equal(await page.locator('#chop-index option').count(),chopCountBeforeCopy);
+    await page.locator('#undo').click();await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();assert.deepEqual(await bankBytes(),beforeReassign);
+  }
+  await page.locator('#chop-index').selectOption('1');
   await page.locator('#chop-copy').selectOption('0');await page.locator('#chop-full').click();
-  await page.getByText('Chops updated locally',{exact:true}).first().waitFor();
+  await page.locator('#status').filter({hasText:'Chops updated locally'}).waitFor();
   const copied=await page.evaluate(async()=>{const d=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);}),image=await new Promise(r=>{const q=d.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});d.close();const {songChops}=await import('/pigeon/editing.js');return songChops(image,1);});
   assert.equal(copied.length,chopCountBeforeCopy);assert.deepEqual(copied[1],copied[0]);assert.equal(await page.locator('#chop-index').inputValue(),'1');assert.equal(await page.locator('#chop-pitch').inputValue(),'0');
   await page.locator("#pad-pitch").fill("5");
@@ -257,6 +313,16 @@ try {
     await page.locator("#pattern-grid button").first().textContent(),
     /7/,
   );
+  await page.locator('#pattern-chop').fill('9');await page.locator('#pattern-apply').click();
+  await page.locator('#status').filter({hasText:'Pattern step updated locally'}).waitFor();
+  await page.locator('#undo').click();await page.locator('#status').filter({hasText:'Local edit undone'}).waitFor();
+  assert.match(await page.locator('#pattern-grid button').first().textContent(),/7/);
+  await page.locator('#library-name').fill('Full session');await page.locator('#library-save').click();
+  await page.locator('#status').filter({hasText:'Saved in this browser’s library'}).waitFor();
+  await page.locator('#library-list').selectOption({label:'Full session (session)'});
+  const libraryDownload=page.waitForEvent('download');await page.locator('#library-download').click();
+  const libraryFile=await libraryDownload;assert.equal(libraryFile.suggestedFilename(),'Full session.pigeon');
+  validateArchive(JSON.parse(await fs.readFile(await libraryFile.path(),'utf8')));
   await page
     .locator("#firmware-file")
     .setInputFiles(path.join(build, "../pigeon.fwsc"));

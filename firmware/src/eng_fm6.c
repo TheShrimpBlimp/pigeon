@@ -179,6 +179,9 @@ static void fm6_set_patch(uint32_t tr, const uint8_t *v)
  * has none there, nothing changed) */
 static int fm6_load_slot(uint32_t tr, uint32_t s)
 {
+#if FELUCCA_SAMPLER_ONLY
+    (void)tr;(void)s;return 1;
+#else
     uint8_t v[FP_SIZE + 1u], pk[FM6_PACKED];
     int32_t k = fm6_bank_slot((int32_t)s);
     if (k < 0) {
@@ -191,6 +194,7 @@ static int fm6_load_slot(uint32_t tr, uint32_t s)
     fm6_set_patch(tr, v);
     fm6_slot[tr % NTRK] = (uint8_t)s;
     return 0;
+#endif
 }
 
 /* track tr's patch was just put in as its own (a project, a user preset, the editor, a conversion): an FM6 track's
@@ -198,6 +202,9 @@ static int fm6_load_slot(uint32_t tr, uint32_t s)
  * (fm6_poll) */
 static void fm6_adopt(uint32_t tr)
 {
+#if FELUCCA_SAMPLER_ONLY
+    (void)tr; /* Serialized patches survive; PIGEON never identifies synth presets. */
+#else
     track_t *t = &trk[tr % NTRK];
     int32_t s = t->p[P_E7];
     tr %= NTRK;
@@ -214,6 +221,7 @@ static void fm6_adopt(uint32_t tr)
         t->p[P_E7] = (int16_t)s;
     }
     fm6_slot[tr] = (uint8_t)s;
+#endif
 }
 
 /* a factory sound load put a SLOT value in (a preset, an engine change): its patch (OWN: the patch stays) */

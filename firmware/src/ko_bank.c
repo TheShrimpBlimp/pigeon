@@ -92,7 +92,7 @@ static int ko_bank_header_valid(const ko_bank_hdr_t *h)
         return !h->frames && !h->skip && h->samples <= h->song_len*2u;
     return h->rate == 22050u && h->frames >= 3u && (h->frames < 16000u ||
 #ifdef FELUCCA_WEB
-           web_bank_capacity>0x67000u ||
+           web_bank_capacity>0x7D000u ||
 #endif
            0) &&
            (h->frames+1u)*4u < h->song_len && h->skip <= 2304u && h->skip < h->frames*576u &&

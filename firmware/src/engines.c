@@ -111,7 +111,7 @@ static void eng_mem_claim(const track_t *t)
 }
 
 /* the sample source a track's sound plays that has no data (SAMPLE's SET, GRAIN's SRC, SLICE's SRC: an empty or
- * invalid user slot, a set or PIANO this build lacks): its name (it plays a sine: eng_sample.c smp_sine), 0 = none;
+ * invalid user slot, a set or PIANO this build lacks): its name (it stays silent), 0 = none;
  * *code a small number for it (1.., per engine and source) so the UI says it once (ui_input.c sample_notice) */
 static uint8_t snd_said[NTRK];   /* per track: the code last said, 0 = none (a project load clears them: said again) */
 static const char *snd_missing(const track_t *t, uint32_t *code)

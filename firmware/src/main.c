@@ -192,7 +192,8 @@ static void fm1_main(void)
     }
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
 #if FELUCCA_KO
-    ko.on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    if(FELUCCA_SAMPLER_ONLY)ko_product_boot();
+    ko_states[0].on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
     ko_palette_on = ko.on; palette_set(settings.palette);
     if (ko.on) ko_prepare();
 #endif

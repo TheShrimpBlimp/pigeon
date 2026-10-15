@@ -31,7 +31,7 @@ int main(void)
     bad+=check("manual edit pauses automatic following",ko_wave_a==old_a);
     fm1_ms+=1001;host_fl_begin();ko_draw();flashes=host_fl_end(26,240);
     bad+=check("playback follows into visible window without changing edit selection",ko_wave_a<=v->ph[0] && v->ph[0]-ko_wave_a<ko_wave_span && ko.selected==selected && ko.cursor==cursor && !flashes);
-    host_fl_begin();v->ph[0]+=ko_wave_span/(SP_COLS-1)+1;ko_playhead();flashes=host_fl_end(170,173);
+    host_fl_begin();v->ph[0]+=ko_wave_span/(KO_WAVE_COLS-1)+1;ko_playhead();flashes=host_fl_end(170,173);
     bad+=check("overlapping playback cursor positions avoid intermediate blank pixels",!flashes);
     v->ph[0]=2048;ko_draw();bad+=check("loop restart follows back to earlier sample position",ko_wave_a<=2048 && 2048-ko_wave_a<ko_wave_span);
     v->active=0;ko.view=7;ko_seq[0].enabled=1;ui.force=1;ko_draw();
@@ -73,14 +73,14 @@ int main(void)
     ko.view=1;ui.force=1;ko_draw();host_fl_begin();ko_knob(1,1);ko_draw();flashes=host_fl_end(26,240);
     bad+=check("FX value changes redraw buffered text without intermediate blanks",!flashes);
     ko.view=8;ko_launch_pending=2;chain_config.rsv[0]=1;ui.force=1;ko_draw();
-    int label=0;for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==74)label=!strcmp(ko_lines[i].text,"PATTERN END: C");
+    int label=0;for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==140)label=!strcmp(ko_lines[i].text,"PATTERN END: C");
     bad+=check("queued pattern label names pattern-end preference",label);
     chain_config.rsv[0]=0;ui.force=1;ko_draw();label=0;
-    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==74)label=!strcmp(ko_lines[i].text,"NEXT BAR: C");
+    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==140)label=!strcmp(ko_lines[i].text,"NEXT BAR: C");
     bad+=check("queued pattern label follows bar preference",label);ko_launch_pending=255;
     ko.view=27;ko_sync[0]=(ko_sync_t){.samples=((slc_get(1)->rate*44100u+32768u)>>16)*2u,.beats=4,.on=1};song.g[G_BPM]=120;ui.force=1;ko_draw();
     song.g[G_BPM]=180;ui.force=0;ko_draw();label=0;
-    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==140)label=!strcmp(ko_lines[i].text,"SPEED % 150");
+    for(uint32_t i=0;i<ko_line_n;i++)if(ko_lines[i].y==205)label=!strcmp(ko_lines[i].text,"SPEED 150% / PITCH FOLLOWS");
     bad+=check("sync speed display follows external tempo without forced redraw",label);song.g[G_BPM]=120;
     const char *screens=getenv("KO_SCREEN_DIR");if(screens) {ko_palette_on=1;palette_set(settings.palette);ko.view=7;screen_save(screens,"pigeon-sequencer");ko.view=0;screen_save(screens,"pigeon-waveform");}
     printf("PIGEON UI: %s\n",bad?"FAILED":"PASSED");return bad!=0;

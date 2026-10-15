@@ -723,6 +723,9 @@ static uint32_t perf_key(uint32_t k)
  * remapped while held lets go of what it holds; an effect two keys hold ends with the last of them. noinline: out
  * of keyboard_block's loop (the audio ISR) */
 static uint8_t kb_fx[27];
+#if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
+static uint32_t kb_tail;
+#endif
 static __attribute__((noinline)) void perf_key_press(uint32_t k, int down)
 {
     uint32_t e, j;
@@ -861,6 +864,16 @@ static void keyboard_block(void)
                 kb_note[k] = (uint8_t)kb_map(&trk[kb_trk[k]], k);
             if (kb_note[k] == KB_SILENT)
                 continue;
+#if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
+            if (ko_song(&trk[kb_trk[k]]) && (fm1_in.buttons & ko_tail_button_mask)) {
+                /* Audition directly: no recording, quantization, arp or MIDI output. */
+                ko_tail_preview = 1;
+                trk_note_on(&trk[kb_trk[k]], kb_note[k], 100);
+                ko_tail_preview = 0;
+                kb_tail |= 1u << k;
+                continue;
+            }
+#endif
             key_on(k, &trk[kb_trk[k]]);
 #ifdef FM1_INPUT_LAT
             kb_lat(k);
@@ -873,6 +886,13 @@ static void keyboard_block(void)
             }
             if (kb_note[k] == KB_SILENT)
                 continue;
+#if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
+            if (kb_tail & (1u << k)) {
+                kb_tail &= ~(1u << k);
+                trk_note_off(&trk[kb_trk[k] % NTRK], kb_note[k]);
+                continue;
+            }
+#endif
             key_off(k, &trk[kb_trk[k] % NTRK]);
         }
     }

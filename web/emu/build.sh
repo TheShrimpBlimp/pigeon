@@ -12,7 +12,7 @@ set -e
 cd "$(dirname "$0")/../.."
 [ -f build/gen/felucca_tables.h ] || { echo "emu: run ./build.sh once first (build/gen)"; exit 1; }
 command -v emcc >/dev/null 2>&1 || { echo "emu: no emcc (Emscripten)"; exit 1; }
-VERSION=PIGEON-0.1
+VERSION=PIGEON-0.3
 mkdir -p build/emu/fonts
 rm -f build/emu/fonts/DotGothic16-subset.woff build/emu/fonts/OFL.txt
 # shellcheck disable=SC2086

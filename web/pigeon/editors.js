@@ -21,7 +21,7 @@ import {
   updateObject,
 } from "./editing.js";
 import { unb64 } from "./device.js";
-import { WaveEditor } from "./wave-editor.js";
+import { WaveEditor } from "./wave-editor-v2.js";
 export function editors(api) {
   const $ = (id) => document.getElementById(id);
   let loaded = null,
@@ -35,7 +35,7 @@ export function editors(api) {
     step = 0;
   const block = document.createElement("section");
   block.className = "kit";
-  block.innerHTML = `<div class="section-heading"><h2>Chop editor</h2><label>Song<select id="chop-song"><option value="1">Song 1</option><option value="2">Song 2</option></select></label><button id="load-chops" data-bank>Load waveform</button></div><p>Drag either chop boundary, or drag a new range. Edits remain local until you send the bank. To overwrite a key, select its destination chop, choose Copy from, then Copy whole chop here. This replaces its boundaries and playback settings without shifting other keys.</p><canvas class="wave" id="chop-wave"></canvas><div class="edit-fields"><label>Chop<select id="chop-index"></select></label><label>Start (s)<input id="chop-start" type="number" min="0" step="0.001"></label><label>End (s)<input id="chop-end" type="number" min="0" step="0.001"></label><label>Choke group<input id="chop-choke" type="number" min="0" max="3" value="0"></label><label>Pitch<input id="chop-pitch" type="number" min="-24" max="24" value="0"></label><label>Attack (ms)<input id="chop-attack" type="number" min="0" max="155" step="5" value="0"></label><label>Release (ms)<input id="chop-release" type="number" min="0" max="310" step="10" value="0"></label><label>Trigger<select id="chop-mode"><option value="0">Hold</option><option value="1">One-shot</option><option value="2">Latch</option></select></label><label>Loop<select id="chop-loop"><option value="1">On</option><option value="0">Off</option></select></label><label>Zoom<input id="chop-zoom" type="range" min="0" max="8" value="0"></label><label>Scroll<input id="chop-scroll" type="range" min="0" max="1000" value="0"></label><label>Transient sensitivity<input id="chop-sensitivity" type="range" min="0" max="100" value="50"></label><label>Copy from<select id="chop-copy"></select></label></div><div class="song-actions"><button id="chop-apply" data-bank>Apply chop</button><button id="chop-play" data-bank>Preview chop</button><button id="chop-stop">Stop preview</button><button id="chop-auto" data-bank>Detect transients</button><button id="chop-duplicate" data-bank>Duplicate</button><button id="chop-split" data-bank>Split</button><button id="chop-merge" data-bank>Merge previous</button><button id="chop-paste" data-bank>Copy settings</button><button id="chop-full" data-bank>Copy whole chop here</button></div><p>Attack/release and explicit trigger modes require the updated firmware. Release 0 uses the track default.</p><div class="edit-fields"><label>Song name (device: 8 characters)<input id="rename-song" maxlength="8"></label><button id="rename-apply" data-bank>Rename song</button></div>`;
+  block.innerHTML = `<div class="section-heading"><h2>Chop editor</h2><label>Song<select id="chop-song"><option value="1">Song 1</option><option value="2">Song 2</option></select></label><button id="load-chops" data-bank>Load waveform</button></div><p>Drag the S/E flags to trim, or drag the selected region to move it. Click to place the cursor. Shift-drag makes a new selection. Scroll to zoom; drag the overview to pan. Double-click resets the view. Edits remain local until you send the bank. To overwrite a key, select its destination chop, choose Copy from, then Copy whole chop here. Swap exchanges both keys. Move shifts the intervening keys without discarding chops. Copy replaces its boundaries and playback settings without shifting other keys.</p><canvas class="wave" id="chop-wave"></canvas><div class="edit-fields"><label>Chop<select id="chop-index"></select></label><label>Start (s)<input id="chop-start" type="number" min="0" step="0.001"></label><label>End (s)<input id="chop-end" type="number" min="0" step="0.001"></label><label>Choke group<input id="chop-choke" type="number" min="0" max="3" value="0"></label><label>Pitch<input id="chop-pitch" type="number" min="-24" max="24" value="0"></label><label>Attack (ms)<input id="chop-attack" type="number" min="0" max="155" step="5" value="0"></label><label>Release (ms)<input id="chop-release" type="number" min="0" max="310" step="10" value="0"></label><label>Trigger<select id="chop-mode"><option value="0">Hold</option><option value="1">One-shot</option><option value="2">Latch</option></select></label><label>Loop<select id="chop-loop"><option value="1">On</option><option value="0">Off</option></select></label><label>Zoom<input id="chop-zoom" type="range" min="0" max="8" step="0.01" value="0"></label><output id="chop-cursor">Cursor 0.000 s</output><label>Transient sensitivity<input id="chop-sensitivity" type="number" min="0" max="100" value="50"></label><label>Copy from<select id="chop-copy"></select></label></div><div class="song-actions"><button id="chop-apply" data-bank>Apply chop</button><button id="chop-play" data-bank>Preview chop</button><button id="chop-stop">Stop preview</button><button id="chop-auto" data-bank>Detect transients</button><button id="chop-duplicate" data-bank>Duplicate</button><button id="chop-split" data-bank>Split</button><button id="chop-merge" data-bank>Merge previous</button><button id="chop-paste" data-bank>Copy settings</button><button id="chop-full" data-bank>Copy whole chop here</button><button id="chop-swap" data-bank>Swap selected with Copy from</button><button id="chop-move" data-bank>Move selected to Copy from key</button></div><p>Attack/release and explicit trigger modes require the updated firmware. Release 0 uses the track default.</p><div class="edit-fields"><label>Song name (device: 8 characters)<input id="rename-song" maxlength="8"></label><button id="rename-apply" data-bank>Rename song</button></div>`;
   $("songs").after(block);
   const wave = new WaveEditor($("chop-wave"), (a, b) => {
     $("chop-start").value = (a / component(api.bank(), slot).h[5]).toFixed(5);
@@ -116,12 +116,9 @@ export function editors(api) {
       select();
       api.status(`Loaded Song ${slot} waveform`);
     });
-  for (const k of ["zoom", "scroll"])
-    $(`chop-${k}`).oninput = () => {
-      wave.zoom = Number($("chop-zoom").value);
-      wave.scroll = Number($("chop-scroll").value) / 1000;
-      wave.draw();
-    };
+  wave.onCursorChange=p=>$("chop-cursor").textContent=`Cursor ${(p/(component(api.bank(),slot)?.h[5]||22050)).toFixed(3)} s`;
+  wave.onViewChange=zoom=>$("chop-zoom").value=zoom;
+  $("chop-zoom").oninput=()=>wave.setZoom(Number($("chop-zoom").value));
   $("chop-apply").onclick = () =>
     api.run(async () => {
       if (!chops[chop]) throw Error("Song is empty");
@@ -160,6 +157,7 @@ export function editors(api) {
         component(api.bank(), slot).h[5],
         Number($("chop-loop").value) === 1 &&
           Number($("chop-mode").value) !== 1,
+        wave,c.a,
       );
       api.status(`Playing chop ${chop + 1}`);
     });
@@ -179,7 +177,7 @@ export function editors(api) {
         "Transient chops generated locally",
       );
     });
-  for (const op of ["duplicate", "split", "merge", "paste", "full"])
+  for (const op of ["duplicate", "split", "merge", "paste", "full", "swap", "move"])
     $(`chop-${op}`).onclick = () =>
       api.run(async () => {
         if (!chops[chop]) throw Error("Song is empty");
@@ -204,7 +202,9 @@ export function editors(api) {
         } else {
           const source = next[Number($("chop-copy").value)];
           if(!source)throw Error("Choose a source chop");
-          if(op==="full")next[chop]={...source};
+          if(op==="swap") {const target=Number($("chop-copy").value);[next[chop],next[target]]=[next[target],next[chop]];chop=target;}
+          else if(op==="move") {const target=Number($("chop-copy").value);next.splice(chop,1);next.splice(target,0,c);chop=target;}
+          else if(op==="full")next[chop]={...source};
           else{c.pitch = source.pitch;c.flags = source.flags;}
         }
         await save(next, "Chops updated locally");
@@ -216,7 +216,7 @@ export function editors(api) {
     });
   const pads = document.createElement("section");
   pads.className = "kit";
-  pads.innerHTML = `<h2>Drum pad settings</h2><div class="edit-fields"><label>Pad<select id="pad-setting-index">${Array.from({ length: 16 }, (_, i) => `<option value="${i}">Pad ${i + 1}</option>`).join("")}</select></label><label>Name<input id="pad-label" maxlength="128"></label><label>Pitch<input id="pad-pitch" type="number" min="-24" max="24"></label><label>Level<input id="pad-level" type="number" min="0" max="127"></label><label>Decay<input id="pad-decay" type="number" min="0" max="127"></label><label>Choke group<input id="pad-choke" type="number" min="0" max="4"></label></div><div class="song-actions"><button id="pad-settings-apply" data-bank>Apply pad settings</button><button id="pad-remove" data-bank>Remove pad</button><button id="pad-left" data-bank>Move pad left</button><button id="pad-right" data-bank>Move pad right</button></div><p>Decay 0 plays the full one-shot. Choke group 0 allows overlap. Removing a pad leaves a silent hit so later assignments keep their key numbers.</p>`;
+  pads.innerHTML = `<h2>Drum pad settings</h2><div class="edit-fields"><label>Pad<select id="pad-setting-index">${Array.from({ length: 16 }, (_, i) => `<option value="${i}">Pad ${i + 1}</option>`).join("")}</select></label><label>Copy to pad<select id="pad-copy-target">${Array.from({length:16},(_,i)=>`<option value="${i}">Pad ${i+1}</option>`).join("")}</select></label><label>Name<input id="pad-label" maxlength="128"></label><label>Pitch<input id="pad-pitch" type="number" min="-24" max="24"></label><label>Level<input id="pad-level" type="number" min="0" max="127"></label><label>Decay<input id="pad-decay" type="number" min="0" max="127"></label><label>Choke group<input id="pad-choke" type="number" min="0" max="4"></label></div><div class="song-actions"><button id="pad-settings-apply" data-bank>Apply pad settings</button><button id="pad-copy" data-bank>Copy pad to key</button><button id="pad-remove" data-bank>Remove pad</button><button id="pad-left" data-bank>Move pad left</button><button id="pad-right" data-bank>Move pad right</button></div><p>Decay 0 plays the full one-shot. Choke group 0 allows overlap. Removing a pad leaves a silent hit so later assignments keep their key numbers.</p>`;
   $("drum-settings-host").append(pads);
   $("pad-setting-index").onchange = () => {
     pad = Number($("pad-setting-index").value);
@@ -236,7 +236,7 @@ export function editors(api) {
       await api.setPadName(pad, label);
       api.status("Pad settings updated locally");
     });
-  for (const direction of ["left", "right", "remove"])
+  for (const direction of ["left", "right", "remove", "copy"])
     $(`pad-${direction}`).onclick = () =>
       api.run(async () => {
         const b = api.bank(),
@@ -246,7 +246,11 @@ export function editors(api) {
           ),
           settings = padSettings(b);
         if (pad >= entries.length) throw Error("Pad is empty");
-        if (direction === "remove") {
+        if(direction === "copy") {
+          const target=Number($("pad-copy-target").value);
+          while(entries.length<=target)entries.push(new Int16Array(64));
+          entries[target]=encodedPad(b,pad);settings[target]={...settings[pad]};
+        } else if (direction === "remove") {
           entries[pad] = new Int16Array(64);
           settings[pad] = { pitch: 0, level: 127, decay: 0, choke: 0 };
         } else {

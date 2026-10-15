@@ -333,6 +333,27 @@ static void scr_shown(void)                            /* after the frame: the r
     scrn.idle = fm1_ms;
 }
 
+enum { LAYER_NONE, LAYER_FX, LAYER_GLO, LAYER_SCL, LAYER_EDIT, LAYER_SEQ, LAYER_REC, LAYER_N };
+
+static void (*pigeon_restore_tracks)(void);
+static int layer_supported(uint32_t layer)
+{
+    /* The retired FX macro, synth scale/chord, recording and engine maps are gone. */
+    return layer==LAYER_GLO || layer==LAYER_SEQ;
+}
+
+/* Restore the product UI before reading a page restored by old settings/layers. */
+static void pigeon_ui_guard(void)
+{
+#if FELUCCA_SAMPLER_ONLY
+    if (!ko_states[0].on) {ko_states[0].on=1;ko_palette_on=1;palette_set(settings.palette);ui.force=1;}
+    if (song.sel>=SAMPLER_PARTS) {song.sel=0;ui.force=1;}
+    if (!ui.home || ui.page>=NPAGES) {ui.home=1;ui.page=0;ui.plk_src=0;ui.entry_open=0;ui.force=1;}
+    if (ko.view>28) {ko.view=0;ui.force=1;}
+    if ((ui.layer && !layer_supported(ui.layer)) || (ui.lock && !layer_supported(ui.lock))) {ui.layer=ui.lock=ui.ly=0;ui.force=1;}
+#endif
+}
+
 static const page_t *page_over;   /* a quick layer's own four knobs (ui_layer.c), while it edits or draws them */
 static const page_t *cur_page(void) { return page_over ? page_over : &PAGES[ui.page]; }
 
@@ -379,7 +400,6 @@ static int32_t ink_w(const aafont_t *f, const char *s)
 }
 
 /* the quick layers (ui_layer.c): a button held, the keys and KNOB 1..4 are its shortcuts, its map over the page */
-enum { LAYER_NONE, LAYER_FX, LAYER_GLO, LAYER_SCL, LAYER_EDIT, LAYER_SEQ, LAYER_REC, LAYER_N };
 static void draw_layer(void);
 static const char *layer_head(void);
 static int layer_locked(void);
@@ -397,7 +417,7 @@ static int page_visible(uint32_t i)
         return ENGINES[TSEL->eng_req % NENGINES] == &ENG_ANALOG;
     if (PAGES[i].graph >= GR_FMOP && PAGES[i].graph <= GR_FMENV)
         return TSEL->eng_req % NENGINES == ENGI_FM6;
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (PAGES[i].graph == GR_SLICES)
         return ENGINES[TSEL->eng_req % NENGINES] == &ENG_SLICE;
 #else
@@ -657,8 +677,16 @@ static void note_name(char *b, uint32_t n)
  * to 1.4.1 the last); HOME: home_tap). From another
  * family the family's page shown last (SAVE: USER); one that is not the family's any more (a page that moved, as GLOBAL
  * and SYSTEM in 1.2), or not shown for this track, gives the family's first */
+static void go_home(void);
 static void open_family(uint32_t fam)
 {
+#if FELUCCA_SAMPLER_ONLY
+    pigeon_ui_guard();
+    ko.view=fam==FAM_ENV?3:fam==FAM_LFO?4:fam==FAM_FX?1:
+        fam==FAM_SCL || fam==FAM_SAVE?8:fam==FAM_EDIT?(song.sel==1?16:5):
+        fam==FAM_ARP?10:fam==FAM_SEQ?7:fam==FAM_GLO?23:0;
+    ui.page=0;go_home();
+#else
     if (!ui.home && cur_page()->fam == fam) {          /* same button again: next page */
         uint32_t n, i = ui.page;
         for (n = 0; n < NPAGES; n++) {
@@ -678,6 +706,7 @@ static void open_family(uint32_t fam)
     ui.fam_last[fam] = ui.page;
     ui.home = 0;
     page_entered();
+#endif
 }
 
 static void go_home(void)
@@ -697,7 +726,15 @@ static void go_home(void)
 static void home_tap(void)
 {
 #if FELUCCA_KO
-    if (ko.on) { ko.view = 0; go_home(); ui.force = 1; return; }
+    if (ko.on) {
+#if FELUCCA_SAMPLER_ONLY
+        if (ui.home && ko.view == 0) {
+            ui.menu = 1; ui.confirm = 0;
+            song.seq_mode = 0; ui.force = 1; return;
+        }
+#endif
+        ko.view = 0; go_home(); ui.force = 1; return;
+    }
 #endif
     uint32_t i = ui.page + 1u;
     if (ui.home) {
@@ -1666,7 +1703,7 @@ static int act_ready(void)
         return pat_last[s] != pat_pick() + 1u || steps_sig(TSEL) != pat_sig[s];
     if (cur_page()->graph == GR_USER)
         return c == 3u ? !song.playing : up_used(ui.uslot) && (c == 1u || !song.playing);
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (cur_page()->graph == GR_SLICES)
         return slice_act_ready(c);
 #endif

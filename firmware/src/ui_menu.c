@@ -160,6 +160,13 @@ static void menu_dots(void);
 /* the menu's header (0..24): its icon and title, the REC mark, the way back (the tabs: HOME CLOSE before the dots) */
 static void menu_head(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    cv_begin(240,H_HEAD,T_BG);
+    cv_text(8,5,&AF_S,ui.menu==3?"PIGEON / INFO":ui.menu==2?"PIGEON / CREDITS":"PIGEON / SETTINGS",T_THEME);
+    cv_text(172,5,&AF_S,ui.menu>=2?"OCT- BACK":"HOME EXIT",T_MID);
+    cv_rect(8,H_HEAD-1,224,1,T_MID);cv_blit(0,Y_HEAD);return;
+#endif
+
     cv_begin(240, H_HEAD, T_BG);
     GFX_HOOK_ALIGN(0, HEAD_MY + AF_M_CAP_Y, 0, HEAD_MY + AF_M_CAP_Y + AF_M_CAP_H, AL_V, "header icon on its title's line");
     cv_icon_mid(8, H_HEAD / 2, 16, ui.menu >= 2 ? ICON_X_INFO : ICON_X_COG, T_THEME, T_BG);   /* (as draw_head's) */
@@ -213,8 +220,11 @@ static const uint16_t MTAB_ICON[MTAB_COUNT] = {ICON_X_EYE, ICON_X_KNOB, ICON_X_S
 #define MR_LX 16                                       /* its label */
 #define MR_VR 224                                      /* its value's right edge */
 #define MK_Y 224                                       /* the key hints */
-static int menu_large(void) { return (ui_prefs & PREF_LARGE) != 0u; }
-static uint32_t menu_tab(void) { return MI_TAB[ui.menu_sel % MI_COUNT]; }
+static int menu_large(void) { return !FELUCCA_SAMPLER_ONLY && (ui_prefs & PREF_LARGE) != 0u; }
+static uint32_t menu_tab(void) {
+    if(!menu_visible(ui.menu_sel)) {ui.menu_sel=(uint8_t)mtab_first(MTAB_DISPLAY);ui.force=1;}
+    return MI_TAB[ui.menu_sel];
+}
 /* the shown tab's rows: 24 px (LARGE 28, a tab of up to 5 rows), 2 px apart (a tab of 6: 1 px, its panel then ends
  * 6 px above the key hints as the others do; the rule between two rows is that gap row; 1.2, a tab of 7: 21 px rows
  * 1 px apart, its panel then ends 4 px lower, LARGE too; 1.3, a tab of 8: 18 px rows 1 px apart, the same end) */
@@ -267,7 +277,7 @@ static void menu_tabs(void)                            /* (in screen rows: cv_oy
     for (k = 0; k < MTAB_COUNT; k++) {
         int on = k == (uint32_t)((mt.pos + MT_ONE / 2) / MT_ONE);   /* (half way, the shown look moves over) */
         uint16_t bg = on ? T_ACCENT : T_SURF;
-        cv_rrect(x[k], MT_Y, w[k], MT_H, -8, bg, T_BG);
+        cv_rrect(x[k], MT_Y, w[k], MT_H, FELUCCA_SAMPLER_ONLY?0:-8, bg, T_BG);
         GFX_HOOK_ALIGN(x[k], MT_Y, x[k] + MT_IW, MT_Y + MT_H, AL_HV, "menu tab icon centred in its cushion");
         cv_icon_in(x[k], MT_Y, MT_IW, MT_H, 16, MTAB_ICON[k], on ? T_INK : T_MID, bg);
         if (a[k] == MT_ONE) {                          /* (settled: its name) */
@@ -291,6 +301,11 @@ static void menu_dots(void)
 /* a two-valued row whose values are ON and OFF: a switch (a 26 x 14 cushion, its knob at the right when ON) */
 static void menu_switch(int32_t xr, int32_t y, int32_t h, int on, int sel)
 {
+#if FELUCCA_SAMPLER_ONLY
+    cv_text_r(xr,y+CAP_IN(M,h),&AF_M,on?"ON":"OFF",sel?T_INK:T_THEME,sel?T_THEME:T_SURF);
+    return;
+#endif
+
     int32_t x = xr - 26, ty = y + HALF_UP(h - 14);
     uint16_t under = sel ? T_THEME : T_SURF;
     uint16_t track = sel ? (on ? T_INK : ux_mix(T_THEME, T_INK, 35)) : on ? T_THEME : T_DIM;
@@ -306,7 +321,7 @@ static void menu_row(uint32_t k, uint32_t row)
     uint16_t bg = sel ? T_THEME : T_SURF, fg = sel ? T_INK : T_TEXT, val = sel ? T_INK : T_THEME;
     const char *v = menu_valued(row) ? menu_vname(row, menu_get(row)) : "";
     if (sel)
-        cv_rrect(MR_X, y, MR_W, h, 6, T_THEME, T_SURF);
+        cv_rrect(MR_X, y, MR_W, h, FELUCCA_SAMPLER_ONLY?0:6, T_THEME, T_SURF);
     else if (k && row - 1u != ui.menu_sel)             /* a rule from the row above (none beside the selected one) */
         cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
     GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row name centred up/down");
@@ -384,7 +399,7 @@ static void info_rows(void)                            /* (in screen rows: cv_oy
     char cpu[8];
     fmt_int(cpu, info.cpu);
     if (!ux.style)                                     /* FLAT: the rows' panel */
-        cv_rrect(4, INFO_Y, 232, (int32_t)INFO_N * (h + 2) - 2 + 2 * MP_PAD, 8, T_SURF, T_BG);
+        cv_rrect(4, INFO_Y, 232, (int32_t)INFO_N * (h + 2) - 2 + 2 * MP_PAD, FELUCCA_SAMPLER_ONLY?0:8, T_SURF, T_BG);
     for (k = 0; k < INFO_N; k++) {
         int32_t y = INFO_Y + MP_PAD + (int32_t)k * (h + 2), vy = y + CAP_IN(M, h);
         if (k)
@@ -480,10 +495,10 @@ static void draw_menu(void)
         if (!pass)
             menu_tabs();
         if (!ux.style)                                /* FLAT: the rows' panel */
-            cv_rrect(4, MP_Y, 232, mr_y(n) - mr_gap() + MP_PAD - MP_Y, 8, T_SURF, T_BG);
+            cv_rrect(4, MP_Y, 232, mr_y(n) - mr_gap() + MP_PAD - MP_Y, FELUCCA_SAMPLER_ONLY?0:8, T_SURF, T_BG);
         for (k = 0; k < n; k++)
             if (mr_y(k) + mr_h() > top_y && mr_y(k) - 1 < top_y + (int32_t)cv_h)
-                menu_row(k, first + k);
+                menu_row(k, mtab_at(menu_tab(), k));
         if (pass)
             cv_key_row(8, 232, MK_Y, KEYS[ui.menu_sel == MI_LCLEAR ? 2 : !menu_valued(ui.menu_sel)], 3, 7u, T_BG);
         cv_oy = 0;
@@ -511,20 +526,21 @@ static void menu_close(void)
  * (ui_input.c) */
 static void menu_move(int32_t s)                       /* PRESETS: the next / previous row of the tab */
 {
-    uint32_t t = menu_tab(), f = mtab_first(t), n = mtab_rows(t), k = (ui.menu_sel - f + (s > 0 ? 1u : n - 1u)) % n;
-    ui.menu_sel = (uint8_t)(f + k);
+    uint32_t t = menu_tab(), n = mtab_rows(t), k = (mtab_pos(t,ui.menu_sel) + (s > 0 ? 1u : n - 1u)) % n;
+    ui.menu_sel = (uint8_t)mtab_at(t,k);
     ui.menu_row[t] = (uint8_t)k;
 }
 static void menu_tab_go(int32_t s)                     /* ALGORITHM: the next / previous tab, at its last row */
 {
     uint32_t t = menu_tab(), k;
-    ui.menu_row[t] = (uint8_t)(ui.menu_sel - mtab_first(t));
+    ui.menu_row[t] = (uint8_t)mtab_pos(t,ui.menu_sel);
     t = (t + (s > 0 ? 1u : MTAB_COUNT - 1u)) % MTAB_COUNT;
     k = ui.menu_row[t] < mtab_rows(t) ? ui.menu_row[t] : 0u;
-    ui.menu_sel = (uint8_t)(mtab_first(t) + k);
+    ui.menu_sel = (uint8_t)mtab_at(t,k);
 }
 static void menu_input(uint32_t oct)                  /* oct: ui_input.c oct_taps */
 {
+    (void)menu_tab();
     int32_t s;
     uint32_t k, up = (oct >> 1) & 1u, dn = oct & 1u;
     if (ui.menu >= 2) {                                /* ABOUT: PRESETS scrolls (bounded); INFO, ABOUT: OCT- back to

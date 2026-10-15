@@ -363,3 +363,27 @@ body, body *, button, input, select, textarea { font-family: "Little Character",
 .support-row{max-width:1160px;margin:0 auto;padding:12px 0;text-align:right}.coffee-link{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid #526546;background:#1a2116;color:#b9ef77!important;text-decoration:none;font-size:13px;line-height:1.4;letter-spacing:.025em}.coffee-link:hover{border-color:#b9ef77;background:#283321}.coffee-link:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}
 
 .clip-builder{margin:12px 0}.clip-row{display:flex;flex-wrap:wrap;gap:8px;padding:10px 0;border-bottom:1px solid var(--line,#354531)}.clip-row p{flex-basis:100%;overflow-wrap:anywhere}.clip-row label{flex:1 1 110px}.clip-row input{max-width:100%;width:100%}
+
+.wave {height:180px;cursor:crosshair;touch-action:none}
+.wave:focus-visible{outline:2px solid var(--green,#b9ef77);outline-offset:3px}
+.edit-fields output {align-self:center;color:#a5af99;font-size:13px}
+
+.timeline-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.clip-row[draggable=true]{border:1px solid var(--line,#354531);padding:12px;margin:8px 0;background:#11150d;cursor:grab}.clip-row:active{cursor:grabbing}.clip-row input,.clip-row button{cursor:auto}.wave:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}
+
+.timeline-strip{display:flex;gap:6px;overflow:auto;max-width:100%;padding:8px 0}.timeline-strip button{flex:0 0 auto;min-width:100px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab}.timeline-strip button:active{cursor:grabbing}
+
+/* Workspace hierarchy: editing first, detailed settings on demand. */
+.toolbar{display:grid;grid-template-columns:minmax(0,2fr) auto minmax(0,1fr);gap:20px;align-items:start}
+.control-group{min-width:0}.control-group-label{display:block;font-size:10px;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;text-transform:uppercase}
+.control-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.control-row>label:not(.button){flex:1 1 90px;min-width:0}.control-row button,.control-row .button{padding:8px 10px}
+.timeline-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border-block:1px solid var(--line);padding:12px 0}
+.timeline-actions .control-row button{flex:1 1 auto}.playback-controls{display:flex;flex-wrap:wrap;gap:16px;align-items:start;margin:12px 0}.playback-controls>.control-group{flex:1 1 200px}.playback-controls output{white-space:nowrap}
+.workspace-drawer{border:1px solid var(--line);padding:12px 14px;margin:12px 0}.workspace-drawer>summary,.clip-builder>summary{cursor:pointer;color:var(--muted);font-size:12px}.workspace-drawer[open]>summary{margin-bottom:16px;color:var(--green)}.workspace-drawer .kit{margin-top:0}.workspace-drawer .device{min-width:0;grid-template-columns:1fr 1fr auto;align-items:end;margin:16px 0}.workspace-drawer .control-group+.control-group{margin-top:16px}
+.song .control-group:has(.add-audio){margin:14px 0}.commit-actions{justify-content:flex-end;border-top:1px solid var(--line);padding-top:12px}.commit-actions button{min-width:160px}.shortcut-note{font-size:11px}.workspace-nav{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0;margin:8px 0 20px;border-bottom:1px solid var(--line)}.workspace-nav a{color:var(--green);text-decoration:none;padding:8px 12px;border:1px solid var(--line);font-size:12px}.workspace-nav a:hover{background:#20251c}#songs,#chop-workspace,#drum-workspace,#pattern-workspace,#device-tools{scroll-margin-top:20px}
+footer .support-row{text-align:left;margin:0 0 20px;padding:0}.song .wave-help{font-size:11px}.clip-builder{padding:12px 0}.kit>.song-actions:has(#chop-apply){align-items:end;justify-content:space-between}
+@media(max-width:800px){.toolbar{grid-template-columns:1fr}.toolbar .control-group{border-bottom:1px solid var(--line);padding-bottom:12px}.toolbar .control-group:last-child{border-bottom:0;padding-bottom:0}.timeline-actions{grid-template-columns:1fr}.workspace-drawer .device{grid-template-columns:1fr}.playback-controls{gap:12px}}
+
+[hidden]{display:none!important}
+
+.timeline-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.timeline-actions>.control-group:first-child{grid-column:1/-1}.timeline-actions>.control-group:first-child button{flex:1 1 90px}footer>.support-row{grid-column:1/-1;display:block;width:auto;justify-self:start}footer .coffee-link{white-space:nowrap}.workspace-drawer>section{margin:0;border:0;padding:0}
+@media(max-width:600px){.timeline-actions{grid-template-columns:1fr}.timeline-actions>.control-group:first-child{grid-column:auto}}

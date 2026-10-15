@@ -42,5 +42,10 @@ int main(int argc,char **argv) {
     for(uint32_t i=0;i<16;i++){trk[0].step[i]=(step_t){.note={60+i%4},.n=(i%4==0 || i==6),.time=ST_NOTE,.vel=100};}
     ko.view=7;capture(argv[1],"sequencer");
     ko.view=27;ko_sync[0]=(ko_sync_t){.beats=4,.samples=44100,.on=1};capture(argv[1],"tempo-sync");
+    ko.view=0;song.sel=0;
+    trk[0].p[P_E7]=94;trk[0].p[P_DLY]=32;trk[0].p[P_CHOR]=18;trk[0].p[P_REV]=46;
+    trk[0].p[P_DIST]=24;trk[0].p[P_LEVEL]=100;song.g[G_DTIME]=11;song.g[G_DFDBK]=56;
+    ko.comp[0]=(ko_comp_t){18,4,12,18,3};
+    for(uint32_t view=1;view<=4;view++) {char name[24];snprintf(name,sizeof name,"fx-%u",view);ko.view=view;capture(argv[1],name);}
     return 0;
 }

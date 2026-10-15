@@ -41,7 +41,8 @@ for name,image in [('minute-mp3.kob',mp3),('minute-ima.kob',ima)]:
 assert sum(size for _,size in bank.EXTENTS)==bank.SIZE
 for base,size in bank.EXTENTS:
     assert not (base<0xA0000 and base+size>0x97000)
-    assert base>=0x78000 and base+size<=0xFC000
+    assert (base>=0x78000 and base+size<=0xFC000) or (base==0x60000 and base+size==0x76000)
+    assert not (base<0x78000 and base+size>0x76000), "boot marker sectors overlap the bank"
 second_song=out/'second-song.wav';wav(second_song,8*22050,freq=880)
 dual=bank.combine(mp3,bank.build(second_song,(),bitrate=32))
 (out/'dual.kob').write_bytes(dual)
@@ -78,7 +79,8 @@ for sanitize in (False,True):
     if sanitize:linkflags+=['-fsanitize=address,undefined','-fno-sanitize=shift,signed-integer-overflow,pointer-overflow',
                             '-fno-sanitize-recover=undefined']
     for test,args in [('ko_mp3_test',[str(out/'minute-mp3.kob')]),
-                      ('ko_storage_test',[str(out/'minute-mp3.kob'),str(out/'minute-ima.kob')]+([str(out/'dual.kob')] if os.environ.get('FELUCCA_KO_DUAL')=='1' else []))]:
+                      ('ko_storage_test',[str(out/'minute-mp3.kob'),str(out/'minute-ima.kob')]+([str(out/'dual.kob')] if os.environ.get('FELUCCA_KO_DUAL')=='1' else [])),
+                      *([('pigeon_expanded_bank_test',[])] if os.environ.get('FELUCCA_SAMPLER_ONLY')=='1' and os.environ.get('FELUCCA_KO_DUAL')=='1' else [])]:
         exe=host/test
         subprocess.run([os.environ.get('CC','cc'),*linkflags,f'tests/{test}.c',*objs,'-lm','-o',str(exe)],check=True,cwd=ROOT)
         subprocess.run([str(exe),*args],check=True,cwd=ROOT,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})

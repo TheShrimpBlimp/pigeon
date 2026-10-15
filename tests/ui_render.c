@@ -2035,27 +2035,16 @@ static void align_sweeps(void)
     if (nul) fclose(nul);
 }
 
-/* the keycaps' labels in their pills (tools/gen_aa_keycaps.py), from the data: the label's ink (nibbles 6..15) in the
- * pill (KC_H rows, its width) */
+/* Control labels are drawn from the regular font inside geometric boxes. */
 static void al_keycaps(void)
 {
-    uint32_t id;
-    cur_name = "keycap data";
-    for (id = 0; id < KC_COUNT; id++) {
-        const kc_t *k = &KC[id];
-        int32_t x, y, x0 = 999, y0 = 999, x1 = -1, y1 = -1, w = k->w;
-        uint32_t i = 0;
-        for (y = 0; y < KC_H; y++)
-            for (x = 0; x < w; x++, i++)
-                if (((KC_DATA[k->off + (i >> 1)] >> ((i & 1u) ? 0 : 4)) & 15u) >= 6u) {
-                    if (x < x0) x0 = x;
-                    if (y < y0) y0 = y;
-                    if (x + 1 > x1) x1 = x + 1;
-                    if (y + 1 > y1) y1 = y + 1;
-                }
-        al_record("keycap label in its pill", (x0 + x1) - w, (y0 + y1) - KC_H, k->label, 0, 0, w, KC_H, x0, y0, x1, y1);
-        if (al_rep) fprintf(al_rep, "keycap %-8s w %2d  ink x %2d..%2d y %d..%d  across %+.1f up/down %+.1f\n", k->label, w, x0, x1, y0, y1,
-                            ((x0 + x1) - w) / 2.0, ((y0 + y1) - KC_H) / 2.0);
+    cur_name="drawn control labels";
+    for(uint32_t id=0;id<KC_COUNT;id++) {
+        int32_t bounds[4];text_ink(&AF_S,KC[id].label,bounds);
+        int32_t w=kc_w(id),tx=4,ty=HALF_UP(KC_H-AF_S_CAP_H)-AF_S_CAP_Y;
+        al_record("control text in box",(tx+bounds[0]+tx+bounds[2])-w,
+                  (ty+bounds[1]+ty+bounds[3])-KC_H,KC[id].label,0,0,w,KC_H,
+                  tx+bounds[0],ty+bounds[1],tx+bounds[2],ty+bounds[3]);
     }
 }
 static void al_table(void)

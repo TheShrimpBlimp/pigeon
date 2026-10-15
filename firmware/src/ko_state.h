@@ -33,6 +33,9 @@ static uint32_t ko_id(void) { return FELUCCA_KO_DUAL && (ko_context<2 ? ko_conte
 static uint32_t ko_src(void) { return ko_id() ? 3u : 1u; }
 static ko_state_t *ko_track_state(const track_t *t) { return &ko_states[FELUCCA_KO_DUAL && t==trk+2]; }
 static void (*ko_load_hook)(void);
+/* Set only around a local end-audition trigger, never MIDI or sequencer notes. */
+static uint8_t ko_tail_preview;
+static volatile uint32_t ko_tail_button_mask;
 static int ko_song(const track_t *t)
 {
     return ko_states[0].on && (t == &trk[0] || (FELUCCA_KO_DUAL && t==trk+2)) && t->eng_req == 13u && t->p[P_E0] == (t==trk+2 ? 3 : 1) && t->p[P_E1] == 5;
@@ -62,7 +65,9 @@ static struct {
     uint8_t pending;
     uint32_t age[NVOICE], baseline[NVOICE];
 } ko_seq[SAMPLER_PARTS];
-static int ko_seq_on(const track_t *t) { return ko_states[0].on && t>=trk && t<trk+SAMPLER_PARTS && ko_seq[t-trk].enabled && (ko_song(t)||ko_kit(t)); }
+/* PIGEON always uses sampler sequencing. The optional upstream mode still
+ * requires SEQ to opt in; that transient UI flag is cleared on project restore. */
+static int ko_seq_on(const track_t *t) { return ko_states[0].on && t>=trk && t<trk+SAMPLER_PARTS && (FELUCCA_SAMPLER_ONLY || ko_seq[t-trk].enabled) && (ko_song(t)||ko_kit(t)); }
 static int ko_seq_end(const track_t *t) { return ko_seq_on(t) && ko_seq[t-trk].end_mode; }
 static volatile uint8_t ko_seq_firing;
 

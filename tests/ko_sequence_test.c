@@ -29,6 +29,11 @@ int main(void)
     song.rec=0;for(uint32_t p=0;p<SAMPLER_PARTS;p++)for(uint32_t i=0;i<NSTEP;i++)step_clear(&trk[p].step[i]);
     for(uint32_t i=0;i<2;i++){step_t *s=&trk[0].step[i];s->time=ST_NOTE;s->n=1;s->note[0]=60+i;s->vel=100;}
     trk[0].p[P_SDIV]=2;trk[0].p[P_SQNT]=1;ko_seq[0].end_mode=1;ko_select(0);ko_flag_turn(KO_LATCH,1);
+#if FELUCCA_SAMPLER_ONLY
+    /* A reboot/project restore clears this transient flag. No SEQ tap follows. */
+    ko_seq[0].enabled=0;
+    bad+=check("restored sample-end mode works before opening SEQ",ko_seq_end(&trk[0]));
+#endif
     clear_voices();seq_start();ko_end_tick(&trk[0],CTL);
     int one=0;for(uint32_t i=0;i<NVOICE;i++)if(trk[0].v[i].active)one|=!!(trk[0].v[i].s[4]&KO_V_NO_LOOP)&&!(trk[0].v[i].s[4]&KO_V_LATCH);
     bad+=check("sample-end playback overrides loop/latch without editing chop flags",one && (ko_table()->chop[0].rsv&KO_LATCH) && !(ko_table()->chop[0].rsv&KO_NO_LOOP));

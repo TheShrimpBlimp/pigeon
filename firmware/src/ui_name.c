@@ -83,6 +83,9 @@ static uint32_t nm_black(uint32_t k)                   /* black key k's function
 
 static void name_open(uint32_t kind, uint32_t slot)
 {
+#if FELUCCA_SAMPLER_ONLY
+    if(kind==NK_USER_SAVE || kind==NK_USER_RENAME) return;
+#endif
     char b[16];
     nm.kind = (uint8_t)kind;
     nm.slot = (uint8_t)slot;
@@ -343,7 +346,7 @@ static void nm_draw_field(void)
     char b[24];
     uint32_t i, empty = nm.len == 0u;
     cv_begin(240, CARD_H, T_BG);
-    cv_rrect(3, 0, 234, CARD_H, 4, T_SURF, T_BG);
+    cv_rrect(3, 0, 234, CARD_H, FELUCCA_SAMPLER_ONLY?0:4, T_SURF, T_BG);
     nm_title(b);
     cv_text_on(9, 2, &AF_S, b, T_MID, T_SURF);
     fmt_int(b, nm.len);
@@ -356,16 +359,16 @@ static void nm_draw_field(void)
         char c[2] = {empty ? nm.ph[i] : i < nm.len ? nm.s[i] : 0, 0};
         uint16_t bg = T_SURF, fg = empty ? T_DIM : T_TEXT;
         if (i == nm.cur && nm.key) {                   /* the letter being cycled */
-            cv_rrect(x, 18, 18, 22, 3, T_THEME, T_SURF);
+            cv_rrect(x, 18, 18, 22, FELUCCA_SAMPLER_ONLY?0:3, T_THEME, T_SURF);
             bg = T_THEME;
             fg = T_INK;
         } else if (i == nm.cur) {                      /* the cursor: a box */
-            cv_rrect(x, 18, 18, 22, 4, T_ACCENT, T_SURF);
-            cv_rrect(x + 2, 20, 14, 18, 2, T_SURF, T_ACCENT);
+            cv_rrect(x, 18, 18, 22, FELUCCA_SAMPLER_ONLY?0:4, T_ACCENT, T_SURF);
+            cv_rrect(x + 2, 20, 14, 18, FELUCCA_SAMPLER_ONLY?0:2, T_SURF, T_ACCENT);
         }
         if (!c[0] || (c[0] == ' ' && i >= nm.len)) {
             if (i != nm.cur)
-                cv_rrect(x + 4, 37, 10, 2, 1, T_RAISE, T_SURF);   /* an empty cell */
+                cv_rrect(x + 4, 37, 10, 2, FELUCCA_SAMPLER_ONLY?0:1, T_RAISE, T_SURF);   /* an empty cell */
         } else if (c[0] == ' ') {
             cv_rect(x + 8, 28, 2, 2, bg == T_THEME ? T_INK : T_DIM);   /* a space */
         } else {
@@ -374,7 +377,7 @@ static void nm_draw_field(void)
         }
     }
     if (nm.cur >= NM_LEN)                              /* full, the cursor past the end: a bar */
-        cv_rrect(NM_CX(NM_LEN) + 1, 18, 3, 22, 1, T_ACCENT, T_SURF);
+        cv_rrect(NM_CX(NM_LEN) + 1, 18, 3, 22, FELUCCA_SAMPLER_ONLY?0:1, T_ACCENT, T_SURF);
     cv_blit(0, Y_LABEL);
 }
 static void nm_draw_panel(void)
@@ -382,7 +385,7 @@ static void nm_draw_panel(void)
     static const char *const FN[5] = {"F#", "G#", "A#", "C#", "D#"};
     uint32_t i;
     cv_begin(240, H_GRAPH, T_BG);
-    cv_rrect(3, 0, 234, H_GRAPH, 5, T_SURF, T_BG);
+    cv_rrect(3, 0, 234, H_GRAPH, FELUCCA_SAMPLER_ONLY?0:5, T_SURF, T_BG);
     cv_bg = T_SURF;
     if (nm.key) {                                      /* the cycling key's characters: typed THEME, next ACCENT */
         const char *g = nm_group(nm.key - 1u);
@@ -392,7 +395,7 @@ static void nm_draw_panel(void)
             char c[2] = {g[i], 0};
             int typed = i == nm.tap, next = i == (nm.tap + 1u) % n;
             uint16_t f = typed ? T_THEME : T_RAISE;
-            cv_rrect(x, 4, 22, 22, 4, f, T_SURF);
+            cv_rrect(x, 4, 22, 22, FELUCCA_SAMPLER_ONLY?0:4, f, T_SURF);
             GFX_HOOK_ALIGN(x, 4, x + 22, 26, AL_HV, "name cycling letter in its cell");
             cv_text_in(x, 4 + CAP_IN(M, 22), 22, &AF_M, c, typed ? T_INK : next ? T_ACCENT : T_TEXT, f);
         }
@@ -407,7 +410,7 @@ static void nm_draw_panel(void)
         int act = nm.key == i + 1u;
         uint16_t f = act ? T_THEME : T_RAISE;
         const char *g = nm_group(i);
-        cv_rrect(x, y, 26, 20, 4, f, T_SURF);
+        cv_rrect(x, y, 26, 20, FELUCCA_SAMPLER_ONLY?0:4, f, T_SURF);
         GFX_HOOK_ALIGN(x, y, x + 26, y + 20, AL_HV, "name white key letters centred");
         cv_text_in(x, y + CAP_IN(S, 20), 26, &AF_S, g, act ? T_INK : T_TEXT, f);
     }
@@ -415,7 +418,7 @@ static void nm_draw_panel(void)
         int32_t x = 9 + 45 * (int32_t)i, y = 80;
         if (!i)
             GFX_HOOK_ALIGN(3, 0, 237, 0, AL_H | AL_CELLS | AL_N(5), "name keys' row in the panel");
-        cv_rrect(x, y, 42, 36, 4, T_KEY, T_SURF);
+        cv_rrect(x, y, 42, 36, FELUCCA_SAMPLER_ONLY?0:4, T_KEY, T_SURF);
         GFX_HOOK_ALIGN(0, y, 0, y + 36, AL_V | AL_N(2), "name black key name + use centred up/down");
         GFX_HOOK_ALIGN(x, 0, x + 42, 0, AL_H | AL_PASS, "name black key name / use centred across");
         cv_text_in(x, y + 2, 42, &AF_S, FN[i], T_INK, T_KEY);

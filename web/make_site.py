@@ -63,7 +63,7 @@ def main(pkg, version, out):
         strip_module((HERE / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
         strip_module((HERE / "fm1backup.js").read_text(encoding="utf-8"))
     name = f"pigeon-{re.sub(r'[^A-Za-z0-9.-]', '-', version)}.fwsc"
-    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "Beta candidate: hardware verification pending." if "beta" in version else "Development package: review validation notes before installing."})
+    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "Beta candidate: hardware verification pending." if "beta" in version else "PIGEON v0.3. Basic hardware installation verified; see release notes for remaining checks."})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
@@ -109,8 +109,10 @@ def main(pkg, version, out):
     for asset in ("site.css","nixie.css","nixie.js"):
         shutil.copy(HERE / "site" / asset,out / asset)
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
+    for asset in ("footer.css", "footer.js"):
+        shutil.copy(HERE / asset, out / asset)
     guide=out / "guide";guide.mkdir(exist_ok=True)
-    for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V05_RELEASE.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
+    for doc in ("KO_MODE.md","KO_LEGACY_REFERENCE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
     # Matching working source, excluding user audio, build artifacts, and hosting state.
     root=HERE.parent
     tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")

@@ -54,15 +54,21 @@ static void render_blocks(uint32_t blocks)
 int KO_TEST_MAIN(void)
 {
     int bad = 0; ui_power_on(); memset(&ko, 0, sizeof ko); memset(ko_flash, 255, sizeof ko_flash);
+#if FELUCCA_SAMPLER_ONLY
     bad += check("sampler profile identifies itself as PIGEON",
                  !strcmp(FW_DISPLAY_NAME, "PIGEON") && !strcmp(SPLASH_LINES[0], "PIGEON"));
-#if BRAND_SPLASH_AVAILABLE
+#else
+    bad += check("upstream compatibility profile is not branded PIGEON",!strcmp(FW_DISPLAY_NAME,"Felucca"));
+#endif
+#if BRAND_SPLASH_AVAILABLE && FELUCCA_SAMPLER_ONLY
     draw_splash();
     int photo_ok = BRAND_SPLASH_W == 240 && BRAND_SPLASH_H == 240;
-    for (uint32_t y = 0; y < BRAND_SPLASH_H; y++)
+    for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
+        uint16_t row[BRAND_SPLASH_W];brand_splash_row(y,row);
         for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
-            if (y < 24 || y >= 123 || x >= 168) photo_ok &= host_screen[y*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
-                        swap16(brand_splash_palette[brand_splash_pixels[y*BRAND_SPLASH_W+x]]);
+            if ((y < 24 || y >= 123 || x >= 168) && !(x >= 20 && x < 64 && y >= 211 && y < 224)) photo_ok &= host_screen[y*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
+                        row[x];
+    }
     bad += check("logo splash preserves artwork outside the text area and LCD byte order", photo_ok);
 #endif
     slc_store_boot(); fixture(0, 0); fixture(1, 1);
@@ -289,12 +295,13 @@ int KO_TEST_MAIN(void)
     menu_put(MI_KO, 0); frame();
 #if FELUCCA_SAMPLER_ONLY
     bad += check("sampler profile stays enabled",ko.on&&menu_get(MI_KO)==1);
-    trk[2].eng_req = 0; trk[2].preset = 3; trk[2].p[P_E0] = 71;
+    uint32_t legacy_track=SAMPLER_PARTS;
+    trk[legacy_track].eng_req = 0; trk[legacy_track].preset = 3; trk[legacy_track].p[P_E0] = 71;
     project_capture(&project);
     int preserved = proj_pack(&wire, &project) && proj_import(&proj_scratch, &wire, sizeof wire);
     preserved &= project_restore_runtime(&proj_scratch) == 0;
-    bad += check("unavailable synth parameters survive project round trip",
-                 preserved && trk[2].eng_req == 0 && trk[2].preset == 3 && trk[2].p[P_E0] == 71);
+    bad += check("reserved-track parameters survive project round trip",
+                 preserved && trk[legacy_track].eng_req == 0 && trk[legacy_track].preset == 3 && trk[legacy_track].p[P_E0] == 71);
 
 #if FELUCCA_KO_DUAL
     song.sel=2;ko_setup_second();

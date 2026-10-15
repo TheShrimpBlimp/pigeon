@@ -27,10 +27,27 @@ int main(void) {
     song.sel=2;ko_setup_second();render_blocks(32);song.sel=0;go_home();
     for(screen_track=0;screen_track<SAMPLER_PARTS;screen_track++) {
         song.sel=screen_track;
-        for(screen_view=0;screen_view<28;screen_view++) {
+        for(screen_view=0;screen_view<29;screen_view++) {
             ko.view=screen_view;ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;
         }
     }
+    for(screen_track=0;screen_track<SAMPLER_PARTS;screen_track++) {
+        song.sel=screen_track;song.g[G_DFDBK]=120;ko.comp[song.sel==1]=(ko_comp_t){48,8,100,50,12};
+        TSEL->p[P_DLY]=TSEL->p[P_CHOR]=TSEL->p[P_REV]=TSEL->p[P_DIST]=TSEL->p[P_LEVEL]=127;
+        for(uint32_t time=0;time<sizeof N_DTIME/sizeof N_DTIME[0];time++) {
+            song.g[G_DTIME]=(int16_t)time;
+            for(screen_view=1;screen_view<=4;screen_view++){ko.view=screen_view;ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;}
+        }
+    }
+    song.sel=0;ui.menu=ui.confirm=ui.layer=ui.lock=0;
+    for(uint32_t layer=1;layer<LAYER_N;layer++)if(layer_supported(layer)){
+        screen_view=100+layer;ui.layer=ui.lock=layer;ui.force=1;lint_active=1;ui_draw();lint_active=0;
+    }
+    ui.layer=ui.lock=0;
+    for(uint32_t row=0;row<MI_COUNT;row++)if(menu_visible(row)){
+        screen_view=200+row;ui.menu=1;ui.menu_sel=row;ui.force=1;lint_active=1;ui_draw();lint_active=0;
+    }
+    ui.menu=0;
     printf("PIGEON screen text: %u checks, %u clipping failures\n",text_checks,text_failures);
     return !text_checks || text_failures;
 }

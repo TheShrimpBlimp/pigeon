@@ -168,7 +168,10 @@ static uint32_t get(uint32_t id, uint32_t off, uint32_t count)
     return rep[1];
 }
 
-int main(void)
+#ifndef BACKUP_TEST_MAIN
+#define BACKUP_TEST_MAIN main
+#endif
+int BACKUP_TEST_MAIN(void)
 {
     int bad = 0;
     uint32_t len = 0, crc = 0, before;

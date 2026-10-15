@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Pure local bank preview. No MIDI access or upload occurs here. */
 (function(root) {
-  const SIZE=0x67000, HEAD=4096, HEADER=668;
+  const SIZE=0x7D000, HEAD=4096, HEADER=668;
   function crc(b) { let c=0xffffffff; for(const x of b) { c^=x; for(let i=0;i<8;i++) c=(c>>>1)^((c&1)?0xedb88320:0); } return (c^0xffffffff)>>>0; }
   function inspect(bytes) {
     const b=new Uint8Array(bytes), v=new DataView(b.buffer,b.byteOffset,b.byteLength);

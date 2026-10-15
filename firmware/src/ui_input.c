@@ -269,7 +269,7 @@ static uint32_t step_leds(void)
 static int keys_own(void)
 {
     return (name_on() && !ui.menu) || ui.layer || grid_on()
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
            || (!ui.menu && !name_on() && slice_page_on())
 #endif
         ;
@@ -371,7 +371,7 @@ static uint32_t key_leds(uint32_t *br)                 /* (*br: a layer's keys t
 #endif
     c = name_on() && !ui.menu ? name_leds() : ui.layer ? layer_leds(br) : grid_on() ? grid_leds() :
                  (fm1_in.notes & ~kb_layer) | play_leds() | step_leds() | (song_keys_on() ? song_leds() : 0u);
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (!ui.layer && !ui.menu && !name_on() && slice_page_on())
         c |= slice_leds();                              /* SLICES: and the keys of the selected slice */
 #endif
@@ -958,6 +958,9 @@ static void edit_param(uint32_t slot, int32_t steps)
     const page_t *pg = cur_page();
     const param_desc_t *d;
     int32_t v;
+#if FELUCCA_SAMPLER_ONLY
+    if (!page_over || slot>=4 || (pg->graph!=GR_SCALE && pg->graph!=GR_STEPS)) return;
+#else
     if (pg->graph == GR_EVENTS) {                         /* AUTOMATION (ui_events.c) */
         ev_knob(slot, steps);
         return;
@@ -1014,7 +1017,7 @@ static void edit_param(uint32_t slot, int32_t steps)
         }
         return;
     }
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (pg->graph == GR_SLICES && slot < 2u) {           /* SLICES: KNOB 1 the marker, 2 moves it (ui_slice.c) */
         if (slice_page_ok())                              /* (the engine changed before ui_draw left the page) */
             slice_knob(slot, steps);
@@ -1044,6 +1047,7 @@ static void edit_param(uint32_t slot, int32_t steps)
         mod_ui_slot = (uint8_t)clamp((int32_t)mod_ui_slot + (steps > 0 ? 1 : -1), 0, 3);
         return;
     }
+#endif
     d = page_desc(pg, slot, &vp);
     if (!d || !vp || d->max == d->min)
         return;
@@ -1089,7 +1093,7 @@ static void act_do(void)
             pat_load_ui(TSEL, pat_pick());
         return;
     }
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (cur_page()->graph == GR_SLICES) {                 /* SPLIT / JOIN: stays picked (split again, join again) */
         if (slice_page_ok())
             slice_act(c);
@@ -1257,6 +1261,7 @@ static void seq_entry(uint32_t pressed)
  *   HOME, PRESETS and every other page (EDIT, ENV, LFO, FX, SCL, ARP, MIXER, CLOCK, ...): the selected track's
  *     sound, one list over every engine, then the used user presets (preset_step). A sound load keeps the steps
  *     (SAVE held undoes it). Up to 1.0.3 it did that on HOME and PRESETS only */
+#if !FELUCCA_SAMPLER_ONLY
 static void presets_turn(int32_t s)
 {
     const page_t *pg = cur_page();
@@ -1283,6 +1288,8 @@ static void presets_turn(int32_t s)
         preset_step(s);
     }
 }
+
+#endif
 
 /* HOME / REC / SAVE: tap on release, hold 0.7 s fires once. t0 = press time | 1,
  * bit 1 = fired (or swallowed: then the release is no tap either) */
@@ -1314,9 +1321,6 @@ static void layer_show(void);
 static void layer_tap(uint32_t l);
 static void layer_keys(uint32_t keys);
 static void layer_knob(uint32_t k, int32_t s);
-static void fx_map_sync(void);
-static void fx_assign(int32_t s);
-static void fx_default(void);
 static int layer_play(void);
 static int layer_set_open(void);
 static uint32_t layer_oct(uint32_t pressed, uint32_t oct);
@@ -1333,7 +1337,7 @@ static int page_tap(uint32_t b)
 #if FELUCCA_KO
     if(ko_home() && b==B_SEQ) {
         if(!ko_ready()) {ui_message("SET UP SAMPLER FIRST");return 1;}
-        if(!ko_seq[song.sel].enabled && transport_busy()) {ui_message("STOP TO ENABLE SEQUENCER");return 1;}
+        if(!ko_seq_on(TSEL) && transport_busy()) {ui_message("STOP TO ENABLE SEQUENCER");return 1;}
         ko_seq[song.sel].enabled=1;
         ko.view=ko.view==7?0:7;go_home();ui.force=1;return 1;
     }
@@ -1341,6 +1345,7 @@ static int page_tap(uint32_t b)
     if(ko_home() && ko.view==23 && b==B_EDIT){ko_tap_tempo();return 1;}
     if(ko_home() && (ko.view==21 || ko.view==23) && b==B_ENV){ko.view=ko.view==23?21:23;ui.force=1;return 1;}
     if(ko_home() && (ko.view==14 || ko.view==24) && b==B_ENV){ko.view=ko.view==24?14:24;ui.force=1;return 1;}
+    if(ko_home() && song.sel!=1 && (ko.view==20 || ko.view==28) && b==B_ENV){ko.view=ko.view==28?20:28;ui.force=1;return 1;}
     if(ko_home() && song.sel!=1 && (ko.view==20 || ko.view==25) && b==B_FX){ko.view=ko.view==25?20:25;ui.force=1;return 1;}
     if(ko_home() && song.sel==1 && (ko.view==16 || ko.view==26) && b==B_LFO){ko.view=ko.view==26?16:26;ui.force=1;return 1;}
     if(ko_home() && song.sel!=1 && (ko.view==5 || ko.view==19 || ko.view==20) && (b==B_ENV || b==B_LFO)) {
@@ -1413,7 +1418,7 @@ static int page_tap(uint32_t b)
 }
 
 /* a track whose sound's sample is missing (engines.c snd_missing: an empty user slot, a built-in set this build lacks;
- * it plays a sine): the no-file icon and NO SAMPLE (ui.c MSG_NO_SAMPLE). Once per track and source: at power-on, a sound
+ * it stays silent): the no-file icon and NO SAMPLE (ui.c MSG_NO_SAMPLE). Once per track and source: at power-on, a sound
  * or project load, SRC / SET turned, a slot erased; again after another source or a project load. One a frame; after
  * a message already showing (LOADED) as the second message. Not on notes: nothing in the audio path */
 static void sample_notice(void)
@@ -1457,6 +1462,11 @@ static void ui_notices(void)
 
 static void ui_input(void)
 {
+    pigeon_ui_guard();
+#if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
+    ko_tail_button_mask = !ui.menu && !ui.confirm && !name_on() && !ui.uboot ?
+        1u << panel.btn[B_EDIT] : 0u;
+#endif
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
     uint32_t home, rec, save;
     uint32_t oct;
@@ -1467,7 +1477,7 @@ static void ui_input(void)
     midi_pc_poll();                                     /* MIDI Program Change (before fm6_poll: a bank voice) */
 #if FELUCCA_KO
     uint8_t ko_was_on = ko.on;
-    ko.on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
+    ko_states[0].on = FELUCCA_SAMPLER_ONLY || (ui_prefs2 & (PREF_KO >> 16)) != 0;
     if (ko_was_on != ko.on) {
         ko_palette_on = ko.on; palette_set(settings.palette);
         if (!ko.on) { trk_all_off(&trk[0]); ko_solo=-1; }
@@ -1484,7 +1494,6 @@ static void ui_input(void)
 #endif
 #endif
     perf_latch_on = fx_latch & 1u;                      /* (MENU > FX LATCH; a settings load sets it too) */
-    fx_map_sync();                                      /* (the FX layer's key map: ui_layer.c, a settings load too) */
     fx_usb_fixed = (ui_prefs & PREF_USB_FIXED) != 0u;   /* (MENU > USB LEVEL: fx.c, audio.c) */
     scope_mix = (ui_prefs2 & (PREF_SCOPE_MIX >> 16)) != 0u;   /* (MENU > SCOPE: fx.c, audio.c) */
     rp_apply();                                         /* (MENU > CLICK, CLICK LEVEL, COUNT-IN: click.c, seq.c) */
@@ -1502,7 +1511,12 @@ static void ui_input(void)
         pressed &= ~(1u << panel.btn[B_OCTUP]);
         ui_message("KEPT");
     }
+    #if FELUCCA_SAMPLER_ONLY
+    home = (pressed & (1u << panel.btn[B_HOME])) ? BT_TAP : BT_NONE;
+    ui.home_t0 = 0;
+#else
     home = btn_hold(&ui.home_t0, B_HOME, now, 1);
+#endif
     rec = btn_hold(&ui.rec_t0, B_REC, now, 0);          /* (a tap; held, the REC layer: ui_layer.c) */
     save = btn_hold(&ui.save_t0, B_SAVE, now, !ui.menu && !ui.confirm);   /* held: UNDO (ui.c undo_swap) */
     layer_lock_input(pressed);                          /* (#83: a button closes a locked layer) */
@@ -1542,12 +1556,6 @@ static void ui_input(void)
         for (k = 0; k < 4u; k++)                        /* KNOB 1..4: the layer's (ui_layer.c layer_knob) */
             if ((ks[k] = panel_enc(EN_K1 + k)) != 0)
                 combo = 1;
-        if ((s = panel_enc(EN_PRESET)) != 0 && ui.ly == LAYER_FX) {   /* (a stray turn would load another sound) */
-            fx_assign(s);                               /* FX: the white key held takes the next effect */
-            combo = 1;
-        }
-        if (ui.ly == LAYER_FX && ((pressed >> panel.btn[B_EDIT]) & 1u))
-            fx_default();                               /* .. EDIT: its default back */
         panel_enc(EN_ALGO);                             /* (another track: OCT- puts back the layer's track only) */
         if (glo && (sel = panel_enc(EN_SELECT)) != 0)   /* GLO + SELECT: the tempo, a combo (OCT- puts it back) */
             combo = 1;
@@ -1663,6 +1671,9 @@ static void ui_input(void)
         enc_drop();
         return;
     }
+#if FELUCCA_SAMPLER_ONLY
+    lytap = 0; /* Page navigation already happened on the press edge. */
+#endif
     if (lytap)                                          /* a layer's button acts on release (held: the layer; SEQ's */
         layer_tap(lytap);                               /* on every page since 1.2, its tap the SEQ pages) */
     if (home == BT_TAP)                                 /* HOME acts on release: a hold opens the menu */
@@ -1694,20 +1705,30 @@ static void ui_input(void)
                 /* PLAY after stopped step entry auditions the pattern; REC during
                  * running playback explicitly enables live recording again. */
                 if(ko_home() && ko_seq_on(TSEL)) {
-                    for(uint32_t p=0;p<SAMPLER_PARTS;p++) if(ko_seq[p].enabled) song.rec&=(uint8_t)~(1u<<p);
+                    for(uint32_t p=0;p<SAMPLER_PARTS;p++) if(ko_seq_on(&trk[p])) song.rec&=(uint8_t)~(1u<<p);
                     ui.force=1;
                 }
 #endif
                 transport_req = 1;
             }
             break;
+#if FELUCCA_SAMPLER_ONLY
         case B_SEQ:
-        case B_REC:                                     /* tap: above; held, its layer (ui_layer.c) */
-        case B_SAVE:
-        case B_FX:                                      /* the layers' buttons: ui_layer.c */
+        case B_FX:
         case B_GLO:
         case B_SCL:
         case B_EDIT:
+            page_tap(b);
+            break;
+#else
+        case B_SEQ:
+        case B_FX:
+        case B_GLO:
+        case B_SCL:
+        case B_EDIT:
+#endif
+        case B_REC:                                     /* tap: above; held, its layer (ui_layer.c) */
+        case B_SAVE:
         case B_HOME:
             break;
         case B_OCTDN:
@@ -1736,8 +1757,13 @@ static void ui_input(void)
             break;
         }
         default:                                        /* page buttons (GLO SCL ENV LFO EDIT ARP): when let go */
-            if (!lay)                                   /* (with FX held: swallowed) */
+            if (!lay) {
+#if FELUCCA_SAMPLER_ONLY
+                page_tap(b);
+#else
                 ui.pg_down |= (uint16_t)(1u << id);
+#endif
+            }
             break;
         }
     }
@@ -1771,7 +1797,7 @@ static void ui_input(void)
             }
     }
 #endif
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (notes && slice_page_on())                       /* SLICES: a key picks the slice it plays */
         slice_keys_pick(notes);
 #endif
@@ -1815,9 +1841,14 @@ static void ui_input(void)
             if(ko.view==14) {ko_seq[song.sel].cursor=(uint8_t)clamp((int32_t)ko_seq[song.sel].cursor+s,0,TSEL->p[P_SLEN]-1);ui.force=1;}
             else if(ko.view==8 || ko.view==9) ko_arrange_turn(0,s);
             else if (song.sel!=1) ko_select((uint32_t)clamp((int32_t)ko.selected + s, 0, KO_CHOPS - 1));
-        } else
+        }
+#endif
+#if !FELUCCA_SAMPLER_ONLY
+#if FELUCCA_KO
+        else
 #endif
         presets_turn(s);
+#endif
     }
     if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
         track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0,
@@ -1896,6 +1927,16 @@ static void ui_input(void)
 #define SETUP_GIVE_UP(t0) (fm1_ms - (t0) > SETUP_IDLE_MS || fm1_in.notes != 0u)
 static void setup_title(void)
 {
+#if FELUCCA_SAMPLER_ONLY
+    lcd_fill(0,0,240,240,T_BG);
+    draw_text_line(8,5,224,&AF_S,"PIGEON / CALIBRATION",T_THEME,T_BG,0);
+    lcd_fill(8,23,224,1,T_MID);
+    draw_text_line(8,180,224,&AF_S,"TEACH EACH BUTTON AND KNOB",T_MID,T_BG,0);
+    draw_text_line(8,205,224,&AF_S,"ANY PIANO KEY CANCELS",T_MID,T_BG,0);
+    draw_text_line(8,224,224,&AF_S,"30 SECONDS WITHOUT INPUT: EXIT",T_MID,T_BG,0);
+    return;
+#endif
+
     lcd_fill(0, 0, 240, 240, T_BG);
     {   /* the title with its icon (the menu row's), centred together; M from y 8 as before */
         const char *t = "HARDWARE CALIBRATION";
@@ -1914,6 +1955,14 @@ static void setup_title(void)
 }
 static void setup_show(const char *what, const char *name)     /* "PRESS" / "TURN RIGHT", the control */
 {
+#if FELUCCA_SAMPLER_ONLY
+    draw_text_line(8,49,224,&AF_S,what,T_MID,T_BG,0);
+    cv_begin(224,86,T_BG);
+    cv_rect(0,0,224,1,T_MID);cv_rect(0,85,224,1,T_MID);cv_rect(0,0,1,86,T_MID);cv_rect(223,0,1,86,T_MID);
+    cv_text(8,7,&AF_S,"CONTROL",T_MID);
+    cv_text(8,34,text_w(&AF_M,name)<=208?&AF_M:&AF_S,name,T_THEME);cv_blit(8,70);
+    return;
+#endif
     draw_text_box(0, 80, 240, &AF_S, what, T_MID, 1);
     draw_text_box(0, 100, 240, &AF_L, name, T_THEME, 1);
 }

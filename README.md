@@ -5,12 +5,12 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
+Created and directed by **The Shrimp Blimp**. Current release: **v0.3**, with **496 KiB** shared sample storage. The main release does not include the experimental screen reader. Basic installation and sample/chop preservation were verified on an FM1; extended hardware checks remain listed in the release notes.
 
 ## What it does
 
-- **Two independent song samples and a 16-pad drum kit**, sharing 408 KiB of
-  flash-backed sample storage. Songs use indexed mono MP3 or IMA ADPCM;
+- **Two independent song samples and a 16-pad drum kit**, sharing 496 KiB of
+  flash-backed sample storage in v0.3. Songs use indexed mono MP3 or IMA ADPCM;
   available duration depends on encoding quality and the other samples loaded.
 - **Up to 32 editable chops per song**, with transient detection, independent
   boundaries, pitch, attack/release, one-shot, hold, looping, and latch. All 27 keys play chops; a second
@@ -32,7 +32,8 @@ Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
 - A green display with **Little Character** typography, buffered updates,
   waveform zoom, and playback following.
 
-Eight audio voices are shared across the instrument. Synth engines are
+The v0.3 candidate gives both songs eight shared voices plus four dedicated drum
+voices. Sustained 8+4 playback still needs physical testing. Synth engines are
 unavailable in the PIGEON profile. Direct recording, resampling, and compressed
 reverse playback are outside the current release scope.
 
@@ -64,9 +65,13 @@ PYTHON=.venv/bin/python ./build-sampler.sh
 
 Outputs: `build/pigeon.fwsc` and `build/pigeon.bin`. Install this project's
 package with `tools/fm1_install.py`; upstream installers distribute upstream
-Felucca. Back up your instrument before installing or replacing sample banks.
+Felucca. Before installing from another custom firmware, back up, revert to
+official M-VAVE V15 using that firmware’s documented procedure, then install
+PIGEON. The local v0.3 candidate still needs physical verification.
 
-- [Controls and workflow](docs/KO_MODE.md)
+- [Start-to-finish tutorial](docs/KO_MODE.md)
+- [Quick control reference](docs/PIGEON_CONTROLS.md)
+- [v0.3 release status and pending checks](docs/PIGEON_V03_RELEASE.md)
 - [Sample storage and transfers](docs/KO_STORAGE.md)
 - [Sample library and complete archives](tools/pigeon_library.py)
 - [Contributing](CONTRIBUTING.md)
@@ -132,7 +137,7 @@ These independent checkouts are excluded from the firmware repository.
 
 The [browser emulator](https://theshrimpblimp.com/pigeon/webapp/emu/) starts
 empty. Load your own Song 1, Song 2 and drum samples; audio stays on your
-computer. Choose the real 408 KiB FM1 sample pool or unlimited browser storage.
+computer. Choose the real 496 KiB FM1 sample pool or unlimited browser storage.
 Connect a MIDI controller (including the FM1) to play its keys; use the on-screen
 knobs and buttons to edit. The emulator credits Charles Vestal’s FM1 X0X browser
 code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.

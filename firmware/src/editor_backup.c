@@ -41,15 +41,30 @@ static const uint8_t *ed_bk_object(uint32_t id, uint32_t *len)
         return (const uint8_t *)&proj_slot[id - 2u];
     }
     if (id == 6u || id == 7u) {
+#if FELUCCA_SAMPLER_ONLY && FELUCCA_FLASH
+        int n=flash_ok?st_load(OBJ_UPRESET0+id-6u,st_buf,sizeof st_buf):-1;
+        if(n==(int)sizeof(up_bank_t) && ((const up_bank_t *)st_buf)->magic==UP_BANK_MAGIC) *len=(uint32_t)n;
+        return st_buf;
+#else
         if (up_bank[id - 6u].magic == UP_BANK_MAGIC) *len = sizeof up_bank[0];
         return (const uint8_t *)&up_bank[id - 6u];
+#endif
     }
+#if FELUCCA_SAMPLER_ONLY && FELUCCA_FLASH
+    if(id==8u || id==9u) {
+        int n=flash_ok?st_load(id==8u?OBJ_FM6BANK:OBJ_UPFM6,st_buf,sizeof st_buf):-1;
+        if((id==8u && n==(int)sizeof(fm6_bank_t) && fm6_bank_valid((const fm6_bank_t *)st_buf)) ||
+           (id==9u && n==(int)sizeof(upf_t) && upf_valid((const upf_t *)st_buf))) *len=(uint32_t)n;
+        return st_buf;
+    }
+#else
     if (id == 8u)                                   /* the retired FM6 patch bank: always empty */
         return ED_BK_RAW;
     if (id == 9u) {                                 /* the user presets' FM6 patches */
         if (upf_valid(&upf)) *len = sizeof upf;
         return (const uint8_t *)&upf;
     }
+#endif
     if (id >= 32u && id < 32u + SMP_USER_SLOTS) {
         uint32_t k = id - 32u;
         const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
@@ -119,15 +134,30 @@ static uint32_t ed_bk_commit(void)
     } else if (ed_bk_id == 8u) {                    /* an older archive's FM6 bank: into the restored user presets */
         if (!ed_bk_len) return 0;
         if (ed_bk_len != sizeof(fm6_bank_t) || !fm6_bank_valid((const fm6_bank_t *)raw)) return 2;
+#if FELUCCA_SAMPLER_ONLY
+        obj=OBJ_FM6BANK; /* Preserve old bytes without activating/migrating a synth bank. */
+#else
         upf_migrate((const fm6_bank_t *)raw);
         sync_reload = 1; ui.force = 1;
         return upf_save() == 2 ? 4u : 0u;
+#endif
     } else if (ed_bk_id == 9u) {                    /* the user presets' FM6 patches (0: none) */
         const upf_t *u = (const upf_t *)raw;
         if (ed_bk_len && (ed_bk_len != sizeof *u || !upf_valid(u) || (u->used >> (UP_SLOTS - 1u) >> 1))) return 2;
+#if FELUCCA_SAMPLER_ONLY
+        if(!ed_bk_len) {
+#if FELUCCA_FLASH
+            int n=flash_ok?st_load(OBJ_FM6BANK,st_buf,sizeof st_buf):-1;
+            /* An older archive lists id 9 empty after restoring id 8. */
+            if(n==(int)sizeof(fm6_bank_t) && fm6_bank_valid((const fm6_bank_t *)st_buf)) return 0;
+#endif
+        }
+        obj=OBJ_UPFM6;
+#else
         if (ed_bk_len) memcpy(&upf, raw, sizeof upf); else upf_empty();
         sync_reload = 1; ui.force = 1;
         return upf_save() == 2 ? 4u : 0u;           /* (a failed write keeps the restored RAM copy) */
+#endif
     } else return 1;
 #if FELUCCA_FLASH
     if (!flash_ok || st_save(obj, raw, ed_bk_len)) return 4;
@@ -146,12 +176,15 @@ static uint32_t ed_bk_commit(void)
 #if FELUCCA_FLASH
         persist_saved = ed_bk_settings; persist_pending = 0;
 #endif
-    } else {
+    }
+#if !FELUCCA_SAMPLER_ONLY
+    else {
         uint32_t b = ed_bk_id - 6u;
         memset(&up_bank[b], 0, sizeof up_bank[b]);
         if (ed_bk_len) memcpy(&up_bank[b], raw, ed_bk_len);
         up_bank_check(b, (int)ed_bk_len); up_gen++;
     }
+#endif
     sync_reload = 1; ui.force = 1;
     return 0;
 }

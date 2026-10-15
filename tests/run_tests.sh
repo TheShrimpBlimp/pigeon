@@ -172,13 +172,19 @@ $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_test" tests/ko_test.c -lm
 run "KO: pads, independent chops, one shots, compression, metadata and unchanged project format" "$OUT/ko_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_sequence_test" tests/ko_sequence_test.c -lm
 run "KO: 16 steps, sample-end timing, recording LEDs and all-key chops" "$OUT/ko_sequence_test"
+$CC -w -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_sequence_boot_test" tests/ko_sequence_test.c -lm
+run "PIGEON: restored sample-end playback before opening SEQ" "$OUT/pigeon_sequence_boot_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_ui_test" tests/pigeon_ui_test.c -lm
 run "PIGEON: partial drawing, playback follow, step divisions and K1 response" "$OUT/pigeon_ui_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_arrange_test" tests/ko_arrange_test.c -lm
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_voice_budget_test" tests/ko_voice_budget_test.c -lm
 run "PIGEON: eight song plus four drum voices, track selection and SAVE" "$OUT/ko_voice_budget_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_ui_isolation_test" tests/pigeon_ui_isolation_test.c -lm
+run "PIGEON: legacy UI excluded, stale state repaired, panel navigation isolated" "$OUT/pigeon_ui_isolation_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_copy_test" tests/ko_copy_test.c -lm
-run "PIGEON: whole chop overwrite and undo without key renumbering" "$OUT/ko_copy_test"
+run "PIGEON: whole chop copy, swap, move and undo" "$OUT/ko_copy_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/browser_controller_test" tests/browser_controller_test.c -lm
+run "PIGEON: FM1 browser panel lease, snapshots, timeout and release" "$OUT/browser_controller_test"
 run "PIGEON: pattern copy/paste, next-bar launches, arrangement and mixer" "$OUT/ko_arrange_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_workflow_test" tests/pigeon_workflow_test.c -lm
 run "PIGEON: direct edit, pad settings, performance FX and arrangement tools" "$OUT/pigeon_workflow_test"
@@ -237,7 +243,9 @@ done
 $CC -DOWN_PKG=1 -o "$OUT/ota_test" tests/ota_test.c
 run "M-UPGRADE entry (own loader)" "$OUT/ota_test" build/felucca.fwsc
 
-head -c 200000 build/felucca.bin > "$OUT/old_app.bin"
+# A legacy-layout fixture must not contain the modern KOPOOL2 boot stub.
+# This deterministic synthetic body is never executed by the loader simulation.
+python3 -c 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_bytes(bytes(range(256))*781 + bytes(range(64)))' "$OUT/old_app.bin"
 python3 tools/fm1pkg_make.py "$OUT/old_app.bin" build/loader/ota.bin "$OUT/old.fwsc" >/dev/null
 $CC -o "$OUT/ldr_test" tests/ldr_test.c
 run "update loader: other app -> this build" "$OUT/ldr_test" "$OUT/old.fwsc" build/felucca.fwsc
@@ -444,6 +452,7 @@ run "installer CLI (fm1_install.py) against a simulated FM-1" python3 tests/inst
 if command -v node >/dev/null 2>&1; then
     run "web pages: editor protocol + samples, package builder, update protocol" node web/test_web.mjs
     run "web backup: capture, validation before writes, restore order" node web/test_backup.mjs
+    run "browser MIDI and FM1 panel permissions, routing and release" node web/emu/controller-test.mjs
 else
     echo "== skip web tests (no node)"
 fi

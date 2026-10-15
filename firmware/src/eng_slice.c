@@ -8,8 +8,7 @@
  * (a zone that shares its data with an earlier one is skipped), or PIANO (SRC 4, since 1.0.4: one
  * note, the SAMPLE engine's PIANO zone of middle C, played from its data in SMP_DATA: no copy).
  * A source with no material (an empty or invalid slot; PIANO in a build without the CC0 samples)
- * plays a plain sine at the key's pitch (+ PTCH) instead, through DCAY, TONE and the ADSR (MODE ONE
- * acts as GATE there: no slice end), and the UI says so (ui_input.c sample_notice).
+ * stays silent; the UI reports the missing source (ui_input.c sample_notice).
  *
  * Slices (DIV): 4 / 8 / 16 / 32 equal ones, AUTO: one per onset, or MAN: set by hand on the EDIT family's SLICES
  * page (ui_slice.c) for a user slot (BREAK and PIANO: MAN plays AUTO). IMA ADPCM can only be entered
@@ -37,8 +36,7 @@
  * over one block (0.7 ms).
  * Voice state: ph[0] position (reverse: position + 1), ph[1] fraction Q16, ph[2] slice end (reverse:
  * its start), s[0] predictor (reverse: window start), s[1] step index, s[2] / s[3] previous / current
- * sample, s[4] source | segment << 3 | reverse << 7 | slice << 8 | DIV << 16 (source SLC_SINE: the sine, its
- * phase in ph[0]), s[5] DECAY level Q15, s[6] 0 to prime, 1 playing, 3 fading out, 2 ended, s[7] low-pass. */
+ * sample, s[4] source | segment << 3 | reverse << 7 | slice << 8 | DIV << 16, s[5] DECAY level Q15, s[6] 0 to prime, 1 playing, 3 fading out, 2 ended, s[7] low-pass. */
 #define SLC_GRID 128u                /* grid points: decoder states at k * len / SLC_GRID */
 #define SLC_GRID_LOG2 7
 #define SLC_AUTO 32u                 /* AUTO slices at most */
@@ -70,7 +68,6 @@ ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
 static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"};
 #define SLC_SRC_PIANO 4u
 #define SLC_NSRC 5
-#define SLC_SINE 7u                  /* a voice's source when it has no material: the sine */
 static const char *const N_SLC_DIV[] = {"4", "8", "16", "32", "AUTO", "MAN"};
 static const char *const N_SLC_MODE[] = {"ONE", "GATE", "LOOP"};
 static const char *const N_SLC_REV[] = {"OFF", "ON"};
@@ -513,19 +510,31 @@ static void slice_note_on(track_t *t, voice_t *v)
     v->s[6] = 2;
     v->s[7] = 0;
     v->env_out = 0;                                     /* a new slice fades in over one block */
-    if (!s) {                                           /* no material: the sine (from phase 0: no click) */
-#if FELUCCA_KO
-        if (ko_song(t)) { v->active = 0; return; }
-#endif
-        v->s[4] = (int32_t)SLC_SINE;
-        v->s[6] = 1;
-        v->ph[0] = 0;
-        return;
-    }
+    if (!s) { v->active = 0; return; }
     j = slc_note_slice(p, v->note, slc_count(s, div));
     slc_bounds(s, div, j, &a, &b, &st);
     if (b <= a || (rev && !slc_rb(t, v)))
         return;
+#if FELUCCA_KO
+    if (ko_tail_preview && ko_song(t)) {
+        uint32_t tail = ((s->rate * 44100u + 32768u) >> 16) * 2u;
+        if (b - a > tail) {
+            uint32_t target = b - tail;
+#if FELUCCA_KO_STORAGE
+            if (ko_compressed(s)) { a = target; st = 0; }
+            else
+#endif
+            {
+                /* Use an exact ADPCM checkpoint: no long decode in the audio ISR. */
+                uint32_t k = 0;
+                while (k + 1u < SLC_GRID && slc_gpos(s, k) < target) k++;
+                if (slc_gpos(s, k) >= a && slc_gpos(s, k) < b) {
+                    a = slc_gpos(s, k); st = s->grid[k];
+                }
+            }
+        }
+    }
+#endif
     v->s[4] = (int32_t)(src | (st >> 24) << 3 | rev << 7 | j << 8 | div << 16);
 #if FELUCCA_KO
     if (ko_song(t)) {
@@ -539,6 +548,14 @@ static void slice_note_on(track_t *t, voice_t *v)
 
         v->s[4] |= (int32_t)(KO_VOICE | (uint32_t)(c->pitch + 24) << 24 |
             (c->rsv & (KO_NO_LOOP|KO_ONE) ? KO_V_NO_LOOP : 0u) | (c->rsv & KO_LATCH ? KO_V_LATCH : 0u));
+    }
+#endif
+#if FELUCCA_KO
+    if (ko_tail_preview && ko_song(t)) {
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2, vi=(uint32_t)(v-t->v);
+        v->s[4] = (v->s[4] & ~KO_V_LATCH) | KO_V_NO_LOOP;
+        ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_GATE)) | KO_ONE;
+        ko_env_gain[id][vi] = 32767; ko_env_attack[id][vi] = 32767;
     }
 #endif
     v->s[6] = 0;
@@ -646,8 +663,8 @@ static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
         ko_env_gain[id][vi]=(uint16_t)gain;adsr=mulq15(adsr,gain);
     }
 #endif
-    if (!ko_voice && p[P_E4] == SLC_ONE && v->stage == 3u && ((uint32_t)v->s[4] & 7u) != SLC_SINE)
-        v->stage = 2;                                   /* ONE: the slice plays to its end (the sine has none) */
+    if (!ko_voice && p[P_E4] == SLC_ONE && v->stage == 3u)
+        v->stage = 2;                                   /* ONE: the slice plays to its end */
     if (p[P_E6] < 127) {
         v->s[5] -= mulq16(v->s[5], ENV_EXP[p[P_E6] & 127]);
         if (v->s[5] < 8)
@@ -665,13 +682,9 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
 #if FELUCCA_KO
     if (pk & KO_VOICE) loop = !(pk & KO_V_NO_LOOP) && v->gate;
 #endif
-    const slc_src_t *s = v->s[6] == 2 || (pk & 7u) == SLC_SINE ? 0 : slc_get(pk & 7u);
+    const slc_src_t *s = v->s[6] == 2 ? 0 : slc_get(pk & 7u);
     int16_t *rb = slc_rb(t, v);
     slc_dec_t d;
-    if ((pk & 7u) == SLC_SINE && v->s[6] != 2) {        /* no material: the sine at the key's pitch + PTCH */
-        smp_sine(out, n, m, p[P_E3] * 16, lp, &v->ph[0], &v->s[7]);
-        return;
-    }
     if (!s) {                                           /* ended, or its slot was erased */
         v->active = 0;
         return;

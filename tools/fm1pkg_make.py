@@ -30,11 +30,12 @@ from pathlib import Path
 
 APP_SLOT = 0x8DFBC
 KO_APP_HI = 0x78000
+KO_EXTRA_LO, KO_EXTRA_HI = 0x60000, 0x76000
 KO_APP_SLOT = APP_SLOT - (0x93000 - KO_APP_HI)
 # PIGEON boot-stub layout, adapted from ChoralRoot FM-1 (GPL-3.0-only).
 STUB_LEN = 0xEE0
 STUB_SIG = b"CRSTUB"
-BODY_MAX = 0x71000  # body 0x5000..0x75fff; last whole slot sector is 0x76000
+BODY_MAX = KO_EXTRA_LO - 0x5000  # reserve the appended sample extent; marker stays at 0x76FE0
 MARK_OFF = 0x76FE0 - 0x4120
 MARK_MAGIC = 0x4D425243
 MARK_FORMAT = 1
@@ -228,6 +229,9 @@ def flash_image(app, key, ko_storage=False):
     if ko_storage:
         ents[-1] = entry(0xFFFF, 0xEA000, 0x12000, 0x92, 0x81, 0, "USR")
         ents.append(entry(0xFFFF, KO_APP_HI, 0x92000-KO_APP_HI, 0x92, 0x81, 1, "KOPOOL2"))
+        if has_stub(app):
+            ents[-1] = entry(0xFFFF, KO_APP_HI, 0x92000-KO_APP_HI, 0x92, 0x81, 0, "KOPOOL2")
+            ents.append(entry(0xFFFF, KO_EXTRA_LO, KO_EXTRA_HI-KO_EXTRA_LO, 0x92, 0x81, 1, "KOPOOL3"))
     area[32:32 + len(b"".join(ents))] = b"".join(ents)
     area[0:32] = entry(crc16(area[32:blk]), 0x02000120, blk, 0x83, 0xFF, 0, "app_area_head")
     # nested cfg directory right after the block: SDK default EQ table

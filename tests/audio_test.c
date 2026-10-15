@@ -28,6 +28,7 @@ static void uac_render_start(void) {}
 enum { FM1_ADC_BATT = 3, FM1_ADC_MASTER = 4 };
 static int32_t host_pot = 1023;                        /* the MASTER pot as the ADC reads it (-1: timeout) */
 static int32_t fm1_adc_read(uint32_t ch) { return ch == FM1_ADC_MASTER ? host_pot : 620; }
+static uint32_t panel_controller_master; /* panel.c raw ADC mirror; this audio-only harness has no panel UI */
 #include "../firmware/src/master.c"
 
 static int bad;

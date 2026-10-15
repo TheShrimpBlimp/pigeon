@@ -20,7 +20,7 @@ static int allowed(uint32_t off,uint32_t n)
 {
     return off <= sizeof bank_flash && n <= sizeof bank_flash-off &&
         ((off>=0xA0000 && off+n<=0xDC000) || (off>=KO_APP_HI && off+n<=KO_APP_DATA_HI) ||
-         (off>=KO_TOP_LO && off+n<=KO_TOP_HI));
+         (off>=KO_TOP_LO && off+n<=KO_TOP_HI) || (off>=KO_EXTRA_LO && off+n<=KO_EXTRA_HI));
 }
 static int st_read(uint32_t off,void *p,uint32_t n)
 { if (!allowed(off,n)) { bad_flash++; return -1; } memcpy(p,bank_flash+off,n); return 0; }
@@ -83,7 +83,10 @@ static void pump(uint32_t n)
     int32_t out[CTL*2];
     for (uint32_t i=0;i<n;i++) { for(uint32_t v=0;v<NVOICE*4u;v++) ko_pcm_poll();mix_block(out,CTL); }
 }
-int main(int argc,char **argv)
+#ifndef KO_STORAGE_TEST_MAIN
+#define KO_STORAGE_TEST_MAIN main
+#endif
+int KO_STORAGE_TEST_MAIN(int argc,char **argv)
 {
     if (argc!=(FELUCCA_KO_DUAL ? 4 : 3)) return 2;
     uint8_t *mp3,*ima;uint32_t nm,ni;int bad=0;
@@ -121,6 +124,15 @@ int main(int argc,char **argv)
     before=erases;uint8_t slot=0;
     bad+=check("legacy sample uploader cannot damage shared pool",request(11,&slot,1)==0&&ed_out[6]==6&&erases==before);
     ko.loaded=0;ko_prepare();
+    ko_table_t end_table={0};end_table.n=1;end_table.chop[0].b=slc_get(1)->len;
+    bad+=check("long compressed chop ready for end audition",ko_restore(&end_table));
+    ko_tail_preview=1;trk_note_on(trk,60,100);ko_tail_preview=0;
+    voice_t *end_voice=0;
+    for(uint32_t i=0;i<NVOICE;i++)if(trk[0].v[i].active)end_voice=&trk[0].v[i];
+    bad+=check("MP3 end audition seeks directly to final two seconds",end_voice&&end_voice->ph[0]==58u*22050u);
+    pump(100);
+    bad+=check("MP3 end audition decodes near end",end_voice&&end_voice->ph[0]>=58u*22050u&&end_voice->s[6]);
+    for(uint32_t i=0;i<NVOICE;i++)voice_kill(&trk[0].v[i]);
     ko_table_t table={0};table.n=16;
     for(uint32_t i=0;i<16;i++){table.chop[i].a=i*5000;table.chop[i].b=(i+1)*5000;}
     bad+=check("compressed chops accept editable sample bounds",ko_restore(&table));

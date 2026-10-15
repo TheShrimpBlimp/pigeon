@@ -155,6 +155,13 @@ static struct { uint32_t stage; } felucca_dbg;
 #include "../firmware/src/ui_menu.c"
 #include "../firmware/src/ui_input.c"
 #include "../firmware/src/ui_layer.c"
+/* Historical fixtures for the upstream layer tests. These are not firmware assets. */
+static const page_t LY_SCL = {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT,P_SCALE,P_CHRD,P_VOIC}};
+static const uint8_t RL_F[3] = {RP_CLICK,RP_COUNTIN,RP_LEVEL};
+static const char *rl_name(uint32_t r,uint32_t v) {return (r==0?CLICK_N:r==1?COUNTIN_N:CLKLVL_N)[v%3];}
+#define fx_keys (&favorites.factory[15][14])
+static const char *const PF_CELL[PF_NFX] = {"1/8","1/16","1/32","REV","LPF","HPF","STOP","FRZ","OCT+","OCT-","FLNG","PHSR","VERB","ECHO"};
+
 #include "../firmware/src/upreset.c"
 #include "../firmware/src/project.c"
 
@@ -3615,7 +3622,7 @@ static int test_edit_cycle(void)
     return bad;
 }
 
-/* a missing sample (an empty user slot; a set this build lacks): it plays a sine (eng_sample.c smp_sine) and the UI
+/* a missing sample (an empty user slot; a set this build lacks): it stays silent and the UI
  * says NO SAMPLE, led by the no-file icon (ui.c MSG_NO_SAMPLE), once per track and source (ui_input.c
  * sample_notice): when it is chosen, not on its notes; again for another source; after a project load (behind
  * LOADED); the icon and the words fit the header */
@@ -3657,7 +3664,7 @@ static int test_sample_alert(void)
     frame();
     bad += check("GRAIN on an empty USR2: said", msg_is(nf));
     frames(1500);
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     set_engine_of(TSEL, 13u);                        /* SLICE, SRC USR3 */
     TSEL->p[P_E0] = 3;
     frame();
@@ -3689,7 +3696,7 @@ static int test_sample_alert(void)
     return bad;
 }
 
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
 /* SLICES (EDIT family, a SLICE track: ui_slice.c; the MAN slices of eng_slice.c, ported from hugelton/Felucca#27 by
  * andreahaku): in the EDIT cycle after EDIT 2 on SLICE only; BREAK shows its slices, edits need a user slot; the first
  * edit takes the slices shown (8 equal) as MAN and sets DIV MAN; KNOB 1 the marker (then END), KNOB 2 moves it,
@@ -9625,7 +9632,7 @@ int UI_TEST_MAIN(void)
     bad += test_browse_no_pattern();
     bad += test_name();
     bad += test_edit_cycle();
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     bad += test_slices();
 #endif
     bad += test_sample_alert();

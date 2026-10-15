@@ -113,7 +113,13 @@ static int up_valid(const up_rec_t *r)
     return 1;
 }
 
-static int up_used(uint32_t k) { return k < UP_SLOTS && up_valid(up_rec(k)); }
+static int up_used(uint32_t k) {
+#if FELUCCA_SAMPLER_ONLY
+    (void)k;return 0;
+#else
+    return k < UP_SLOTS && up_valid(up_rec(k));
+#endif
+}
 
 static int up_grid(const up_rec_t *r) { return r->ver == 3u || r->ver == UP_VER_GRID; }
 static int16_t up_value(const up_rec_t *r, uint32_t k) { return r->ver >= 4u ? (int16_t)r->packed[k] - 64 : r->p[k]; }
@@ -177,11 +183,15 @@ static int up_name_ok(const uint8_t *s, uint32_t n)   /* 1..12 printable ASCII *
 
 static void up_name(uint32_t k, char *b)       /* upper case, 0-terminated: b holds 13 */
 {
+#if FELUCCA_SAMPLER_ONLY
+    (void)k;b[0]=0;
+#else
     const up_rec_t *r = up_rec(k);
     uint32_t i;
     for (i = 0; i < 12u && r->name[i]; i++)
         b[i] = r->name[i] >= 'a' && r->name[i] <= 'z' ? (char)(r->name[i] - 32) : r->name[i];
     b[i] = 0;
+#endif
 }
 
 static void up_pat_norm(uint8_t *note, uint8_t *flags)   /* tie: no note; rest: no flags */
@@ -391,7 +401,13 @@ static void up_set_name(up_rec_t *r, uint32_t k, const char *name)
         r->name[i] = name[i];
 }
 
-static uint32_t up_cat(uint32_t k) { return up_cat_of(up_rec(k % UP_SLOTS)); }   /* a used slot's category */
+static uint32_t up_cat(uint32_t k) {
+#if FELUCCA_SAMPLER_ONLY
+    (void)k;return 0;
+#else
+    return up_cat_of(up_rec(k % UP_SLOTS));
+#endif
+}   /* a used slot's category */
 static uint32_t track_cat(const track_t *t);     /* (ui.c: the category of the sound a track plays) */
 
 /* the selected part's sound -> slot k; name 0 or "": the automatic name (up_auto_name); cat its category (CAT_*), 0:
@@ -538,7 +554,13 @@ static void up_pat_load(track_t *t, uint32_t k)
 }
 
 /* the engine a used slot's sound plays on (a DIGITAL record: FM6, without FELUCCA_FM4) */
-static uint32_t up_engine(uint32_t k) { return eng_ok(up_rec(k)->engine) ? up_rec(k)->engine : ENGI_FM6; }
+static uint32_t up_engine(uint32_t k) {
+#if FELUCCA_SAMPLER_ONLY
+    (void)k;return 0;
+#else
+    return eng_ok(up_rec(k)->engine) ? up_rec(k)->engine : ENGI_FM6;
+#endif
+}
 
 static uint32_t up_count(void)                 /* used slots */
 {
@@ -569,6 +591,10 @@ static uint32_t up_rank(uint32_t slot)         /* used slots before it */
  * cat: its category (0: the sound's, a rename keeps it) */
 static void up_ui_named(uint32_t op, uint32_t k, const char *name, uint32_t cat)   /* 0 load, 1 erase, 2 save, 3 rename */
 {
+#if FELUCCA_SAMPLER_ONLY
+    (void)op;(void)k;(void)name;(void)cat;return;
+#else
+
     char l[4];
     int rc;
     up_slot_label(l, k);
@@ -595,6 +621,8 @@ static void up_ui_named(uint32_t op, uint32_t k, const char *name, uint32_t cat)
     else
         ui_say(op == 1u ? "ERASED " : op == 3u ? "RENAMED " : "SAVED ", l);
     ui.force = 1;
+
+#endif
 }
 static void up_ui(uint32_t op, uint32_t k) { up_ui_named(op, k, 0, 0); }
 #endif

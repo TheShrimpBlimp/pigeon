@@ -1041,6 +1041,9 @@ static int project_restore_runtime(const project_t *input)
         }
         pat_sig[k] = ~steps_sig(t);                     /* a project's steps are the user's */
     }
+#if FELUCCA_SAMPLER_ONLY
+    if(pigeon_restore_tracks)pigeon_restore_tracks();
+#endif
     undo_depth--;
     sync_reload = 1;
     ui.force = 1;
@@ -1103,7 +1106,9 @@ static void persist_boot(void)                    /* before settings_init / pane
             if (!proj_import(&proj_scratch, &proj_slot[i], sizeof(project_store_t)))
                 proj_fetch(i);
     }
+#if !FELUCCA_SAMPLER_ONLY
     up_boot();                                     /* user presets */
+#endif
 #endif
 }
 

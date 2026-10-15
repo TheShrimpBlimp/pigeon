@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {normalize,imaEncode,onsets,join,crc,component} from '../pigeon/bank.js';
-export const FM1_POOL=0x67000, HEAD=4096, HEADER=668;
+export const FM1_POOL=0x7D000, HEAD=4096, HEADER=668;
 export function buildBank(songs,pads=[],unlimited=false) {
   if(!songs[0])throw Error('Load Song 1 first.');
   if(pads.length>16)throw Error('Choose up to 16 drum samples.');
@@ -21,7 +21,7 @@ export function buildBank(songs,pads=[],unlimited=false) {
     if(!i&&songs[1]){const pad=new Uint8Array(-(HEAD+length)&255);chunks.push(pad);length+=pad.length;}
   }
   const used=HEAD+length;
-  if(!unlimited && used>FM1_POOL)throw Error(`These samples use ${(length/1024).toFixed(1)} KiB. The FM1 has 408 KiB shared by both songs and all 16 pads. Lower song quality, shorten the audio or select unlimited mode.`);
+  if(!unlimited && used>FM1_POOL)throw Error(`These samples use ${(length/1024).toFixed(1)} KiB. The FM1 has 496 KiB shared by both songs and all 16 pads. Lower song quality, shorten the audio or select unlimited mode.`);
   const image=new Uint8Array(used);image.fill(255,0,HEAD);const payload=join(chunks);image.set(payload,HEAD);const checksum=crc(payload),v=new DataView(image.buffer);
   headers.forEach(({h,starts,name},i)=>{
     const off=i*HEADER;image.fill(0,off,off+HEADER);h[2]=used;h[3]=checksum;h.forEach((n,j)=>v.setUint32(off+j*4,n,true));starts.forEach((n,j)=>v.setUint32(off+80+j*4,n,true));

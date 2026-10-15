@@ -147,25 +147,6 @@ static void smp_user_scan(uint32_t k)
     slc_user_scan(k, 1);
 }
 
-/* A missing sample (SAMPLE, GRAIN, SLICE: an empty or invalid user slot, a set this build has no data for) plays
- * this instead, like a hardware sampler with its sample gone: a plain sine at the note's pitch (+ d16, 1/16
- * semitones), at half the peak of a full sample, through the engine's one-pole low-pass (lp Q15, state *y) and the
- * voice's amp (the ADSR: no click at the start, phase 0, or the end). *ph its phase. The UI says so once
- * (engines.c snd_missing, ui_input.c sample_notice). */
-static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int32_t lp, uint32_t *ph, int32_t *y)
-{
-#ifdef FELUCCA_WEB
-    return; /* Empty browser slots stay silent until the user imports audio. */
-#endif
-    uint32_t i, p = *ph, inc = pitch_inc((uint32_t)clamp(m->pitch16 + d16, 0, 2047));
-    int32_t s = *y;
-    for (i = 0; i < n; i++, p += inc) {
-        s += mulq15((sine_i(p) >> 1) - s, lp);
-        out[i] += voice_amp(s, m, i) << 1;
-    }
-    *ph = p;
-    *y = s;
-}
 /* SET / SRC si (0..SMP_NALL - 1) has no sample data: an empty or invalid user slot, a built-in set without data */
 static int smp_set_missing(uint32_t si)
 {
@@ -247,9 +228,9 @@ static void sample_note_on(track_t *t, voice_t *v)
     v->s[6] = zi == 0xFFFFu;     /* 1 = sample ended (one-shot); a kit key with no sound stays silent */
     v->s[7] = 0;                 /* lo-pass state */
     if (smp_set_missing(si))
-        v->s[6] = 2;             /* 2 = no sample data: the sine (smp_sine; ph[0] its phase) */
+        v->s[6] = 1;             /* no sample data: silent, ended */
 #if FELUCCA_KO
-    if (ko_kit(t)) {                                /* unloaded pads are silent, never a fallback sine */
+    if (ko_kit(t)) {                                /* unloaded pads are silent */
         if (zi == 0xFFFFu || smp_set_missing(si))
             v->s[6] = 1;
         v->gate = 0;                               /* sequencer gate length does not truncate a hit */
@@ -295,10 +276,6 @@ static void sample_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, cons
 #if FELUCCA_KO
     if (ko_kit(t)) loop = 0;
 #endif
-    if (v->s[6] == 2) {                               /* no sample data: the sine at the note's pitch + TUNE */
-        smp_sine(out, n, m, p[P_E1] * 16, lp, &v->ph[0], &v->s[7]);
-        return;
-    }
     if (v->s[6] || !z->n) {
         v->active = 0;
         return;

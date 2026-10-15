@@ -185,6 +185,18 @@ static int ko_copy_full(uint32_t source)
     ko_table_t *d=ko_edit();d->chop[ko.selected]=d->chop[source];
     ko_publish(1);ko_select(ko.selected);return 1;
 }
+/* Rearrange assignments, retaining decoder seek state and every chop. */
+static int ko_reassign(uint32_t target, int move)
+{
+    uint32_t source=ko.selected,n=ko_table()->n;
+    if(source>=n || target>=n)return 0;
+    if(source==target)return 1;
+    ko_table_t *d=ko_edit();ko_chop_t saved=d->chop[source];
+    if(!move)d->chop[source]=d->chop[target];
+    else if(source<target)for(uint32_t i=source;i<target;i++)d->chop[i]=d->chop[i+1];
+    else for(uint32_t i=source;i>target;i--)d->chop[i]=d->chop[i-1];
+    d->chop[target]=saved;ko_publish(1);ko_select(target);return 1;
+}
 static int ko_copy_settings(uint32_t source)
 {
     if(source>=ko_table()->n || !ko_table()->n)return 0;

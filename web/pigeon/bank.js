@@ -67,7 +67,7 @@ export function repack(original, replacement = null, slot = 1, kit = null) {
   const used = HEAD + length;
   if (used > SIZE)
     throw Error(
-      `Samples need ${(length / 1024).toFixed(1)} KiB; capacity is 408 KiB. Shorten audio or lower song bitrate.`,
+      `Samples need ${(length / 1024).toFixed(1)} KiB; capacity is 496 KiB. Shorten audio or lower song bitrate.`,
     );
   const payload = join(chunks),
     image = new Uint8Array(used + original.length - f.used);
@@ -248,7 +248,7 @@ export function makeSong(samples, encoded, name = "UNTITLED") {
     wave[i * 2 + 1] = (hi >> 9) & 255;
   }
   const used = HEAD + data.length + wave.length;
-  if (used > SIZE) throw Error("Song exceeds the 408 KiB sample pool");
+  if (used > SIZE) throw Error("Song exceeds the 496 KiB sample pool");
   const payload = join([data, wave]),
     image = new Uint8Array(used);
   image.fill(255, 0, HEAD);

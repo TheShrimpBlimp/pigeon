@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {assemble} from './audio-assembly.js';
+import {RATE,deleteRange,sliceTimeline,splitTimeline,pasteTimeline,moveClip,timelineLength} from './timeline.js';
+const pcm=Float32Array.from({length:1000},(_,i)=>i/1000),clip={pcm,start:0,end:1000/RATE,gainDb:0,fadeMs:0,name:'A',filename:'a.wav'};
+const render=clips=>assemble(clips).pcm;
+assert.deepEqual(render(deleteRange([clip],200,700)),new Float32Array([...pcm.slice(0,200),...pcm.slice(700)]));
+assert.deepEqual(render(splitTimeline([clip],400)),pcm);
+const two=splitTimeline([clip],400);
+assert.deepEqual(render(moveClip(two,0,1)),new Float32Array([...pcm.slice(400),...pcm.slice(0,400)]));
+assert.deepEqual(render(deleteRange(two,200,700)),render(deleteRange([clip],200,700)));
+assert.deepEqual(render(pasteTimeline([clip],500,sliceTimeline([clip],100,200))),new Float32Array([...pcm.slice(0,500),...pcm.slice(100,200),...pcm.slice(500)]));
+assert.equal(timelineLength(deleteRange([clip],0,1000)),0);
+assert.equal(two[0].pcm,pcm);assert.equal(two[1].pcm,pcm);
+for(let at=65;at<935;at+=7)assert.deepEqual(render(splitTimeline([clip],at)),pcm,'split must retain exact samples at '+at);
+assert.equal(clip.start,0);assert.equal(clip.end,1000/RATE);
+console.log('Timeline: exact delete, keep, split, reorder, paste, cross-clip edits and shared PCM passed.');

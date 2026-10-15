@@ -17,6 +17,7 @@ static int32_t graph_ht = 100;
 /* Matches voice.c: attack is linear, decay and release are exponential
  * (env += (target - env) * k each tick, ~99 % after the set time). Time
  * axis is the parameter value (the times themselves are exponential). */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_adsr(const track_t *t, uint16_t c)
 {
     const page_t *pg = cur_page();
@@ -49,7 +50,9 @@ static void graph_adsr(const track_t *t, uint16_t c)
     }
 #undef EGY
 }
+#endif
 
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_lfo(const track_t *t, uint16_t c)
 {
     int32_t x, cy = graph_ht / 2, a = 38 * graph_ht / 100, py = cy, uni = t->p[P_LPOL] != 0;
@@ -66,6 +69,7 @@ static void graph_lfo(const track_t *t, uint16_t c)
         py = y;
     }
 }
+#endif
 
 /* step bar x of step i of a 16-step row: 4 groups, as the footer (9 px bars, 13 px apart, 4 px between groups),
  * the row centred: x 12 .. 228 */
@@ -192,6 +196,7 @@ static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_
             pr_split(x, y + 1, w, PR_RH - 2, c, hits);
     }
 }
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_roll(const track_t *t, uint16_t c)
 {
     uint32_t i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, ncol, mask = scale_mask(t), held = pr_held();
@@ -256,11 +261,13 @@ static void graph_roll(const track_t *t, uint16_t c)
         }
     }
 }
+#endif
 /* SEQ > STEP on a DRUM track: the grid, 8 lanes x the 16 steps of the page shown. Lanes by their two-letter
  * names (BD SD CP CH OH TM RS CB; CG CL CY on the other kits). A hit is a rounded square (accented: the
  * accent; a RATCH step's: its 2..4 parts as bars), an empty step a dot (brighter on the beats and on the selected lane); the selected lane is
  * underlaid RAISE, the cursor framed in TEXT; a TEXT bar over the step playing. 1.4.1: a muted lane (the EDIT layer's
  * black keys, eng_drum.c drum_mute): its name DIM, the MUTE icon after it, its hits DIM */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_grid(const track_t *t, uint16_t c)
 {
     uint32_t l, i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, mute = drum_mute[trk_index(t) % NPART];
@@ -303,6 +310,7 @@ static void graph_grid(const track_t *t, uint16_t c)
     if (song.playing && t->seq_idx < len && t->seq_idx / 16u == ui.bank)
         cv_rect(40 + (int32_t)(t->seq_idx % 16u) * 12, y0 - 1, 10, 3, T_TEXT);
 }
+#endif
 /* SEQ > DETAIL (1.5.1, Discussion #199): the cursor's 16 steps as four lanes, the knobs' order top to bottom, each
  * named on the left (the lane of the knob just turned in the accent): CHANCE a bar as high as the chance, RATCH the
  * step's bar in its 2..4 parts (as the roll draws a ratchet), NUDGE a tick left / right of the step's middle, VEL a bar
@@ -311,6 +319,7 @@ static void graph_grid(const track_t *t, uint16_t c)
  * ratchet, a VEL under ACC). A step that plays nothing: a dot (a value left on it DIM); past LEN nothing. The cursor
  * framed through the lanes, the step playing a line */
 #define SD_X0 36                                    /* the first step column (12 px each) */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_detail(const track_t *t, uint16_t c)
 {
     static const char *const NAME[4] = {"CHN", "RAT", "NDG", "VEL"};
@@ -362,8 +371,10 @@ static void graph_detail(const track_t *t, uint16_t c)
         }
     }
 }
+#endif
 /* SCL: the 12 keys as rounded bars (black keys high, white keys low): in the scale THEME, the root the
  * accent, out of the scale RAISE */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_scale(const track_t *t, uint16_t c)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
@@ -375,11 +386,13 @@ static void graph_scale(const track_t *t, uint16_t c)
         cv_rrect(x + 3, BLACK[i] ? 6 : 38, 10, 52, 3, col, T_SURF);
     }
 }
+#endif
 /* CHORD (SCL 2): the chord's name ("Cm7": the last one the track played; before any, the one on its ROOT from
  * C4) over the keys from the C below its lowest note (two octaves, three for a wide one): its notes THEME, its
  * root's ACCENT, the others RAISE. OFF or a kit: what to do instead */
 static void panel_note(const char *a, const char *b, const char *c);
 static void panel_alert(uint32_t id, const char *a);
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_chord(const track_t *t, uint16_t c)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
@@ -426,7 +439,9 @@ static void graph_chord(const track_t *t, uint16_t c)
                  !on ? T_RAISE : note % 12u == (uint32_t)r % 12u ? T_ACCENT : c, T_SURF);
     }
 }
+#endif
 /* the four sends as faders under their cards: a RAISE slot, the THEME fill from the bottom, a cap */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_fx(const track_t *t, uint16_t c)
 {
     uint32_t i;
@@ -438,10 +453,12 @@ static void graph_fx(const track_t *t, uint16_t c)
         cv_rrect(x - 4, 85 - h, 12, 6, 3, c, T_SURF);
     }
 }
+#endif
 /* INSERT pages (1.5, fx.c track_insert): the drives and CRUSH as their curve, input (-1.5 .. +1.5 of a voice's full
  * scale) across, output up, dry and wet blended by MIX (fx.c ins_shape: the same shape; the dry diagonal RAISE); the
  * swept ones as two cycles of their sweep, as deep as DEPTH (FLANG the squared triangle, CHOR a sine, PHASR a
  * triangle). OFF: the dry diagonal, dim */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_insert(const track_t *t, uint16_t c)
 {
     int32_t x, cy = graph_ht / 2, a = 38 * graph_ht / 100, py = cy, ty = clamp(t->p[P_ITYPE], 0, IT_N - 1);
@@ -470,8 +487,10 @@ static void graph_insert(const track_t *t, uint16_t c)
         py = y;
     }
 }
+#endif
 /* SLICER page: the pattern's 16 steps, a 'x' step a full bar; a '.' step: GATE a bar as high as it stays
  * open (DEPTH), STUT hatched (it repeats the last 'x'); the step playing underlined. Grey when OFF. */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_slicer(const track_t *t, uint16_t c)
 {
     uint32_t i, pat = sl_pattern(t), mode = (uint32_t)t->p[P_SLCR], cur = sl[t - trk].idx;
@@ -493,9 +512,11 @@ static void graph_slicer(const track_t *t, uint16_t c)
             cv_rect(x, 84, 9, 2, T_ACCENT);
     }
 }
+#endif
 /* MOD page: the four slots as rows "1 LFO > CUT +50%" (M, a list's rows: the source to x 78, the arrow 84..98, the
  * destination of up to 5 characters 106..160, the amount from 172), the one KNOB 2..4 edit selected, slots that do
  * nothing (SRC, DST or AMT at 0) dim */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_mod(const track_t *t, uint16_t c)
 {
     uint32_t k;
@@ -524,6 +545,7 @@ static void graph_mod(const track_t *t, uint16_t c)
         cv_text_on(x, y + CAP_IN(M, 17) + AF_M.asc - AF_S.asc, &AF_S, unit, sel ? T_INK : T_DIM, bg);   /* (a unit: S) */
     }
 }
+#endif
 
 static uint32_t steps_hash(const track_t *t)
 {
@@ -605,6 +627,7 @@ static void sample_wave_tick(const track_t *t)
     sample_wave.ready = sample_wave.pos == z->n;
 }
 
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_sample(uint16_t c)
 {
     uint32_t i;
@@ -620,11 +643,13 @@ static void graph_sample(uint16_t c)
         cv_line(left, 4, left, 90, T_MID); cv_line(right, 4, right, 90, T_MID);
     }
 }
+#endif
 
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
 /* SLICES (ui_slice.c): the waveform from the marker before the selected one to the one after it (the selected
  * slice tinted, its marker the accent, outside the slices DIM), under it the whole material with every marker and
  * the view; then the selected slice's length and the source */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_slices(void)
 {
     uint32_t a, b, len, n = slice_count(), j = slice_sel(), i, src, div, ma, mb;
@@ -675,9 +700,11 @@ static void graph_slices(void)
     cv_text_r(228, 104, &AF_M, N_SLC_SRC[src], src && src != SLC_SRC_PIANO ? T_THEME : T_DIM, T_SURF);
 }
 #endif
+#endif
 
 /* WHEEL: the nine drawbars as rounded bars over RAISE slots (the bars of the knob just turned: the accent),
  * their footages under them */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_wheel(const track_t *t, uint16_t c)
 {
     uint32_t k;
@@ -694,6 +721,7 @@ static void graph_wheel(const track_t *t, uint16_t c)
         cv_text_in(x + 3, 82, 12, &AF_S, names[k], T_MID, T_SURF);   /* under the bar, by its ink */
     }
 }
+#endif
 /* The FM charts' parts: an operator box 21 x 17 (rows 23 px apart, columns 24), junction dots, Manhattan routes */
 #define FM_BH 17
 static void fm_dot(int32_t x, int32_t y, uint16_t c) { cv_rect(x - 1, y - 1, 3, 3, c); }
@@ -783,6 +811,7 @@ static uint32_t fm6_alg_of(const track_t *t)
  * Routes THEME, the feedback loop MID (DIM at feedback 0), the output bus MID. The knob just turned in ACCENT:
  * ALG and PTCH the label, FB the loop, MLVL the routes, MRAT MEG VMOD the modulators, DTUN the carriers.
  * sel < 6 (the OPERATOR pages, ui_fm6op.c): that operator's box ACCENT with an INK numeral, its frequency top right */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_fm6(const track_t *t, uint16_t c, uint32_t sel)
 {
     uint32_t alg = fm6_alg_of(t), k, j, car = fm6_car_ops(alg), top = 0, hi = 0, fbop = fm6_fb_op(alg), hotset = 0;
@@ -853,11 +882,13 @@ static void graph_fm6(const track_t *t, uint16_t c, uint32_t sel)
     }
     FM6_CHART_HOOK(FMH_END, alg, 0);
 }
+#endif
 
 /* OP ENV (ui_fm6op.c): the picked operator's envelope as the patch has it: from L4 to L1 at R1, L2 at R2, L3 at R3, held
  * there while the key is down (a RAISE mark where it is let go), back to L4 at R4. A stage's width grows as its rate
  * falls (4..48 px: 99 is a step, 0 the longest), the levels 0..99 linearly (dB). The curve THEME, the stage KNOB 3 / 4
  * edit (STAGE) ACCENT with a dot at its target; "OP3" top left, the stage's rate and level top right */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_fm6env(const track_t *t, uint16_t c)
 {
     static const char *const STG[4] = {"ATK", "DEC", "SUS", "REL"};
@@ -893,6 +924,7 @@ static void graph_fm6env(const track_t *t, uint16_t c)
     fmt_int(b + str_len(b), op[FP_L1 + sg]);
     cv_text_r(228, 4 - GOY, &AF_S, b, T_TEXT, T_SURF);
 }
+#endif
 
 #if FELUCCA_FM4
 /* DIGITAL's eight algorithms as FM charts, read from src/eng_digital.c's switch (alg) (ui_test.c checks
@@ -907,6 +939,7 @@ static const uint16_t FM_MOD[8] = {0x0842, 0x00C2, 0x004A, 0x0806, 0x0802, 0x088
  * Carriers THEME with INK numerals, modulators RAISE with THEME ones; an operator at LEVEL 0: DIM numeral.
  * Routes by IDX: DIM at 0, MID, THEME from 64; op 4's feedback loop MID (DIM at FB 0). The knob just turned
  * (an operator's ratio or level, IDX, FB): ACCENT. Junction dots where routes split or merge. */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_fm(const track_t *t, uint16_t c)
 {
     uint32_t alg = (uint32_t)t->p[P_E0] & 7u, k, j, mods = FM_MOD[alg], car = 0, hop = 9;
@@ -949,6 +982,7 @@ static void graph_fm(const track_t *t, uint16_t c)
         cv_text_in(x[k] - 10, y[k] + CAP_IN(S, FM_BH), 21, &AF_S, b, fill_c ? T_INK : on ? f : T_DIM, fill);
     }
 }
+#endif
 #endif
 /* Save-bank validity is expensive (CRC/import). Refresh it once per redraw or
  * twice per second, rather than parsing four projects on every UI frame. */
@@ -1161,6 +1195,7 @@ static void page_title(char *ti)
     }
 }
 /* the strip's title: L centred (M when L lacks a glyph or is too wide) */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_title(void)
 {
     char ti[20];
@@ -1173,6 +1208,7 @@ static void graph_title(void)
     GFX_HOOK_ALIGN(0, 0, 240, LG_H_GRAPH, AL_HV, "large strip title centred");
     cv_text_in(0, y, 240, f, ti, T_THEME, T_SURF);
 }
+#endif
 
 static uint32_t graph_signature(void)
 {
@@ -1221,7 +1257,7 @@ static uint32_t graph_signature(void)
     if (pg->graph == GR_EVENTS)                      /* AUTOMATION: the rows, the one selected, + ADD's place, PLAY,
                                                       * QUANTIZE */
         h = (h ^ ev_sig()) * 16777619u;
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
     if (pg->graph == GR_SLICES && slice_page_ok()) h ^= slice_sig();
 #endif
     if (pg->scope == SC_ENGINE && (ENGINES[t->eng_req % NENGINES] == &ENG_WHEEL || t->eng_req % NENGINES == ENGI_FM6 ||
@@ -1328,6 +1364,7 @@ static void panel_alert(uint32_t id, const char *a)
 
 /* preset browser: the global list (every engine), the current one selected; tag DIM, name TEXT,
  * favourites starred (the accent), the selected row's suggested pattern at its right */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_browse(void)
 {
     uint32_t total, cur = preset_pos(&total), e, k;
@@ -1374,6 +1411,7 @@ static void graph_browse(void)
         }
     }
 }
+#endif
 /* the EDIT layer (ui_layer.c): the sound loaded, as the browser's selected row: "03" (its place in KNOB 2's list,
  * the engine's sounds) or "U07", the name, the star of a favourite */
 static void engine_sound_row(int32_t y)
@@ -1399,6 +1437,7 @@ static void engine_sound_row(int32_t y)
     (void)total;
 }
 /* user preset slots around the selected one: "U07  NAME" / EMPTY */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_user(void)
 {
     int32_t row, first = clamp((int32_t)ui.uslot - 3, 0, UP_SLOTS - 7);
@@ -1414,7 +1453,9 @@ static void graph_user(void)
         list_row(LIST_Y(row), k == ui.uslot, tag, T_MID, nm, used ? T_TEXT : T_DIM, 232);
     }
 }
+#endif
 /* SAVE > PHRASES: the pattern list around the one picked ("03  MELODY", "U07  MY BASS") */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_pats(void)
 {
     uint32_t n = pat_count(), cur = pat_pick();
@@ -1426,6 +1467,7 @@ static void graph_pats(void)
         list_row(LIST_Y(row), k == cur, tag, T_MID, nm, T_TEXT, 232);
     }
 }
+#endif
 /* the AUTOMATION rows' columns (M): the kind at 14 (LOCK AUTO STEP PLAY, to x 54), the step / PLAY's ON at EV_SX, the
  * name / QUANTIZE's ON at EV_NX (QUANTIZE ends at x 86), the value right at 226 */
 #define EV_SX 60
@@ -1445,6 +1487,7 @@ static int32_t ev_value(int32_t y, const char *v, const char *unit, uint16_t fg,
  * QUANTIZE (ON / OFF and the steps nudged), then a row each: the kind (LOCK in the accent, AUTO; STEP: a step's CHANCE,
  * RATCH, NUDGE or VEL, a NUDGE or VEL that does not play DIM), the step, the name, the value at the right; the last row
  * + ADD (LOCK, CHANCE, RATCH, NUDGE or VEL: what OCT+ adds) */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_events(void)
 {
     const track_t *t = TSEL;
@@ -1546,7 +1589,9 @@ static void graph_events(void)
         }
     }
 }
+#endif
 /* project slots: the name (none: USED) / EMPTY, the selected one filled */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_slots(void)
 {
     uint32_t i;
@@ -1560,6 +1605,7 @@ static void graph_slots(void)
         list_row(y, sel, b, T_MID, !used ? "--" : n[0] ? n : "USED", used ? T_TEXT : T_DIM, 232);
     }
 }
+#endif
 /* MIXER page: four SURF columns, one under each card: the track number on its cushion (in the accent:
  * the selected track) with a REC / ARM / MUTE badge (P_MUTE, KNOB 1), the sound's short name (a MUTE badge
  * when armed and muted), the LEVEL knob (dB inside) with the output meter beside it, then the PAN and REV
@@ -1675,6 +1721,7 @@ static void track_strip(uint32_t c, uint32_t sel, uint32_t st, uint32_t mute, ui
         cv_rrect(5, TSS_MY, m < 3 ? 3 : m, 3, 1, T_MID, T_RAISE);
     cv_blit((uint32_t)CARD_X(c), LG_Y_GRAPH);
 }
+#if !FELUCCA_SAMPLER_ONLY
 static void draw_tracks(void)
 {
     uint32_t c, sk = strip_kind() == SK_TRK;
@@ -1762,6 +1809,7 @@ static void draw_tracks(void)
         cv_blit((uint32_t)CARD_X(c), Y_GRAPH);
     }
 }
+#endif
 /* HOME > TRACKS (1.3, Discussions #112 / #134: MENU > DISPLAY > HOME TRACKS): the four tracks as rows in the panel, one
  * under the other (29 px, 2 apart), in place of the scope; the cards above stay HOME's four (the selected track's). A row:
  * the track's cushion at the left; on its first line the engine's icon and the sound's name (MENU > LARGE: the name in M,
@@ -1880,6 +1928,7 @@ static void home_track_row(uint32_t c)
     tr_meter(TR_MX, TR_MY, c, cs, sel ? T_INK : T_MID, bg);
     cv_blit(3, (uint32_t)y);
 }
+#if !FELUCCA_SAMPLER_ONLY
 static void draw_home_tracks(void)
 {
     uint32_t c;
@@ -1900,8 +1949,10 @@ static void draw_home_tracks(void)
     for (c = 0; c < UI_TRACK_COUNT; c++)
         home_track_row(c);
 }
+#endif
 /* oscilloscope of the output, triggered on a rising zero crossing: a RAISE centre line, the trace 2 px (in silence
  * a flat line on it; MENU > SCREEN OFF keeps it from staying on the panel for hours) */
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_scope(uint16_t c)
 {
     static int16_t snap[SCOPE_N] __attribute__((section(".pool")));
@@ -1927,6 +1978,7 @@ static void graph_scope(uint16_t c)
         py = y;
     }
 }
+#endif
 
 /* SONG is a playing order of the four stored project patterns. Letters match
  * PROJECT A..D; loading a project still restores its sound, SONG borrows steps. */
@@ -2096,6 +2148,7 @@ static void sg_block(const song_lay_t *L, int32_t off, uint32_t k, uint32_t i, u
     }
     sg_picture(L, off, k, i, j, s, x0, x1, &F, skip);
 }
+#if !FELUCCA_SAMPLER_ONLY
 static void graph_song(void)
 {
     song_lay_t L;
@@ -2217,6 +2270,8 @@ static void graph_song(void)
                      i < 4u ? "[K3] ADD SECTION" : "[SAVE] PROJECT A-D", T_MID, T_SURF, x0 - 10 - SG_X0);
     }
 }
+#endif
+#if !FELUCCA_SAMPLER_ONLY
 static void draw_graph(void)
 {
     const page_t *pg = cur_page();
@@ -2317,7 +2372,7 @@ static void draw_graph(void)
             cv_oy = 0;
             panel_note("TURN TO PICK", "[OCT+] CONFIRM", 0);
             break;
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FELUCCA_SAMPLER_ONLY
         case GR_SLICES:
             cv_oy = 0;
             graph_slices();
@@ -2345,3 +2400,4 @@ static void draw_graph(void)
     cv_oy = 0;
     cv_blit(0, graph_y());
 }
+#endif

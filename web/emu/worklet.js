@@ -8,7 +8,7 @@
 // The flash the page keeps: storage.c's areas (projects, user presets and their FM6 patches, the user sample
 // slots 0x97000..0xDFFFF; the autosave 0xE5000..0xE6FFF (1.2) and FM6's voice bank 0xE7000 (1.4.1); the settings and
 // the second FM6 copy 0xFC000..0xFFFFF), only the sectors that hold something (an erased sector is all 0xFF). {offset: bytes}
-export const STORE_AREAS = [[0x78000, 0x92000], [0x97000, 0xE0000], [0xE5000, 0xE8000], [0xEA000, 0x100000]];
+export const STORE_AREAS = [[0x60000, 0x76000], [0x78000, 0x92000], [0x97000, 0xE0000], [0xE5000, 0xE8000], [0xEA000, 0x100000]];
 export function storeSectors(nor) {
   const out = {};
   for (const [a, b] of STORE_AREAS)
@@ -50,6 +50,8 @@ if (typeof registerProcessor === "function") {
       const bytes=new Uint8Array(image),ptr=ex.web_upload_buffer(bytes.length);
       if(!ptr)throw Error('The browser has no more sample memory available.');
       new Uint8Array(ex.memory.buffer,ptr,bytes.length).set(bytes);
+      const used=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(8,true);
+      if(!unlimited && used>0x67000)throw Error('This bank exceeds the 408 KiB sample limit.');
       if(ex.web_load_bank(bytes.length,unlimited?1:0,restore?1:0))throw Error('The sample bank could not be loaded.');
       this.sentDraws=-1;
     }

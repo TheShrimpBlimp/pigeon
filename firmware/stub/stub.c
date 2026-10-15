@@ -199,7 +199,7 @@ static void shw_blink(uint32_t n, uint32_t ms)
  * plain). Interrupts are off already and stay off (no cli / sti here) */
 static void shw_plain_window(void)
 {
-    uint32_t a = SHW_XIP(0x93000u) & ~31u, e = SHW_XIP(0x93000u) + (0x100000u - 0x93000u);
+    uint32_t a = SHW_XIP(0x60000u) & ~31u, e = SHW_XIP(0x93000u) + (0x100000u - 0x93000u);
     SHW_SFCENC_CON &= (uint8_t)~2u;
     SHW_SFCENC_UNENC_L = SHW_XIP(0x93000u);
     SHW_SFCENC_UNENC_H = 0x07FFFFFFu;
@@ -291,6 +291,7 @@ void stub_main(void)
     shw_rail(1);                                     /* first: the key window's first 30 ms are its time to come up */
     shw_input_init();
     key = stub_key();
+    shw_plain_window(); /* Reset the runtime sample window before reading encrypted marker/body. */
     v.mark = (const uint8_t *)SHW_XIP(STUB_MARK_OFF);
     v.body = (const uint32_t *)SHW_XIP(STUB_BODY_OFF);
     v.ldr = (const uint8_t *)SHW_XIP(STUB_LDR_OFF);

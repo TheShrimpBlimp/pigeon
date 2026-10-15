@@ -61,6 +61,7 @@ export class Device {
   constructor(request, progress = () => {}) {
     this.request = request;
     this.progress = progress;
+    this.capacity = SIZE;
   }
   async ask(cmd, args = [], timeout = 5000) {
     try { return await this.request([cmd, args], { timeout }); }
@@ -72,10 +73,12 @@ export class Device {
       a.length !== 10 ||
       a[0] !== 75 ||
       ![2, 3].includes(a[1]) ||
-      !same(a.slice(2, 8), [...u21(SIZE), ...u21(HEAD)]) ||
+      ![0x67000,0x7D000].includes(a[2] | (a[3]<<7) | (a[4]<<14)) ||
+      !same(a.slice(5, 8), u21(HEAD)) ||
       a[9] !== 3
     )
       throw Error("Connected firmware does not support PIGEON sample banks");
+    this.capacity=a[2] | (a[3]<<7) | (a[4]<<14);
     return a;
   }
   async ok(cmd, args = [], timeout) {
@@ -95,7 +98,7 @@ export class Device {
     const header = await read(0, 256),
       v = new DataView(header.buffer),
       used = v.getUint32(8, true);
-    if (v.getUint32(0, true) !== 0x32424f4b || used < HEAD || used > SIZE)
+    if (v.getUint32(0, true) !== 0x32424f4b || used < HEAD || used > this.capacity)
       throw Error("Device has no valid PIGEON bank");
     const chunks = [];
     for (let off = 0; off < used; off += 256) {
@@ -103,7 +106,7 @@ export class Device {
       this.progress("Reading samples", off + chunks.at(-1).length, used + 4096);
     }
     for (let off = 0; off < 4096; off += 256) {
-      chunks.push(await read(SIZE + off, 256));
+      chunks.push(await read(this.capacity + off, 256));
       this.progress("Reading chop settings", used + off + 256, used + 4096);
     }
     const image = join(chunks);
@@ -115,6 +118,8 @@ export class Device {
       cap = await this.negotiate();
     if (info.version === 3 && cap[1] !== 3)
       throw Error("Firmware does not support two songs");
+    if(info.used>this.capacity)
+      throw Error(`Connected firmware supports ${(this.capacity-HEAD)/1024} KiB of samples. Update the firmware or reduce this bank before uploading.`);
     await this.ok(91, u21(info.used));
     for (let off = HEAD; off < info.used; off += 256) {
       await this.ok(92, [

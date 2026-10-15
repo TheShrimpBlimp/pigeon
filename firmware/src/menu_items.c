@@ -75,10 +75,31 @@ static const uint8_t MI_TAB[MI_COUNT] = {
 #define TUNE_MIN (-50)
 #define TUNE_N 101u
 typedef char mtab_fits_ui[sizeof ui.menu_row >= MTAB_COUNT ? 1 : -1];   /* (ui.c: the row last picked per tab) */
-static uint32_t mtab_first(uint32_t t)                 /* a tab's first row */
+static int menu_visible(uint32_t row)
+{
+#if FELUCCA_SAMPLER_ONLY
+    if (row==MI_KO || row==MI_SERIAL || row==MI_HOME || row==MI_SCOPE ||
+        row==MI_COLOR || row==MI_STYLE || row==MI_LARGE || row==MI_ACCEL || row==MI_LATCH || row==MI_SCLLED || row==MI_PREVIEW || row==MI_CHADD || row==MI_HELP) return 0;
+#endif
+    return row<MI_COUNT;
+}
+static uint32_t mtab_at(uint32_t t,uint32_t pos)
+{
+    for(uint32_t i=0;i<MI_COUNT;i++) if(MI_TAB[i]==t && menu_visible(i)) {
+        if(!pos--) return i;
+    }
+    return MI_ANIM;
+}
+static uint32_t mtab_pos(uint32_t t,uint32_t row)
+{
+    uint32_t pos=0;
+    for(uint32_t i=0;i<row && i<MI_COUNT;i++) pos+=MI_TAB[i]==t && menu_visible(i);
+    return pos;
+}
+static uint32_t mtab_first(uint32_t t)                 /* a tab's first visible row */
 {
     uint32_t i = 0;
-    while (i < MI_COUNT && MI_TAB[i] != t)
+    while (i < MI_COUNT && (MI_TAB[i] != t || !menu_visible(i)))
         i++;
     return i;
 }
@@ -86,7 +107,7 @@ static uint32_t mtab_rows(uint32_t t)                  /* .. and how many it has
 {
     uint32_t i, n = 0;
     for (i = 0; i < MI_COUNT; i++)
-        n += MI_TAB[i] == t;
+        n += MI_TAB[i] == t && menu_visible(i);
     return n;
 }
 /* STYLE (ui_style, gfx.c ST_*): FLAT the filled cards; LINE black areas divided by 1 px rules (#50, #57: the 0.9 look)
@@ -231,7 +252,7 @@ static const char *menu_vname(uint32_t row, uint32_t v)
 static void menu_put(uint32_t row, uint32_t v)
 {
 #if FELUCCA_SAMPLER_ONLY
-    if (row==MI_KO) return;
+    if (!menu_visible(row)) return;
 #endif
     const menu_flag_t *f = menu_flag(row);
     if (f) {

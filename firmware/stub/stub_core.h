@@ -36,13 +36,13 @@
 #ifndef STUB_CORE_H
 #define STUB_CORE_H
 /* PIGEON v4 adapts ChoralRoot v3 to the KOPOOL2 application boundary. */
-#define STUB_VERSION 4                   /* in the stub's header (crt0_stub.S: no C suffix) and the RAM mailbox */
+#define STUB_VERSION 5                   /* in the stub's header (crt0_stub.S: no C suffix) and the RAM mailbox */
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 
 #define STUB_LEN 0xEE0u                  /* app.bin offset of the body: flash 0x4120 + 0xEE0 = 0x5000 */
 #define STUB_BODY_OFF 0x5000u            /* flash */
-#define STUB_BODY_MAX 0x71000u           /* the body ends below the marker's sector (flash 0x76000) */
+#define STUB_BODY_MAX 0x5B000u           /* the body ends below the marker's sector (flash 0x76000) */
 #define STUB_MARK_SEC 0x76000u
 #define STUB_MARK_OFF 0x76FE0u           /* the sector's last 32 bytes: in its last page, programmed last */
 #define STUB_MARK_LEN 20u

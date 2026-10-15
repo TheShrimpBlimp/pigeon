@@ -26,7 +26,7 @@ try{
  assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'000001');
  assert(await page.locator('#save-bank').isDisabled());assert(await page.locator('#open-loader').isDisabled());
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
- assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 408 KiB');
+ assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 496 KiB');
  await page.locator('#song1-file').setInputFiles({name:'editable.wav',mimeType:'audio/wav',buffer:wav(2)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'Empty','choosing a file must not load it before editing');
@@ -91,7 +91,7 @@ try{
  await page.locator('#song1-file').setInputFiles({name:'too-long.wav',mimeType:'audio/wav',buffer:wav(65)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  await page.locator('#song1-editor .apply-section').click();
- await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('408 KiB'));
+ await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('496 KiB'));
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
  await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'compressed.wav',mimeType:'audio/wav',buffer:wav(65)});
@@ -99,7 +99,7 @@ try{
  await page.locator('#song1-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'compressed.wav');
- assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=417792);
+ assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=507904);
  await page.locator('#storage-mode').selectOption('unlimited');await page.locator('#song1-file:not([disabled])').waitFor();
  assert(await page.locator('#song1-quality').isHidden());
  await page.locator('#save-bank').click();await page.getByText('This unlimited bank is too large for an FM1. Switch to limited storage mode and reduce the audio or MP3 quality before exporting.',{exact:true}).waitFor();
@@ -118,6 +118,20 @@ try{
  await page.evaluate(()=>window.testInput.onmidimessage({data:Uint8Array.from([144,60,100])}));
  await page.evaluate(()=>window.testInput.onmidimessage({data:Uint8Array.from([128,60,0])}));
  await page.locator('#midi-disconnect').click();assert(await page.evaluate(()=>window.testInput.onmidimessage===null));
+ // The optional panel path requests SysEx, routes a real protocol frame, and releases its lease.
+ await page.evaluate(()=>{
+   window.panelSent=[];const input={id:'panel-in',name:'FM1 panel',state:'connected',onmidimessage:null};window.panelTestInput=input;
+   const output={id:'panel-out',name:'FM1 panel',state:'connected',send:d=>window.panelSent.push(d)};
+   navigator.requestMIDIAccess=async options=>{if(!options?.sysex)throw Error('Panel mode must request SysEx');return {inputs:new Map([[input.id,input]]),outputs:new Map([[output.id,output]])};};
+ });
+ await page.locator('#panel-connect').evaluate(e=>e.closest('details').open=true);
+ await page.locator('#panel-connect').click();await page.getByText('Waiting for the FM1 panel…',{exact:true}).waitFor();
+ assert.deepEqual(await page.evaluate(()=>window.panelSent[0]),[240,125,70,76,110,1,247]);
+ await page.evaluate(()=>window.panelTestInput.onmidimessage({data:Uint8Array.of(240,125,70,76,111,1,0,0,1,0,0,0,65,64,64,64,64,64,64,60,5,247)}));
+ await page.getByText('FM1 panel connected: keys, knobs and buttons control the browser. Sound comes from your computer.',{exact:true}).waitFor();
+ assert.equal(await page.locator('g.held .face.key').count(),1);
+ await page.getByRole('button',{name:'G3',exact:true}).click();assert.equal(await page.locator('g.held .face.key').count(),1,'virtual key release must preserve a held physical key');
+ await page.locator('#panel-disconnect').click();assert.equal(await page.locator('g.held .face.key').count(),0);assert.deepEqual(await page.evaluate(()=>window.panelSent.at(-1)),[240,125,70,76,110,0,247]);assert(await page.evaluate(()=>window.panelTestInput.onmidimessage===null));
  // Import a bank and a session, then prove pattern/audio round trips and reload persistence.
  await page.locator('#import-session').setInputFiles({name:'saved.kob',mimeType:'application/octet-stream',buffer:Buffer.from(bank)});
  await page.getByText('Bank imported with chop settings. Current patterns are preserved.',{exact:true}).waitFor();

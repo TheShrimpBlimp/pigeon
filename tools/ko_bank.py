@@ -27,8 +27,8 @@ from pathlib import Path
 import sampleio as sio
 from fm1_sample_upload import Link, pack7
 
-MAGIC, SIZE, HEAD, HEADER = 0x32424F4B, 0x67000, 4096, 668
-EXTENTS = ((0xA0000,0x13000),(0xB4000,0x28000),(0x78000,0x1A000),(0xEA000,0x12000))
+MAGIC, SIZE, HEAD, HEADER = 0x32424F4B, 0x7D000, 4096, 668
+EXTENTS = ((0xA0000,0x13000),(0xB4000,0x28000),(0x78000,0x1A000),(0xEA000,0x12000),(0x60000,0x16000))
 
 
 def physical(offset):
@@ -282,7 +282,7 @@ def preview(image):
 def negotiate(link):
     r=link.req(90,[])
     expected=[0x4B,2]+u21(SIZE)+u21(HEAD)
-    if len(r)!=10 or r[0]!=expected[0] or r[1] not in (2,3) or r[2:8]!=expected[2:8] or r[9]!=3:
+    if len(r)!=10 or r[0]!=expected[0] or r[1] not in (2,3) or (r[2] | r[3]<<7 | r[4]<<14) not in (0x67000,SIZE) or r[5:8]!=expected[5:8] or r[9]!=3:
         raise ValueError("device does not support this exact KO storage layout; nothing written")
     return r
 
@@ -297,6 +297,8 @@ def upload(link,image):
     fields=validate(image); used=fields[2]
     capability=negotiate(link)
     if fields[1]==3 and capability[1]!=3: raise ValueError("device lacks two-song support; nothing written")
+    capacity=capability[2] | capability[3]<<7 | capability[4]<<14
+    if used>capacity: raise ValueError("bank exceeds connected firmware capacity; nothing written")
     request_ok(link,91,u21(used))
     for off in range(HEAD,used,256):
         request_ok(link,92,u21(off)+pack7(image[off:min(off+256,used)]))
@@ -320,13 +322,14 @@ def read(link,off,n):
 
 
 def export(link):
-    negotiate(link)
+    capability=negotiate(link)
+    capacity=capability[2] | capability[3]<<7 | capability[4]<<14
     header=b''.join(read(link,off,min(256,HEADER-off)) for off in range(0,HEADER,256))
     used=struct.unpack_from('<I',header,8)[0]
     if struct.unpack_from('<I',header)[0]!=MAGIC or not HEAD<=used<=SIZE:
         raise ValueError("no KO bank to export; use the legacy sample backup for FSMP slots")
     image=b''.join(read(link,off,min(256,used-off)) for off in range(0,used,256))
-    image+=b''.join(read(link,SIZE+off,256) for off in range(0,4096,256))
+    image+=b''.join(read(link,capacity+off,256) for off in range(0,4096,256))
     validate(image)
     return image
 

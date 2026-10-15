@@ -10,7 +10,7 @@ import ko_bank
 banks=[ROOT/'build/ko-fixtures/minute-mp3.kob',ROOT/'build/ko-fixtures/minute-ima.kob',ROOT/'build/ko-fixtures/dual.kob']
 for path in banks:
     data=path.read_bytes();summary=ko_bank.storage_summary(data)
-    assert summary['payload_used']+summary['free']==summary['payload_capacity']==408*1024
+    assert summary['payload_used']+summary['free']==summary['payload_capacity']==496*1024
     assert len(summary['songs'])==(2 if ko_bank.validate(data)[1]==3 else 1)
 sys.path.insert(0,str(ROOT/'build/qol-js'))
 try: import quickjs

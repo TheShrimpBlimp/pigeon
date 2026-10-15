@@ -480,7 +480,9 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
 #endif
     if (ed_ui_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }
+#if !FELUCCA_SAMPLER_ONLY
     if (ed_fm6_handle(cmd, a, na)) { ed_send(); return; }
+#endif
     if (ed_menu_handle(cmd, a, na)) { ed_send(); return; }
     if (ed_learn_handle(cmd, a, na)) { ed_send(); return; }
     switch (cmd) {
@@ -698,6 +700,14 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         ed_b(0x4B); ed_b(1); /* K, paired-song protocol version */
 #endif
         break;
+#if FELUCCA_SAMPLER_ONLY
+    case ED_UP_LIST:
+        ed_b(na?a[0]:0);ed_b(0);ed_b(0);break;
+    case ED_UP_GET:
+        return; /* No synth preset namespace in PIGEON. Raw backups remain supported. */
+    case ED_UP_PUT:case ED_UP_STORE:case ED_UP_LOAD:case ED_UP_ERASE:
+        ed_b(na?a[0]:0);ed_b(1);break;
+#else
     case ED_UP_LIST: {                                     /* start, count -> start, count, total, per slot: used, engine, name;
                                                             * (1.2) then per slot its category (category.c CAT_*, 0 unused):
                                                             * after the entries, so an older editor stops before them */
@@ -807,6 +817,7 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         ed_b(a[0]);
         ed_b(a[0] >= UP_SLOTS ? 1u : ed_flash_stop() || up_put(a[0], 0) ? 2u : 0u);
         break;
+#endif
     case ED_WATCH: {                                       /* on -> on */
         uint32_t keep, v4was = ed_w.v4;
         if (na < 1u)

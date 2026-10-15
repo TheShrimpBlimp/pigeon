@@ -1,4 +1,4 @@
-# PIGEON controls
+# PIGEON controls — v0.3
 
 PIGEON is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
 Choose the track first; edits belong to that track. Song 2 can hold drum loops.
@@ -31,7 +31,8 @@ reference; it follows project BPM within 50–200% speed. Changing chop boundari
 does not recapture the reference until a sync control is adjusted. SPEED % shows
 the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
 
-Both songs and the kit share 408 KiB. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
+Published firmware and web tools share 408 KiB between both songs and the kit.
+The local v0.3 proposes 496 KiB; hardware verification remains pending. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
 cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
 Drums have 16 one-shot pads. Held loops default on, latch defaults off.
 
@@ -50,10 +51,31 @@ Before installing PIGEON from another custom firmware, revert to official M-VAVE
 
 Patterns shows UNSAVED when the current phrase differs from its saved state or the destination is empty. Selecting an occupied slot with unsaved work warns first; select the same slot again to discard those edits and load it. SAVE stores the phrase, timing, automation and arrangement to the selected A–D destination. Sample/chop settings remain in the shared bank.
 
-See [the first-song walkthrough and V0.5 release gate](PIGEON_V05_RELEASE.md) for the complete workflow and pending physical checks.
+See [the first-song walkthrough and v0.3 release gate](PIGEON_V03_RELEASE.md) for the complete workflow and pending physical checks.
 
 ## Copy a whole chop to another key
 
 Within the same song, EDIT opens chop settings and LFO opens chop operations. Stop playback and release pads. K1 selects the destination chop/key; K2 selects the source. Press REC to copy the source's complete boundaries, pitch, envelope, trigger/loop mode and choke group onto the destination. Existing keys keep their numbers and no extra audio storage is used. The existing chop undo can reverse the overwrite. K4 clockwise still copies settings only.
 
 In the sample loader Chop editor, select the destination with Chop, choose the source in Copy from, then press Copy whole chop here. Send the bank to apply the edited layout to hardware. This does not copy between different songs.
+
+
+## Swap and move chops
+
+From chop operations (EDIT → LFO), tap ENV to open key assignment. K1 selects the source and K2 the destination. Turn K3 clockwise once to swap both assignments, or K4 clockwise once to move the source to the destination while shifting intervening keys. Stop playback and release notes first. ENV returns to chop operations. Chop undo restores the previous assignments; existing pattern key numbers stay unchanged and play their newly assigned chops.
+
+The sample loader offers the same Swap and Move operations. It also copies drum audio and settings: choose a source Pad, a Copy to pad destination, and Copy pad to key. Send the resulting bank to use it on hardware.
+
+Loader Undo/Redo supports Ctrl+Z / Cmd+Z, Ctrl+Shift+Z / Cmd+Shift+Z and Ctrl+Y for committed local edits. Text inputs retain text undo. The Session library keeps multiple named banks or full sessions locally, with download backups. Neither workspace undo nor library loading writes to the FM1.
+
+## Held-button shortcuts
+
+Page buttons open their pages immediately on press; releasing them does not navigate again. HOME returns to the waveform from another page. Press HOME on the waveform to open Settings, then HOME again to return. Hold GLO for mixer shortcuts and SEQ for sequence tools. FX opens the PIGEON effects pages, SCL opens Patterns, EDIT opens chops, and REC arms recording. Their inherited macro, scale/chord, engine-picker and recording overlays have been removed. Recording preferences remain available through LFO from Timing.
+
+## Reading the screen
+
+Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 on the bottom row. Page actions and navigation appear along the bottom. The top strip shows track, phrase, transport/record state, BPM and battery. FX labels EDIT as RESET; HOME returns to the waveform. See [the UI reference](PIGEON_UI.md) for the local v0.3 layout and render workflow.
+
+### Audition a chop ending
+
+Hold **EDIT** and press a chop key to audition its final two seconds. Short chops play from the start. ADPCM uses the nearest decoder checkpoint after the two-second position; MP3 seeks directly to that position. The audition plays once, leaves chop boundaries unchanged, and bypasses recording, quantization and MIDI output. Release EDIT for normal playback. Available on both song tracks; drums keep their normal behavior.

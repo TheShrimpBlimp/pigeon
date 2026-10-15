@@ -24,7 +24,7 @@ typedef struct { const char *name; uint16_t bg, surf, text, theme, accent; } ui_
 typedef struct { uint16_t off; uint8_t w; const char *label; } kc_t;
 #include "ui_fonts.h"                   /* AF_S 12 px / 400, AF_M 15 px / 500, AF_L 28 px / 600 */
 #include "ui_palettes.h"
-#include "ui_keycaps.h"                 /* KC_*: the keycaps / badges (tools/gen_aa_keycaps.py), KNOB_* arcs */
+#include "ui_keycaps.h"                 /* Control labels and legacy KNOB_* arcs; no keycap bitmap data. */
 #define ELLIPSIS '\x85'                 /* the ellipsis glyph of AF_S and AF_M */
 
 /* host tests hook in here (layout lint, draw cost); nothing in the firmware */
@@ -536,6 +536,14 @@ static int32_t text_w(const aafont_t *f, const char *s)
 
 static int32_t text_run(int32_t x, int32_t y, const aafont_t *f, const char *s, const uint16_t *rv, int32_t *bb)
 {
+#ifndef PIGEON_TEXT_NO_AA
+#define PIGEON_TEXT_NO_AA 0
+#endif
+#if PIGEON_TEXT_NO_AA
+    /* Preview-only: binary text coverage; art and icon ramps remain unchanged. */
+    uint16_t solid[16];
+    if (rv) {for (uint32_t i=0;i<16;i++)solid[i]=rv[i<4?0:15];rv=solid;}
+#endif
     int32_t pen = 0, err = 0, x0 = 0x7FFF, y0 = 0x7FFF, x1 = -0x7FFF, y1 = -0x7FFF;
     const int32_t step = 16 >> f->psh;
     uint32_t prev = 0;
@@ -546,7 +554,7 @@ static int32_t text_run(int32_t x, int32_t y, const aafont_t *f, const char *s, 
         if (prev)
             pen += kern(f, prev, c);
         g = &f->g[glyph(f, c)];
-        if (f->psh && g[1].off != g->off) {
+        if (!PIGEON_TEXT_NO_AA && f->psh && g[1].off != g->off) {
             pos = pen - (pen & (step - 1));          /* the phase position at or left of the pen */
             d0 = pos - pen - err;                    /* .. and the one right of it: which keeps the gap truer */
             d1 = d0 + step;
@@ -687,56 +695,19 @@ static int32_t cv_free_text(int32_t x, int32_t y, const aafont_t *f, const char 
 }
 
 /* ---------------------------------------------------------- keycaps --- */
-/* a pre-rendered pill (tools/gen_aa_keycaps.py): nibble 0 outside, 1..4 the edge over `under`, 5 the fill,
- * 6..15 the label over the fill; the 16 colours per (under, fill, ink) are cached like the text ramps */
-#define NKRAMP 4u
-static struct {
-    uint16_t key[NKRAMP][3], v[NKRAMP][16];
-    uint32_t gen;
-    uint8_t next, n;
-} kr __attribute__((section(".pool")));      /* (zero-initialised; outside .bss) */
-static const uint16_t *kc_ramp(uint16_t under, uint16_t fill, uint16_t ink)
+/* Control hints share the regular font; all boxes are drawn geometry. */
+static int32_t kc_w(uint32_t id) { return id<KC_COUNT ? text_w(&AF_S,KC[id].label)+8 : 0; }
+static int32_t cv_keycap(int32_t x,int32_t y,uint32_t id,uint16_t fill,uint16_t ink,uint16_t under)
 {
-    uint32_t i, a;
-    uint16_t *v;
-    if (ink == fill)                             /* (as ramp) */
-        ink = ux.bg;
-    GFX_HOOK_INK(ink, fill);
-    if (kr.gen != ux.gen) {
-        kr.gen = ux.gen;
-        kr.n = kr.next = 0;
-    }
-    for (i = 0; i < kr.n; i++)
-        if (kr.key[i][0] == under && kr.key[i][1] == fill && kr.key[i][2] == ink)
-            return kr.v[i];
-    i = kr.next;
-    kr.next = (uint8_t)((i + 1u) % NKRAMP);
-    if (kr.n < NKRAMP)
-        kr.n++;
-    kr.key[i][0] = under;
-    kr.key[i][1] = fill;
-    kr.key[i][2] = ink;
-    v = kr.v[i];
-    v[0] = swap16(under);
-    for (a = 1; a < 16u; a++) {
-        int32_t p = a < 5u ? (int32_t)a * 20 : (int32_t)(a - 5u) * 10;
-        v[a] = swap16(a < 5u ? ux_mix(under, fill, p) : ux_mix(fill, ink, p));
-    }
-    return v;
-}
-static int32_t kc_w(uint32_t id) { return id < KC_COUNT ? KC[id].w : 0; }
-/* keycap / badge `id` with its top-left at (x, y), KC_H tall: fill and label tinted with tokens, `under` what lies
- * behind its corners; returns its right edge */
-static int32_t cv_keycap(int32_t x, int32_t y, uint32_t id, uint16_t fill, uint16_t ink, uint16_t under)
-{
-    const kc_t *k = &KC[id < KC_COUNT ? id : 0u];
-    const uint16_t *rv = kc_ramp(under, fill, ink);
-    cv_alpha(x, y, k->w, KC_H, KC_DATA + k->off, rv);
-    if (x < 0 || x + k->w > (int32_t)cv_w || y + cv_oy < 0 || y + KC_H + cv_oy > (int32_t)cv_h)
-        GFX_HOOK_TEXT(x, y + cv_oy, x + k->w, y + KC_H + cv_oy, k->label, 6u);      /* cut by the canvas */
-    else
-        GFX_HOOK_TEXT(x, y + cv_oy, x + k->w, y + KC_H + cv_oy, k->label, 4u);
-    return x + k->w;
+    if(id>=KC_COUNT)return x;
+    const char *label=KC[id].label;int32_t w=kc_w(id);
+    (void)under;
+    if(ink==fill)ink=ux.bg;
+    cv_rect(x,y,w,KC_H,fill);
+    cv_rect(x,y,w,1,ink);cv_rect(x,y+KC_H-1,w,1,ink);
+    cv_rect(x,y,1,KC_H,ink);cv_rect(x+w-1,y,1,KC_H,ink);
+    cv_text_on(x+4,y+HALF_UP(KC_H-AF_S_CAP_H)-AF_S_CAP_Y,&AF_S,label,ink,fill);
+    return x+w;
 }
 
 /* a key hint: the keycap, then what it does (S, TEXT); unavailable: a DIM keycap and a DIM word. The word sits on
