@@ -5,12 +5,14 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
+Created and directed by **The Shrimp Blimp**. Local firmware candidate: **v0.3**. It has not been published or physically verified.
+The published firmware and web tools still use the **408 KiB** sample limit; the
+local candidate proposes **496 KiB**, pending hardware checks.
 
 ## What it does
 
 - **Two independent song samples and a 16-pad drum kit**, sharing 408 KiB of
-  flash-backed sample storage. Songs use indexed mono MP3 or IMA ADPCM;
+  flash-backed sample storage in the published version. Songs use indexed mono MP3 or IMA ADPCM;
   available duration depends on encoding quality and the other samples loaded.
 - **Up to 32 editable chops per song**, with transient detection, independent
   boundaries, pitch, attack/release, one-shot, hold, looping, and latch. All 27 keys play chops; a second
@@ -32,7 +34,8 @@ Created and directed by **The Shrimp Blimp**. Development version: **0.1-dev**.
 - A green display with **Little Character** typography, buffered updates,
   waveform zoom, and playback following.
 
-Eight audio voices are shared across the instrument. Synth engines are
+The v0.3 candidate gives both songs eight shared voices plus four dedicated drum
+voices. Sustained 8+4 playback still needs physical testing. Synth engines are
 unavailable in the PIGEON profile. Direct recording, resampling, and compressed
 reverse playback are outside the current release scope.
 
@@ -64,9 +67,13 @@ PYTHON=.venv/bin/python ./build-sampler.sh
 
 Outputs: `build/pigeon.fwsc` and `build/pigeon.bin`. Install this project's
 package with `tools/fm1_install.py`; upstream installers distribute upstream
-Felucca. Back up your instrument before installing or replacing sample banks.
+Felucca. Before installing from another custom firmware, back up, revert to
+official M-VAVE V15 using that firmware’s documented procedure, then install
+PIGEON. The local v0.3 candidate still needs physical verification.
 
-- [Controls and workflow](docs/KO_MODE.md)
+- [Start-to-finish tutorial](docs/KO_MODE.md)
+- [Quick control reference](docs/PIGEON_CONTROLS.md)
+- [v0.3 release status and pending checks](docs/PIGEON_V03_RELEASE.md)
 - [Sample storage and transfers](docs/KO_STORAGE.md)
 - [Sample library and complete archives](tools/pigeon_library.py)
 - [Contributing](CONTRIBUTING.md)

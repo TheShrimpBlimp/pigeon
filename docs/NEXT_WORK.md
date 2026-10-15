@@ -1,4 +1,8 @@
-# PIGEON workflow expansion
+# PIGEON workflow expansion — historical work log
+
+For the current v0.3 candidate and pending hardware checks, use
+[PIGEON_V03_RELEASE.md](PIGEON_V03_RELEASE.md). The entries below record earlier
+implementation work and are not a current release checklist.
 
 Authorized scope: both requested feature lists, excluding firmware performance
 macros. Build and test; do not flash, publish, push, or touch user audio files.

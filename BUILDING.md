@@ -17,7 +17,7 @@ The underlying build makes three files in `build/`:
 ## Prerequisites (macOS)
 
 - Python 3 with Pillow and fontTools: `pip3 install Pillow fonttools` (the UI font and icons are
-  rasterised at build time)
+  rasterised at build time). Pillow must include libraqm support for OpenType font features; check with `python3 -c "from PIL import features; assert features.check('raqm')"`. The project `.venv` already provides this support
 - Docker Desktop. The JieLi toolchain is Linux x86-64 only; the build runs each tool in a
   `linux/amd64` `debian:bookworm-slim` container (Rosetta on Apple silicon). Keep the source
   tree in a folder Docker can share, e.g. under `/Users`.
