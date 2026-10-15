@@ -12,7 +12,7 @@ The main release is v0.3, without the experimental screen reader. This package w
 
 The legacy recovery test now uses a deterministic synthetic legacy-layout application body, rather than truncating a modern KOPOOL2 boot-stub image and mislabelling it legacy. The fixture is only data for the simulated loader; it is never executable firmware.
 
-## Additional local candidate features
+## Additional v0.3 features
 
 - Chop swap and move in the loader and firmware. On hardware: EDIT → LFO → ENV opens key assignment; K1 selects the source, K2 the destination, K3 clockwise swaps, K4 clockwise moves and shifts the keys between. Stop playback and release notes first. Existing chop undo restores the previous assignments. Existing sequenced key numbers stay unchanged, so rearranging chops changes what those notes trigger.
 - Copy drum audio and settings to any of the 16 pad keys in the sample loader. Empty intermediate keys become silent pads; existing other pads remain assigned. This is a bank edit; send the resulting bank to use it on hardware.
@@ -65,20 +65,20 @@ If sustained 8+4 playback fails, optimize or reduce the advertised hardware limi
 
 ## Limits to state with the release
 
-The published firmware and web tools share 408 KiB between both songs and the kit. The local v0.3 candidate proposes 496 KiB after removing legacy assets; that expansion still needs physical verification before publishing matching web limits. Drum audio is ADPCM; song MP3 quality trades duration for fidelity. USB drives, direct recording and resampling are not supported. Reverse playback of compressed songs is not supported. Physical 12-voice performance and update recovery remain unverified until the above checks are completed.
+The published v0.3 firmware, emulator and loader share 496 KiB between both songs and the kit. Earlier firmware retains 408 KiB; the loader checks device capacity before writing. Extended expanded-pool hardware endurance checks remain pending. Drum audio is ADPCM; song MP3 quality trades duration for fidelity. USB drives, direct recording and resampling are not supported. Reverse playback of compressed songs is not supported. Physical 12-voice performance and update recovery remain unverified until the above checks are completed.
 
-## v0.3 local candidate verification — October 15, 2026
+## v0.3 release verification — October 15, 2026
 
 - Hardware package builds successfully and two consecutive candidate builds are byte-identical.
-- Target memory and instruction-budget checks pass: app 348,100 bytes, RAM 55,160 / 65,536 bytes, audio pool 355,664 / 376,832 bytes.
+- Target memory and instruction-budget checks pass: app 336,268 bytes, RAM 55,464 / 65,536 bytes, audio pool 355,664 / 376,832 bytes.
 - Profile audit rejects legacy screens, unused synth renderers, raw splash pixels, preset RAM banks, factory patches and bitmap keycaps. The lossless splash is 18,295 bytes.
 - Full PIGEON product suite passes, including sanitizer runs and all 92 unchanged reference audio renders.
 - Expanded-bank codec/storage tests pass in normal and sanitizer builds: full 496 KiB payload, old-layout physical addresses, protected neighboring firmware/boot sectors, old banks and reboot CRC validation.
 - Recovery simulation, boot-stub checks and installer safety checks pass. Official V15 restore simulation is skipped because its package is unavailable; this does not establish physical recovery safety.
 - v0.3 WebAssembly builds and passes empty-slot silence, MP3 playback, expanded-bank playback, unlimited mode, CRC rejection, legacy backup preservation, transport and persistence checks.
-- Candidate files and checksums are under `build/releases/pigeon-0.3-beta-candidate/`. Nothing has been flashed or published.
+- Published files and checksums are under `build/releases/pigeon-0.3/` and [GitHub Releases](https://github.com/TheShrimpBlimp/pigeon/releases/tag/v0.3). Basic installation/reboot and sample/chop preservation were checked on an FM1.
 
-Physical checks above remain pending. Published web tools keep their 408 KiB limit until expanded firmware is explicitly approved for publication.
+The remaining extended physical checks above are pending; completed software checks do not establish hardware endurance or interruption safety.
 
 ## Boot-selection and empty-slot correction
 
@@ -87,7 +87,7 @@ project selected Song 2 and initialized that song context while the shared
 sampler state remained disabled. This allowed an inherited missing-sample tone
 to sound. Browser builds had a separate silence guard and did not expose it.
 
-The corrected local build selects Song 1 after autosave restoration, enables the
+The v0.3 build selects Song 1 after autosave restoration, enables the
 shared sampler state, repairs legacy sources on the three active sampler tracks
 while preserving sequence notes, and removes the missing-audio tone generator
 and all its call sites from SAMPLE, SLICE and GRAIN. The source no longer contains
@@ -95,8 +95,7 @@ that fallback. Reserved compatibility-track data remains round-trip safe.
 
 Native hardware-path regression tests cover restored Song 2, empty Song 2, source
 repair, preserved sequence data, and project reload. Generic source tests require
-zero output and ended voices for missing audio. This correction still needs to
-be flashed and physically verified; the earlier flash is not evidence for it.
+zero output and ended voices for missing audio. The corrected main build was flashed and restarted successfully. Manual control, power-cycle and endurance checks remain separate from these regression tests.
 
 ## Latest changes
 

@@ -156,8 +156,7 @@ Use **Add audio files** for either song to select one or several files. More fil
 append to the same slot. Split the timeline and drag clip chips into order;
 expand **Clip settings · trim, gain & fades** for per-clip adjustments and move
 buttons. **Rebuild song from clips** refreshes a preview after detailed changes;
-**Apply** commits encoded audio into the local bank. Each clip becomes a chop
-(up to 32); cropping the combined waveform adjusts those boundaries. Encoding
+**Apply** commits encoded audio into the local bank. Whole imported sections occupy the first keys; automatic slices fill the remaining slots, up to 32 total. Cropping the combined waveform adjusts section boundaries. Automatic slices stay inside individual sections. Encoding
 and capacity checks happen before the bank is replaced.
 
 Clip gain ranges from −24 to +12 dB. Fade in/out defaults to 3 ms and can be set from 0 to 100 ms; processing happens when rebuilding. Gain is applied per clip and clipped to the valid audio range and its level is preserved during encoding. No chop naming is required.
@@ -186,3 +185,5 @@ Click the waveform to place its cursor; the white cursor head can be dragged. Dr
 The waveform uses the firmware’s 220-column envelope. Drag to select audio; Backspace/Delete removes it, Keep selection discards everything else, and S splits at the cursor. Drag clip chips to rearrange them or use their move buttons. Copy, cut and paste work at the cursor. Ctrl/Cmd+Z and redo also cover draft audio edits. Adding another file appends it to the current song. Apply commits the edited audio to the bank.
 
 Use **Try this bank in emulator** to open the current bank or full session directly in the hosted emulator. Switch the emulator on to load it. **Load bank / session** also accepts saved `.kob` banks and `.pigeon` sessions; sessions retain their patterns. Banks must fit the connected device’s reported capacity before transfer.
+
+Existing merged banks retain their saved chop count. To generate the additional automatic chops, reapply the original clips in this loader and send the new bank to the FM1. Export custom chop layouts before reapplying; this regenerates the song’s chop assignments. Reflashing firmware alone does not change them.

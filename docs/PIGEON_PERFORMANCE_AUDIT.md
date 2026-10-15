@@ -1,6 +1,6 @@
 # PIGEON performance and compatibility audit
 
-Source audit and host validation, updated 2026-10-13. No device writes or flashes.
+Source audit and host validation, updated 2026-10-15 for published v0.3. Basic device installation/reboot and sample/chop preservation were checked; extended hardware performance and interrupted-update verification remain pending.
 
 ## Audio and display
 
@@ -17,11 +17,7 @@ service running during LCD transfers; blits use at most 240 pixels per chunk.
 `firmware/src/ko_ui.c:ko_wave_draw`, `ko_playhead` and `ko_seq_draw` cache unchanged
 regions and publish final canvas colours. Preserve these paths when adding UI.
 
-`firmware/src/voice.c:voices_busy` and the allocator enforce eight shared sounding
-voices across all parts. Fading/stolen tails are distinct from that count. More
-song tracks do not add polyphony. `firmware/src/ui_input.c:accel_speed` bounds
-encoder acceleration and resets it after a gap or direction change; chop edits
-retain source-position/decoder checkpoints rather than moving selection.
+The sampler allocator reserves eight shared song voices and four dedicated drum voices. Fading/stolen tails are distinct from the sounding-voice count; more song tracks do not add polyphony. Chop edits retain source-position/decoder checkpoints. The EDIT+key ending audition uses MP3 seeking or an existing ADPCM checkpoint, without a long decoder scan in the interrupt.
 
 No decoder was moved into an interrupt and no DSP algorithm was changed in this
 pass. Display additions use cached text and existing integer sync calculations.
@@ -29,19 +25,9 @@ The pattern queue label now follows the configured bar/pattern-end boundary.
 
 ## Budgets and limits
 
-The recovery candidate builds with a 391,104-byte image, including its 3,808-byte
-boot-stub slot. The 387,296-byte app body leaves 75,552 bytes below the reserved
-commit-marker sector. Target RAM/pool totals are
-recorded in the candidate manifest; the build requires at least 4 KiB RAM and
-8 KiB pool headroom. Those are static allocation margins, not measured stack or
-runtime CPU margins. The encoded bank still has 408 KiB shared by both songs,
-drums, waveform data and seek indices. There is no additional sample space from
-this audit.
+The published v0.3 application is 336,268 bytes; RAM is 55,464 / 65,536 bytes and the audio pool is 355,664 / 376,832 bytes. Two target builds produced identical binaries and packages. The bank contains a 4 KiB header plus 496 KiB shared by songs, drums, waveform data and seek indices. Earlier firmware has 408 KiB and is checked before transfer.
 
-Compiled interrupt cost estimates are 38,842 for audio (reference 37,502) and
-35,127 for input/LED scan (reference 33,387), within the existing +10% policy.
-`tests/target_budget.py` measures weighted compiled instruction loops, not real
-cycles or utilization. Host timings cannot establish a physical CPU percentage.
+`tests/target_budget.py` passes for the release. It measures weighted compiled instruction loops, not real cycles or utilization; host timings cannot establish physical CPU percentage or runtime deadlines. Static memory headroom does not measure stack use.
 
 `tests/ko_storage_test.c` now exercises two songs plus drums with filter, delay, chorus,
 reverb, distortion and separate compression enabled, after servicing cold attacks. It checks the shared
@@ -53,15 +39,12 @@ under that model, not a guarantee of hardware deadlines at every pitch.
 
 `firmware/src/ko_store.c:ko_store_poll` postpones flash saves while transport or
 voices are active. Existing A/B project recovery remains in `storage.c`.
-The FUNA layout, parameter IDs, sample flash map and metadata offsets are unchanged.
+The FUNA layout, parameter IDs, existing sample extents and metadata offsets remain compatible. v0.3 appends the KOPOOL3 sample extent.
 Existing project, bank corruption, failed programming, torn-write, old-format and
 GUI/native codec tests are retained. The dual-song storage tests run with native
 and sanitized decoders. Extended conditions/locks still require current firmware.
 
-Evidence is in `build/beta-host-tests.log`, `beta-dual-storage-tests.log`,
-`beta-codec-tests.log`, `beta-ui-san.log`, and `beta-target-budget.log`.
-The beta script records its own checks separately and compares repeated build
-hashes when requested. No new package is considered flashed or hardware verified.
+Release evidence is in `build/v03-product-release.log`, `build/v03-recovery-release.log`, `build/v03-loader-browser.log`, `build/v03-browser-release.log` and `build/v03-wasm-protocol.log`. Release downloads include `manifest.json`, `validation.json` and SHA-256 checksums. The preparation script’s own host-suite flag is separate from the independently run full product suite; it is not rewritten to imply that invocation ran tests.
 
 ## Remaining hardware checks
 
@@ -82,7 +65,9 @@ for actual PIGEON pages: 815 text draws across all three tracks, zero fixed-labe
 clipping failures. This clipping check does not prove every layout is visually
 ideal or replace a physical screen review.
 
-## Recovery candidate validation (2026-10-13)
+## Historical recovery validation (2026-10-13)
+
+This section records the earlier stub v4 validation. Published v0.3 uses stub v5; see [the recovery guide](PIGEON_RECOVERY.md) for current behavior.
 
 The ChoralRoot-derived PIGEON stub v4 is pinned by SHA-256 in
 `firmware/stub/stub.lock`; the built image matches that pin. Target compilation

@@ -31,7 +31,7 @@ It starts empty; audio is decoded and edited on your computer.
    work at the cursor. Ctrl/Cmd+Z undoes a draft edit; Ctrl/Cmd+Shift+Z redoes it.
 4. Scroll over the waveform to zoom. Alt-drag or drag the overview to pan.
    **Clip settings · trim, gain & fades** exposes each clip’s precise settings.
-   Each included clip becomes a chop when applied, up to 32 per song.
+   Whole imported sections occupy the first keys. Automatic slices fill the remaining slots, up to 32 total, without crossing section boundaries. Sparse audio is subdivided to provide editable chops.
 5. Open **Export range & quality** to change exact range or MP3 quality
    (24–64 kbps). Lower quality uses less space. Preview the result, then press
    **Apply to local Song 1**. Draft edits do not affect the bank until Apply.
@@ -121,3 +121,5 @@ Read [storage formats](KO_STORAGE.md), the [v0.3 release checklist](PIGEON_V03_R
 and the [historical technical reference](KO_LEGACY_REFERENCE.md) for more detail.
 
 Page buttons respond on press. HOME returns to the waveform; HOME on the waveform opens Settings. Hold EDIT and play a chop key to audition its ending without recording it. Merged clips occupy the first keys as whole sections, followed by automatic slices in the remaining slots.
+
+To update an existing merged bank that only has one chop per section, reopen the original audio clips in the loader, Apply the song again, save a backup, and send the resulting bank. Reapplying replaces that song’s chop layout; export any custom chop work first. A firmware reflash alone does not regenerate the bank’s chops.

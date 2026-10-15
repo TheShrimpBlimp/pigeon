@@ -1,10 +1,12 @@
-# Preparing a PIGEON beta candidate
+# Preparing PIGEON packages
+
+PIGEON v0.3 is published. These instructions prepare new local packages; they do not publish or flash them. For the current release, use `--version 0.3`; omit it to retain the script’s default development-candidate label.
 
 Use the pinned target compiler provisioned by the existing build workflow and
 Python from the project virtual environment. From the firmware repository:
 
 ```
-.venv/bin/python tools/prepare_pigeon_beta.py --verify-reproducible --run-tests
+.venv/bin/python tools/prepare_pigeon_beta.py --version 0.3 --verify-reproducible --run-tests
 ```
 
 Node.js must be on PATH for full web/codec checks. The script builds the sampler
@@ -14,7 +16,7 @@ malformed data, 92 inherited golden audio renders, sanitizers, dual-song storage
 and GUI codec checks. With `--run-tests`, it also runs
 `tests/run_pigeon_recovery_tests.sh` for the pinned boot stub, commit ordering,
 interrupted writes, and installer compatibility refusals. It copies firmware, checksums, target memory metrics, test logs and control
-documentation into `build/releases/pigeon-0.3-beta-candidate/`. It never contacts
+documentation into `build/releases/pigeon-0.3/`. It never contacts
 hardware, flashes, creates a release/tag, or publishes a website.
 
 Without `--run-tests`, the manifest explicitly says the full host suite was not

@@ -44,7 +44,7 @@ SCL opens Patterns. Choose A–D, stop playback and release the pads, then press
 
 ## Installing from another firmware
 
-Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; physical hardware verification of this beta remains pending.
+Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; basic installation and sample/chop preservation were checked; extended hardware verification remains pending.
 
 ## Unsaved patterns
 
@@ -73,7 +73,7 @@ Page buttons open their pages immediately on press; releasing them does not navi
 
 ## Reading the screen
 
-Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 on the bottom row. Page actions and navigation appear along the bottom. The top strip shows track, phrase, transport/record state, BPM and battery. FX labels EDIT as RESET; HOME returns to the waveform. See [the UI reference](PIGEON_UI.md) for the local v0.3 layout and render workflow.
+Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 on the bottom row. Page actions and navigation appear along the bottom. The top strip shows track, phrase, transport/record state, BPM and battery. FX labels EDIT as RESET; HOME returns to the waveform. See [the UI reference](PIGEON_UI.md) for the v0.3 layout and render workflow.
 
 ### Audition a chop ending
 

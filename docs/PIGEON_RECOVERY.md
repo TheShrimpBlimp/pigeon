@@ -20,12 +20,12 @@ and unknown firmware are refused before the update command. Follow the source
 firmware's official-return procedure first. CLI --force overrides this refusal
 and is explicitly unsafe. A checksum-verified official V15 return remains possible.
 
-## Local v0.3 candidate: recovery stub version 5
+## v0.3 recovery stub version 5
 
-The local candidate uses ChoralRoot’s boot-stub design, adapted to PIGEON’s
-sample storage boundaries. This describes unpublished candidate code. Flash 0x4120–0x4fff contains the pinned stub;
+v0.3 uses ChoralRoot’s boot-stub design, adapted to PIGEON’s
+sample storage boundaries. This describes the published v0.3 package. Flash 0x4120–0x4fff contains the pinned stub;
 the app starts at 0x5000. Flash sector 0x76000 holds the commit marker at
-0x76fe0. The app body must end at or before 0x60000; the proposed extra sample extent
+0x76fe0. The app body must end at or before 0x60000; the additional sample extent
 occupies 0x60000–0x76000. The KOPOOL2 boundary stays 0x78000. Existing sample
 extents, metadata, projects and settings retain their physical addresses. The
 new extent is appended logically, with a KOPOOL3 descriptor alongside KOPOOL2.

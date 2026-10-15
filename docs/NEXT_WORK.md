@@ -1,6 +1,6 @@
 # PIGEON workflow expansion — historical work log
 
-For the current v0.3 candidate and pending hardware checks, use
+For the current v0.3 release and pending hardware checks, use
 [PIGEON_V03_RELEASE.md](PIGEON_V03_RELEASE.md). The entries below record earlier
 implementation work and are not a current release checklist.
 

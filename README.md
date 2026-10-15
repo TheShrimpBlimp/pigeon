@@ -50,7 +50,8 @@ reverse playback are outside the current release scope.
 | SCL | Patterns / Arrangement |
 | ARP | Mixer and FX sends |
 | ENV on drum HOME | Per-pad settings |
-| LFO held on FX pages | Temporary knob changes; release restores them |
+| HOME | Return to waveform; from waveform, open Settings |
+| EDIT held + chop key | Audition the chop ending without recording |
 
 Read the [control guide](docs/KO_MODE.md) for recording, rest entry, undo,
 chop banks, arrangement tools, and the library commands.

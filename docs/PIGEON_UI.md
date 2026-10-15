@@ -1,6 +1,6 @@
 # PIGEON v0.3 UI
 
-The local firmware uses one visual system throughout its sampler pages and
+The v0.3 firmware uses one visual system throughout its sampler pages and
 support screens: Little Character, PIGEON green, a dark background, rectangular
 geometry and explicit button names. The splash artwork remains unchanged.
 
@@ -16,7 +16,7 @@ amount bar. An unused knob has no card.
 
 Page names sit above the controls. The bottom two lines explain the secondary
 action and navigation. FX explicitly labels EDIT as RESET; HOME returns to the
-sample. Existing knob assignments, shortcuts and sound parameters are preserved.
+waveform. Page buttons respond on press. HOME on the waveform opens Settings; HOME closes Settings. Hold EDIT and press a chop key to preview its ending. LFO now opens its page immediately; the old held-LFO temporary-FX gesture is not part of this navigation.
 
 The waveform retains its detailed peak display and moving playhead. The
 sequencer retains its sixteen-cell window and live record/play status. Patterns

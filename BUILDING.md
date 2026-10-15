@@ -144,13 +144,12 @@ Or, to install your own build from the web installer, make a local copy of the s
 (Web MIDI needs a secure context):
 
 ```
-python3 web/make_site.py build/felucca.fwsc dev /tmp/felucca-site
-cd /tmp/felucca-site && python3 -m http.server 8000
+python3 web/make_site.py build/pigeon.fwsc 0.3 /tmp/pigeon-site
+cd /tmp/pigeon-site && python3 -m http.server 8000
 # open http://localhost:8000/webapp/installer/
 ```
 
-Installing firmware is at your own risk. If an install fails and the FM-1 no longer
-starts, recovery needs [FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter).
+For an interrupted update or a dark device, follow [the recovery guide](docs/PIGEON_RECOVERY.md). It distinguishes resuming a staged update from ROM/unbricker recovery and documents the first-stub-install protection gap.
 
 The standalone profile sets `FELUCCA_SAMPLER_ONLY=1`: only SONG 1 (SLICE), DRUM KIT (SAMPLE),
 and SONG 2 (SLICE) render. Synth engines, extra track processing, continuous
@@ -174,7 +173,7 @@ validation, see [PIGEON beta preparation](docs/PIGEON_BETA.md). Control referenc
 [PIGEON controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
 findings: [performance audit](docs/PIGEON_PERFORMANCE_AUDIT.md).
 
-## PIGEON recovery candidate
+## PIGEON v0.3 recovery
 
 PIGEON builds include the ChoralRoot-derived boot stub pinned by
 `firmware/stub/stub.lock`. Its marker occupies flash sector `0x76000`, below
