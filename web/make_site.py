@@ -112,7 +112,7 @@ def main(pkg, version, out):
     for asset in ("footer.css", "footer.js"):
         shutil.copy(HERE / asset, out / asset)
     guide=out / "guide";guide.mkdir(exist_ok=True)
-    for doc in ("KO_MODE.md","KO_LEGACY_REFERENCE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
+    for doc in ("KO_MODE.md","KO_LEGACY_REFERENCE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md","PIGEON_V05_RELEASE.md","PIGEON_FIRMWARE_PROFILE.md","PIGEON_UI.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
     # Matching working source, excluding user audio, build artifacts, and hosting state.
     root=HERE.parent
     tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")
