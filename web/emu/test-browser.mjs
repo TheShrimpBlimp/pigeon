@@ -74,7 +74,7 @@ try{
  assert.equal(sessionFile.suggestedFilename(),'pigeon-emulator-session.pigeon');const session=JSON.parse(await fs.readFile(await sessionFile.path(),'utf8')),validated=validateArchive(session);
  project(validated.objects[0].bytes);assert(validated.objects[1].size>0);assert.deepEqual(Array.from(validated.bank),Array.from(bank));
  const emulatorURL=page.url();await page.locator('#open-loader').click();
- await page.waitForURL('**/webapp/pigeon/**');await page.locator('#transfer-status').filter({hasText:'Emulator session ready'}).waitFor();
+ await page.waitForURL('**/webapp/pigeon/**');await page.locator('#transfer-status').filter({hasText:'Emulator session ready'}).waitFor({state:'attached'});
  const handed=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const bytes=await new Promise(r=>{const q=db.transaction('files').objectStore('files').get('bank');q.onsuccess=()=>r(q.result);});db.close();return Array.from(bytes);});
  const handedSession=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('pigeon-library',1);q.onsuccess=()=>r(q.result);});const value=await new Promise(r=>{const q=db.transaction('files').objectStore('files').get('session');q.onsuccess=()=>r(q.result);});db.close();return value;});
  validateArchive(handedSession);assert.deepEqual(handedSession.objects,session.objects);
