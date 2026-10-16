@@ -131,6 +131,7 @@ def main(pkg, version, out):
         server=worker_root / 'server';server.mkdir(parents=True,exist_ok=True)
         shutil.copy(HERE / 'site' / 'worker' / 'index.js',server / 'index.js')
         shutil.copy(HERE / 'site' / 'trial-api.js',worker_root / 'trial-api.js')
+        shutil.copy(HERE / 'site' / 'hub-count.js',worker_root / 'hub-count.js')
         metadata=worker_root / '.openai';metadata.mkdir(exist_ok=True)
         shutil.copy(hosting,metadata / 'hosting.json')
         config={"name":"pigeon-fm1","main":"index.js","compatibility_date":"2026-10-12","assets":{"directory":"../client","binding":"ASSETS","run_worker_first":["/api/*"]},"d1_databases":[{"binding":"DB","database_name":"pigeon-installs","database_id":"00000000-0000-4000-8000-000000000000"}]}

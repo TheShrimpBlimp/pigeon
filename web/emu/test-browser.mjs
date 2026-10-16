@@ -22,8 +22,8 @@ try{
  try{await page.waitForFunction(()=>Number(document.getElementById("screen").dataset.deviceTime)>1000);}catch(e){console.log(await page.evaluate(()=>({status:document.getElementById("status").textContent,clock:document.getElementById("screen").dataset.deviceTime})),errors);throw e;}
 
  await page.getByText('Anonymous browser trials',{exact:true}).waitFor();
- assert.equal(trialIds.size,1);assert.equal(await page.locator('#trial-total .nixie-unlit b').count(),60);
- assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'000001');
+ assert.equal(trialIds.size,1);assert.equal(await page.locator('#trial-total .nixie-unlit b').count(),70);
+ assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'0000001');
  assert(await page.locator('#save-bank').isDisabled());assert(await page.locator('#open-loader').isDisabled());
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
  assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 496 KiB');
