@@ -34,7 +34,8 @@ try{
  const wave=await page.locator('#song1-editor canvas').boundingBox();
  await page.mouse.move(wave.x+wave.width*.2,wave.y+wave.height/2);await page.mouse.down();await page.mouse.move(wave.x+wave.width*.7,wave.y+wave.height/2);await page.mouse.up();
  assert(Number(await page.locator('#song1-editor .trim-start').inputValue())>0);
- await page.locator('#song1-editor .trim-zoom').fill('2');await page.locator('#song1-editor .trim-scroll').fill('300');
+ await page.locator('#song1-editor .trim-zoom').fill('2');
+ await page.locator('#song1-editor .export-settings summary').click();
  await page.locator('#song1-editor .trim-start').fill('0.25');await page.locator('#song1-editor .trim-end').fill('1');
  await page.locator('#song1-editor .trim-start').focus();await page.keyboard.press('ArrowUp');assert.equal(await page.locator('#song1-editor .trim-start').inputValue(),'0.26');await page.locator('#song1-editor .trim-start').fill('0.25');
  await page.locator('#song1-editor .loop-preview select').selectOption('1');await page.locator('#song1-editor .preview-section').click();
@@ -83,17 +84,17 @@ try{
  await page.goto(emulatorURL);await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
 
  const used64=await page.locator('#sample-meter').getAttribute('value');
- await page.locator('#song1-quality').selectOption('24');
+ await page.locator('#song1-quality').evaluate(e=>e.closest('details').open=true);await page.locator('#song1-quality').selectOption('24');
  await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  await page.locator('#song1-file:not([disabled])').waitFor();
  const used24=await page.locator('#sample-meter').getAttribute('value');assert(Number(used24)<Number(used64),'lower bitrate must save space');
- await page.locator('#song1-quality').selectOption('64');await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();await page.locator('#song1-file:not([disabled])').waitFor();
+ await page.locator('#song1-quality').evaluate(e=>e.closest('details').open=true);await page.locator('#song1-quality').selectOption('64');await page.locator('#song1-editor .apply-section').click();await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'too-long.wav',mimeType:'audio/wav',buffer:wav(65)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  await page.locator('#song1-editor .apply-section').click();
  await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('496 KiB'));
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
- await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
+ await page.locator('#song1-quality').evaluate(e=>e.closest('details').open=true);await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'compressed.wav',mimeType:'audio/wav',buffer:wav(65)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  await page.locator('#song1-editor .apply-section').click();

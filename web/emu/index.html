@@ -75,6 +75,23 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 
 .support-row{max-width:1160px;margin:0 auto;padding:12px 0;text-align:right}.coffee-link{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid #526546;background:#1a2116;color:#b9ef77!important;text-decoration:none;font-size:13px;line-height:1.4;letter-spacing:.025em}.coffee-link:hover{border-color:#b9ef77;background:#283321}.coffee-link:focus-visible{outline:2px solid #b9ef77;outline-offset:3px}
 .sample-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sample-slot:last-child{grid-column:1/-1}.file-wave{display:block;width:100%;height:140px;background:#11150f;border:1px solid var(--rule);margin:14px 0}.file-editor{margin-top:18px}.trim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.trim-fields label{font-size:13px}.trim-fields input{display:block;width:100%;min-width:0;margin-top:6px}.trim-estimate,.edit-source{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.edit-actions button{font-size:13px}.loop-preview{font-size:13px}.loop-preview select{margin-left:8px}#pad-editors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#pad-editors details{border:1px solid var(--rule);padding:14px;min-width:0}#pad-editors summary{cursor:pointer;overflow-wrap:anywhere}#apply-kit{margin-top:18px}@media(max-width:650px){.sample-grid,#pad-editors{grid-template-columns:1fr}}
+
+/* Sample workspace uses the regular loader's card and control grouping. */
+.sample-loader{--line:var(--rule);--muted:var(--dim)}
+.sample-loader .sample-toolbar{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:20px;align-items:start;padding:16px 0;border-block:1px solid var(--line)}
+.sample-loader .control-group{min-width:0}.sample-loader .control-group-label{display:block;font-size:10px;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;text-transform:uppercase}
+.sample-loader .control-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.sample-loader .control-row>label:not(.button){flex:1 1 90px;min-width:0}.sample-loader .control-row button,.sample-loader .button{padding:8px 10px;font-size:13px}
+.sample-loader .button{display:inline-flex;align-items:center;border:1px solid var(--line);cursor:pointer}.sample-loader .button:focus-within{outline:2px solid var(--green);outline-offset:3px}.sample-loader .button input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;margin:0;padding:0}
+.sample-loader .secondary{background:transparent;color:var(--fg)}.sample-loader .apply-section,.sample-loader #apply-kit{background:var(--green);color:#16210c}
+.sample-loader .sample-status-box{border:1px solid var(--line);padding:12px 16px;margin:16px 0}.sample-loader .sample-status-box p{margin:0}.sample-loader .sample-storage{padding:12px 0}.sample-loader .sample-storage p{margin:5px 0}.sample-loader progress{height:7px;margin:14px 0 0}
+.sample-loader .sample-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:24px}.sample-loader .sample-slot{background:#1b2016;border:1px solid var(--line);border-radius:9px;padding:22px;min-width:0}.sample-loader .sample-slot:last-child{grid-column:1/-1}
+.sample-loader .song-header{display:flex;align-items:center;justify-content:space-between;gap:12px}.sample-loader .song-header p{margin:0}.sample-loader .song-name{color:var(--green);font-size:13px}.sample-loader .control-group:has(.add-audio){margin:14px 0}
+.sample-loader .file-wave{height:164px;margin:14px 0;background:#11150d;border:1px solid #333d2b;border-radius:5px}.sample-loader .playback-controls{display:flex;flex-wrap:wrap;gap:16px;align-items:start;margin:12px 0}.sample-loader .playback-controls>.control-group{flex:1 1 200px}.sample-loader .playback-controls output{white-space:nowrap;font-size:12px}.sample-loader .playback-controls input{display:block;width:100%;min-width:0;padding:0}.sample-loader .loop-preview select{display:block;width:100%;margin:0}
+.sample-loader .workspace-drawer{border:1px solid var(--line);padding:12px 14px;margin:12px 0}.sample-loader .workspace-drawer>summary{cursor:pointer;color:var(--muted);font-size:12px}.sample-loader .workspace-drawer[open]>summary{margin-bottom:16px;color:var(--green)}.sample-loader .trim-fields{grid-template-columns:repeat(3,minmax(0,1fr))}.sample-loader .compression-controls{margin:0;min-width:0}.sample-loader .compression-controls select{margin-top:6px}.sample-loader .wave-help,.sample-loader .trim-estimate{font-size:11px;color:var(--muted)}
+.sample-loader .song-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.sample-loader .commit-actions{justify-content:flex-end;border-top:1px solid var(--line);padding-top:12px}.sample-loader .commit-actions button{min-width:160px}.sample-loader #apply-kit{margin:0}
+@media(max-width:800px){.sample-loader .sample-toolbar{grid-template-columns:1fr}.sample-loader .sample-toolbar>.control-group{border-bottom:1px solid var(--line);padding-bottom:12px}.sample-loader .sample-toolbar>.control-group:last-child{border-bottom:0;padding-bottom:0}}
+@media(max-width:650px){.sample-loader .sample-grid,.sample-loader .trim-fields{grid-template-columns:1fr}.sample-loader .song-header{flex-wrap:wrap}.sample-loader .sample-slot{padding:16px}}
+
 </style>
 <link rel="stylesheet" href="../../footer.css"><script type="module" src="../../footer.js"></script></head>
 <body>
@@ -495,7 +512,7 @@ import {inspect,join} from '../pigeon/bank.js';
 import {b64,validateArchive} from '../pigeon/device.js';
 import {crc} from '../pigeon/bank.js';
 import {stageBank,readBank,finishBank} from '../pigeon/bank-handoff.js';
-import {FileEditor} from './file-editor.js';
+import {FileEditor,arrangeSampleWorkspace} from './file-editor.js?layout=2';
 import {decodeBank,prepareBank,decodeSample,bankStorage,FM1_POOL,HEAD} from './loader.js';
 let audioContext,loaderReady=false,loaderBusy=false,samples={songs:[null,null],pads:[],unlimited:false,bitrates:[64,64],image:null},bankId=0;
 let qualityDraft=[64,64];
@@ -600,6 +617,7 @@ for(let slot=0;slot<2;slot++){
   finally{loaderBusy=false;const message=sampleStatus.textContent;refreshSamples();sampleStatus.textContent=message;}
   };
 }
+arrangeSampleWorkspace();
 function setPadEditors(sources,ranges=[]){
   for(const editor of padEditors)editor.stop();padEditors.length=0;const holder=document.getElementById('pad-editors');holder.replaceChildren();
   sources.forEach((source,index)=>{
