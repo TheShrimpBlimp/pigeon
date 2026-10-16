@@ -134,17 +134,17 @@ try{
  await page.locator('#panel-disconnect').click();assert.equal(await page.locator('g.held .face.key').count(),0);assert.deepEqual(await page.evaluate(()=>window.panelSent.at(-1)),[240,125,70,76,110,0,247]);assert(await page.evaluate(()=>window.panelTestInput.onmidimessage===null));
  // Import a bank and a session, then prove pattern/audio round trips and reload persistence.
  await page.locator('#import-session').setInputFiles({name:'saved.kob',mimeType:'application/octet-stream',buffer:Buffer.from(bank)});
- await page.getByText('Bank imported with chop settings. Current patterns are preserved.',{exact:true}).waitFor();
+ await page.getByText('Bank loaded with chop settings. Current patterns are preserved.',{exact:true}).waitFor();
  const custom=structuredClone(session),runtime=editStep(validated.objects[0].bytes,0,0,{chop:4,velocity:77,probability:66}),savedA=editStep(validated.objects[0].bytes,0,0,{chop:7,velocity:88});
  for(const [id,bytes] of [[0,runtime],[2,savedA]])custom.objects[id]={id,size:bytes.length,crc:crc(bytes),data:b64(bytes)};
  const incoming={name:'saved.pigeon',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(custom))};
  await page.locator('#import-session').setInputFiles(incoming);
- await page.getByText('Session imported: current sequence, A–D patterns, settings and samples.',{exact:true}).waitFor();
+ await page.getByText('Session loaded: current sequence, A–D patterns, settings and samples.',{exact:true}).waitFor();
  async function checkImported(){const pending=page.waitForEvent('download');await page.locator('#save-session').click();const d=await pending,a=validateArchive(JSON.parse(await fs.readFile(await d.path(),'utf8')));assert.deepEqual(a.bank,validated.bank);const current=readStep(project(a.objects[0].bytes),0,0),saved=readStep(project(a.objects[2].bytes),0,0);assert.equal(current.notes[0],63);assert.equal(current.velocity,77);assert.equal(current.probability,66);assert.equal(saved.notes[0],66);}
  await checkImported();
  await page.reload();await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});await checkImported();
  await page.locator('#import-session').setInputFiles({name:'bank-only.kob',mimeType:'application/octet-stream',buffer:Buffer.from(bank)});
- await page.getByText('Bank imported with chop settings. Current patterns are preserved.',{exact:true}).waitFor();await checkImported();
+ await page.getByText('Bank loaded with chop settings. Current patterns are preserved.',{exact:true}).waitFor();await checkImported();
  const invalid=structuredClone(custom);invalid.bank_crc^=1;
  await page.locator('#import-session').setInputFiles({name:'invalid.pigeon',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(invalid))});
  await page.getByText('Import failed: Sample bank checksum mismatch',{exact:true}).waitFor();await checkImported();
@@ -160,8 +160,8 @@ try{
  for(const route of ['/', '/webapp/emu/', '/webapp/pigeon/', '/webapp/installer/', '/webapp/editor/', '/firmware/LICENSES/']){
   await page.goto(`http://127.0.0.1:${server.address().port}${route}`);
   if(route==='/'){const callout=page.locator('.browser-trial-callout');assert(await callout.isVisible());assert.equal(await callout.locator('a').getAttribute('href'),'webapp/emu/');assert((await callout.boundingBox()).y<500);}
-  const coffee=page.locator('.coffee-link');assert.equal(await coffee.count(),1);assert.equal(await coffee.getAttribute('href'),'https://buymeacoffee.com/theshrimpb1');
-  const box=await coffee.boundingBox();assert(box&&box.y<350,`coffee link near top on ${route}`);
+  const coffee=page.locator('a[href="https://buymeacoffee.com/theshrimpb1"]');assert.equal(await coffee.count(),1);
+  if(!['/firmware/LICENSES/','/webapp/editor/'].includes(route)){assert.equal(await page.locator('footer').locator('a[href="https://buymeacoffee.com/theshrimpb1"]').count(),1);assert.equal(await page.locator('#font-nerds').count(),1);}
  }
  assert.deepEqual(errors,[]);console.log('Browser: empty boot, own audio, waveform drag, numeric trim, preview/loop, invalid trim refusal, trimmed playback metadata, editor persistence, song/kit loading, both storage modes, persistence, MIDI-only connection, clearing, lit.chr, desktop/mobile passed.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
