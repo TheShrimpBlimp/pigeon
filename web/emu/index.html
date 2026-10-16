@@ -81,7 +81,7 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 <main>
 
 <header><a href="../../">← PIGEON</a><h1>Try PIGEON.</h1><p>An FM1 running PIGEON, right in your browser. Switch on, add your own samples, and start chopping. Nothing is preloaded.</p></header>
-<div class="install-counter"><div id="trial-total" class="nixie-digits" role="img" aria-label="Trial counter loading"></div><div class="counter-caption">BROWSER TRIALS<p id="trial-count-status">Loading shared count…</p><p>One per browser · counted after switching on</p></div><p class="counter-note">Impressive count isn't it? It's actually in trinary so it looks more impressive. HA!</p></div>
+<div class="install-counter"><div id="trial-total" class="nixie-digits" role="img" aria-label="Trial counter loading"></div><div class="counter-caption">BROWSER TRIALS<p id="trial-count-status">Loading shared count…</p><p>One per browser · counted after switching on</p></div><p class="counter-note" id="trial-counter-note" hidden></p></div>
 <p id="incoming-bank" role="status" hidden></p>
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 624" aria-hidden="true"></svg>
@@ -483,12 +483,12 @@ midiDisconnect.onclick=disconnect;
 window.addEventListener('pagehide',disconnect);
 document.addEventListener('visibilitychange',()=>{if(document.hidden && disconnectController)disconnect();});
 
-import {renderNixie,counterDigits} from '../../nixie.js';
+import {renderNixie,counterDigits,counterNote} from '../../nixie.js?v=load-base-1';
 import {trialTotal,recordTrial} from './trial-count.js';
 const trialDigits=document.getElementById('trial-total'),trialCountStatus=document.getElementById('trial-count-status');
 renderNixie(trialDigits,'0000000');
 let shownTrials=0;
-function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,counterDigits(total).padStart(7,'0'));trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
+function showTrials(total){shownTrials=Math.max(shownTrials,total);total=shownTrials;renderNixie(trialDigits,counterDigits(total,undefined,7));const note=document.getElementById('trial-counter-note');note.textContent=counterNote(total);note.hidden=!note.textContent;trialDigits.setAttribute('aria-label',`${total.toLocaleString()} anonymous browser trials`);trialCountStatus.textContent='Anonymous browser trials';}
 trialTotal().then(showTrials).catch(()=>trialCountStatus.textContent='Count temporarily unavailable');
 window.addEventListener('online',()=>{if(loaderReady)recordTrial().then(showTrials).catch(()=>{});});
 import {inspect,join} from '../pigeon/bank.js';
