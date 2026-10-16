@@ -34,6 +34,25 @@ static uint32_t ko_src(void) { return ko_id() ? 3u : 1u; }
 static ko_state_t *ko_track_state(const track_t *t) { return &ko_states[FELUCCA_KO_DUAL && t==trk+2]; }
 static void (*ko_load_hook)(void);
 /* Set only around a local end-audition trigger, never MIDI or sequencer notes. */
+/* Existing project steps hold four note IDs; both sequencer views share them. */
+static volatile uint8_t ko_chord_full;
+/* Keep chord editing out of the per-audio-block inline path. */
+static __attribute__((noinline)) int ko_step_note(step_t *s,uint32_t note,uint32_t vel,int toggle) {
+    if(s->time!=ST_NOTE){memset(s,0,sizeof *s);s->time=ST_NOTE;}
+    for(uint32_t i=0;i<s->n;i++)if(s->note[i]==note){
+        if(!toggle)return 1;
+        for(uint32_t j=i+1;j<s->n;j++)s->note[j-1]=s->note[j];
+        s->note[--s->n]=0;
+        if(!s->n&&!s->hit)s->time=ST_REST;
+        return 1;
+    }
+    if(s->n>=4)return 0;
+    s->note[s->n++]=(uint8_t)note;
+    if(vel>s->vel)s->vel=(uint8_t)vel;
+    return 1;
+}
+static uint8_t ko_piano_roll[SAMPLER_PARTS];
+static uint8_t ko_piano_low[SAMPLER_PARTS] = {60,60,60};
 static uint8_t ko_tail_preview;
 static volatile uint32_t ko_tail_button_mask;
 static int ko_song(const track_t *t)

@@ -131,12 +131,12 @@ does the same for the cost files.
 ## Install
 
 Use the web installer in Chrome or Edge:
-<https://hugelton.github.io/Felucca/webapp/installer/>. It installs the released package.
+<https://theshrimpblimp.com/pigeon/webapp/installer/>. It installs the released PIGEON package.
 
 From the command line (needs `pip3 install mido python-rtmidi`):
 
 ```
-python3 tools/fm1_install.py build/felucca.fwsc
+python3 tools/fm1_install.py build/pigeon.fwsc
 python3 tools/fm1_install.py --info          # identity of the connected FM-1
 ```
 
@@ -144,7 +144,7 @@ Or, to install your own build from the web installer, make a local copy of the s
 (Web MIDI needs a secure context):
 
 ```
-python3 web/make_site.py build/pigeon.fwsc 0.3 /tmp/pigeon-site
+python3 web/make_site.py build/pigeon.fwsc 0.3.1 /tmp/pigeon-site
 cd /tmp/pigeon-site && python3 -m http.server 8000
 # open http://localhost:8000/webapp/installer/
 ```

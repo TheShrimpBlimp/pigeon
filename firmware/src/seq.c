@@ -516,7 +516,11 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         }
         return;
     }
-    if (s->time != ST_NOTE || !s->n || trk_vmode(t) != V_POLY) {
+    if (s->time != ST_NOTE || !s->n || (trk_vmode(t) != V_POLY
+#if FELUCCA_KO
+        && !ko_seq_on(t)
+#endif
+        )) {
         s->n = 0;                                   /* a fresh step */
         s->flags = 0;
         s->vel = 0;
@@ -525,6 +529,9 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
     for (k = 0; k < s->n && s->note[k] != note; k++)
         ;
     if (k == s->n) {
+#if FELUCCA_KO
+        if(ko_seq_on(t) && s->n>=4u){ko_chord_full=1;return;}
+#endif
         if (s->n < 4u)
             s->n++;
         s->note[s->n - 1u] = (uint8_t)note;
@@ -643,6 +650,20 @@ static int ko_condition_pass(const track_t *t,const step_t *s,uint32_t idx) {
     return !c || (c==1 ? (pass&1u)==1u : c==2 ? (pass&3u)==3u : c==3 ? pass==0 : pass!=0);
 }
 #endif
+#if FELUCCA_KO
+static struct {uint32_t held[4];uint8_t active,step;} ko_entry[SAMPLER_PARTS];
+static __attribute__((noinline)) void ko_entry_release(track_t *t,uint32_t note) {
+    if(t<trk || t>=trk+SAMPLER_PARTS || note>=128)return;
+    uint32_t part=(uint32_t)(t-trk);
+    if(!ko_entry[part].active)return;
+    ko_entry[part].held[note/32u]&=~(1u<<(note%32u));
+    if(ko_entry[part].held[0]|ko_entry[part].held[1]|ko_entry[part].held[2]|ko_entry[part].held[3])return;
+    if(ko_seq_on(t) && !song.playing && !cin_left && !chain.running &&
+       (song.rec&(1u<<part)) && ko_seq[part].cursor==ko_entry[part].step)
+        ko_seq[part].cursor=(uint8_t)((ko_entry[part].step+1u)%(uint32_t)t->p[P_SLEN]);
+    ko_entry[part].active=0;
+}
+#endif
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
 #if FELUCCA_KO
@@ -652,9 +673,15 @@ static void input_on(track_t *t, uint32_t note, uint32_t vel)
 #endif
 #if FELUCCA_KO
     if (ko_seq_on(t) && !song.playing && !cin_left && !chain.running && ((song.rec>>(t-trk))&1u)) {
-        uint32_t index=ko_seq[t-trk].cursor % (uint32_t)t->p[P_SLEN];step_t *s=&t->step[index];
-        memset(s,0,sizeof *s);s->time=ST_NOTE;s->n=1;s->note[0]=(uint8_t)note;s->vel=(uint8_t)vel;
-        t->seq_active=1;ko_seq[t-trk].cursor=(uint8_t)((index+1u) % (uint32_t)t->p[P_SLEN]);
+        uint32_t part=(uint32_t)(t-trk),index=ko_seq[part].cursor%(uint32_t)t->p[P_SLEN];step_t *s=&t->step[index];
+        if(!ko_entry[part].active || ko_entry[part].step!=index) {
+            memset(&ko_entry[part],0,sizeof ko_entry[part]);
+            ko_entry[part].active=1;ko_entry[part].step=(uint8_t)index;
+            memset(s,0,sizeof *s);s->time=ST_NOTE;
+        }
+        if(note<128)ko_entry[part].held[note/32u]|=1u<<(note%32u);
+        if(!ko_step_note(s,note,vel,0))ko_chord_full=1;
+        t->seq_active=1;
     }
 #endif
     last_note = (uint8_t)note;
@@ -678,6 +705,9 @@ static void input_off(track_t *t, uint32_t note)
 #endif
     if (midi_note_held(t, note))
         return;
+#if FELUCCA_KO
+    ko_entry_release(t,note);
+#endif
 #if FELUCCA_KO
     if(ko_kit(t))for(uint32_t k=0;k<NVOICE;k++)if(ko_roll[k].note==note)ko_roll[k].on=0;
 #endif
@@ -902,6 +932,9 @@ static void keyboard_block(void)
 /* -------------------------------------------------------- sequencer --- */
 static void seq_start(void)
 {
+#if FELUCCA_KO
+    memset(ko_entry,0,sizeof ko_entry);
+#endif
     uint32_t i;
     motion_begin();
 #if FELUCCA_KO
@@ -949,6 +982,9 @@ static void seq_release(track_t *t)
 
 static void seq_stop(void)
 {
+#if FELUCCA_KO
+    memset(ko_entry,0,sizeof ko_entry);
+#endif
 #if FELUCCA_KO
     memset(ko_live,0,sizeof ko_live);memset(ko_roll,0,sizeof ko_roll);
 #endif

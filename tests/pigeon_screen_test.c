@@ -29,6 +29,14 @@ int main(void) {
         song.sel=screen_track;
         for(screen_view=0;screen_view<29;screen_view++) {
             ko.view=screen_view;ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;
+            if(screen_view==7) {
+                ko_piano_roll[song.sel]=1;
+                for(uint32_t low=0;low<=120;low+=12) {
+                    ko_piano_low[song.sel]=(uint8_t)low;
+                    ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;
+                }
+                ko_piano_roll[song.sel]=0;
+            }
         }
     }
     for(screen_track=0;screen_track<SAMPLER_PARTS;screen_track++) {

@@ -1286,7 +1286,7 @@ static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l
     cv_blit(SPL_X0, y);
 }
 #ifndef PIGEON_SPLASH_TITLE
-#define PIGEON_SPLASH_TITLE "PIGEON V0.3"
+#define PIGEON_SPLASH_TITLE "PIGEON V0.3.1"
 #endif
 static void draw_splash(void)
 {

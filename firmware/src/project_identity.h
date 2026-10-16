@@ -3,7 +3,7 @@
 #if FELUCCA_SAMPLER_ONLY
 #define FW_DISPLAY_NAME "PIGEON"
 #define FW_DISPLAY_TITLE "PIGEON"
-#define FW_DISPLAY_VERSION "v0.3"
+#define FW_DISPLAY_VERSION "v0.3.1"
 #define FW_DISPLAY_DESCRIPTION "Performance sampler"
 #else
 #define FW_DISPLAY_NAME "Felucca"

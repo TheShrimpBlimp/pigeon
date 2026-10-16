@@ -78,3 +78,11 @@ Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 
 ### Audition a chop ending
 
 Hold **EDIT** and press a chop key to audition its final two seconds. Short chops play from the start. ADPCM uses the nearest decoder checkpoint after the two-second position; MP3 seeks directly to that position. The audition plays once, leaves chop boundaries unchanged, and bypasses recording, quantization and MIDI output. Release EDIT for normal playback. Available on both song tracks; drums keep their normal behavior.
+
+## v0.3.1 sequencer grid and piano roll
+
+Press SEQ to open the grid; press SEQ again to switch to the piano roll. SEQ alternates views and HOME exits. Both edit the same **1–64-step sequence**. K3 selects the step, K4 changes length while stopped, and PRESETS scrolls piano-roll rows.
+
+Both views support **four notes per step**. While unarmed and stopped, tap keys to add/remove individual notes on the selected step. With REC armed and transport stopped, hold a chord and release all keys to advance once. During playback, REC records live. A fifth note does not replace a stored note. The grid displays `2N`, `3N` or `4N` for chords; the roll draws each note. REC stays lit when armed in every LED mode.
+
+See [v0.3.1 release notes and validation limits](PIGEON_V031_RELEASE.md).

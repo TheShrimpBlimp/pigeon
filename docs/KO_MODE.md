@@ -87,7 +87,7 @@ chop copy/swap/move, envelopes, tempo tools and mixer controls.
 
 Press SEQ to open the selected track’s grid. K1 sets BPM, K2 chooses TEMPO or
 SAMPLE END timing, K3 selects a step and K4 sets 1–64-step length while stopped.
-REC arms entry: keys write steps while stopped or record live while playing.
+Press SEQ again to alternate grid and piano roll; PRESETS scrolls the roll’s note rows. Both views store up to four notes per step. While stopped and unarmed, keys toggle individual notes on the selected step. REC arms entry: hold a chord and release all keys to advance once while stopped, or record live while playing. REC remains lit while any track is armed, including inverted LED mode.
 ENV opens step details; LFO opens timing and recording preferences. PLAY
 starts/stops playback. Timing preferences belong to the sample-bank metadata;
 sequence notes belong to the current phrase.

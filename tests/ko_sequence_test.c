@@ -23,8 +23,8 @@ int main(void)
     page_tap(B_SEQ);bad+=check("SEQ opens sixteen-step mode",ko.view==7 && ko_seq[0].enabled && trk[0].p[P_SLEN]==16);
     transport_req=0;rec_tap();bad+=check("REC arms stopped step entry without starting transport",song.rec==1 && !song.playing && !transport_req);
     ko_seq[0].cursor=15;input_on(&trk[0],76,100);
-    bad+=check("stopped step entry writes chop and wraps after step sixteen",trk[0].step[15].n==1 && trk[0].step[15].note[0]==76 && ko_seq[0].cursor==0);
-    input_off(&trk[0],76);bad+=check("record LED shows current white-key step",ko_key_leds()==1u);
+    bad+=check("stopped step entry writes chop before release",trk[0].step[15].n==1 && trk[0].step[15].note[0]==76 && ko_seq[0].cursor==15);
+    input_off(&trk[0],76);bad+=check("release wraps after step sixteen",ko_seq[0].cursor==0);bad+=check("record LED shows current white-key step",ko_key_leds()==1u);
     ko_seq[0].cursor=3;press(B_EDIT);bad+=check("EDIT inserts a rest and advances cursor",trk[0].step[3].time==ST_REST && ko_seq[0].cursor==4);
     song.rec=0;for(uint32_t p=0;p<SAMPLER_PARTS;p++)for(uint32_t i=0;i<NSTEP;i++)step_clear(&trk[p].step[i]);
     for(uint32_t i=0;i<2;i++){step_t *s=&trk[0].step[i];s->time=ST_NOTE;s->n=1;s->note[0]=60+i;s->vel=100;}

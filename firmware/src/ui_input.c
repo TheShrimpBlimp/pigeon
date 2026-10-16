@@ -459,6 +459,11 @@ static void ui_leds(void)
     }
     if (song.playing || (seq_counting() && cin_pos < click_beat_len() / 4u))   /* counting in: green on each beat */
         nl[LED_PLAY_GREEN >> 3] |= (uint8_t)(1u << (LED_PLAY_GREEN & 7u));
+#if FELUCCA_SAMPLER_ONLY
+    /* REC is a transport safety indicator, never inverted or suppressed by a layer. */
+    led_clear(nl,panel.btn[B_REC]);led_clear(nb,panel.btn[B_REC]);
+    led_put(nl,panel.btn[B_REC],song.rec!=0u);
+#endif
     fm1_led_dim_level(mode == LEDS_DIM_LO);
     for (c = 0; c < FM1_NCOL; c++) {
         fm1_led_dim[c] = nd[c];
@@ -608,6 +613,7 @@ static int rec_tap(void)                                /* 1: the arming changed
     }
     song.rec ^= bit;
 #if FELUCCA_KO
+    if(song.sel<SAMPLER_PARTS)memset(&ko_entry[song.sel],0,sizeof ko_entry[song.sel]);
     if(ko_home() && ko.view==7 && !song.playing && !seq_counting()) {ui.force=1;ui_message(song.rec&bit ? "KEYS WRITE STEPS" : "RECORD OFF");return 1;}
 #endif
     ui.force = 1;                                     /* also refresh the status on MENU / ABOUT */
@@ -1339,7 +1345,9 @@ static int page_tap(uint32_t b)
         if(!ko_ready()) {ui_message("SET UP SAMPLER FIRST");return 1;}
         if(!ko_seq_on(TSEL) && transport_busy()) {ui_message("STOP TO ENABLE SEQUENCER");return 1;}
         ko_seq[song.sel].enabled=1;
-        ko.view=ko.view==7?0:7;go_home();ui.force=1;return 1;
+        if(ko.view==7) ko_piano_roll[song.sel]^=1u;
+        else {ko.view=7;ko_piano_roll[song.sel]=0;}
+        go_home();ko_ui_invalidate();ui.force=1;return 1;
     }
     if(ko_home() && song.sel!=1 && (ko.view==23 || ko.view==27) && b==B_FX){ko.view=ko.view==27?23:27;ui.force=1;return 1;}
     if(ko_home() && ko.view==23 && b==B_EDIT){ko_tap_tempo();return 1;}
@@ -1463,6 +1471,9 @@ static void ui_notices(void)
 static void ui_input(void)
 {
     pigeon_ui_guard();
+#if FELUCCA_KO
+    if(ko_chord_full){ko_chord_full=0;ui_message("4 NOTES PER STEP");}
+#endif
 #if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
     ko_tail_button_mask = !ui.menu && !ui.confirm && !name_on() && !ui.uboot ?
         1u << panel.btn[B_EDIT] : 0u;
@@ -1807,8 +1818,10 @@ static void ui_input(void)
         for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {
             int32_t pad=ko_pad(key);if(pad<0 || (song.sel==1 && pad>=16)) continue;
             uint32_t step=ko_seq[song.sel].cursor;step_undo_take(TSEL,0);
-            fm1_irq_off();step_t *n=&TSEL->step[step];if(n->time!=ST_NOTE || !n->n)n->vel=100;n->time=ST_NOTE;n->n=1;
-            n->note[0]=(uint8_t)(60+pad+(song.sel==1?0:ko.bank*KO_PADS));fm1_irq_on();motion_undo_done(TSEL);ui.force=1;
+            fm1_irq_off();step_t *n=&TSEL->step[step];
+            int added=ko_step_note(n,(uint32_t)(60+pad+(song.sel==1?0:ko.bank*KO_PADS)),100,1);
+            fm1_irq_on();motion_undo_done(TSEL);ui.force=1;
+            if(!added)ui_message("4 NOTES PER STEP");
         }
     }
     if(ko_home() && song.sel==1 && notes) for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {int32_t pad=ko_pad(key);if(pad>=0 && pad<16) {ko_kit_pad=(uint8_t)pad;ui.force=1;}}
@@ -1838,7 +1851,10 @@ static void ui_input(void)
     if (!lay && (s = panel_enc(EN_PRESET)) != 0) {
 #if FELUCCA_KO
         if (ko_home()) {
-            if(ko.view==14) {ko_seq[song.sel].cursor=(uint8_t)clamp((int32_t)ko_seq[song.sel].cursor+s,0,TSEL->p[P_SLEN]-1);ui.force=1;}
+            if(ko.view==7 && ko_piano_roll[song.sel]) {
+                ko_piano_low[song.sel]=(uint8_t)clamp((int32_t)ko_piano_low[song.sel]+s,0,120);ui.force=1;
+            }
+            else if(ko.view==14) {ko_seq[song.sel].cursor=(uint8_t)clamp((int32_t)ko_seq[song.sel].cursor+s,0,TSEL->p[P_SLEN]-1);ui.force=1;}
             else if(ko.view==8 || ko.view==9) ko_arrange_turn(0,s);
             else if (song.sel!=1) ko_select((uint32_t)clamp((int32_t)ko.selected + s, 0, KO_CHOPS - 1));
         }

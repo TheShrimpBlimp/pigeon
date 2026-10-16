@@ -5,7 +5,7 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **The Shrimp Blimp**. Current release: **v0.3**, with **496 KiB** shared sample storage. The main release does not include the experimental screen reader. Basic installation and sample/chop preservation were verified on an FM1; extended hardware checks remain listed in the release notes.
+Created and directed by **The Shrimp Blimp**. Current release: **v0.3.1**, with **496 KiB** shared sample storage. The main release does not include the experimental screen reader. Basic installation and sample/chop preservation were verified on an FM1; extended hardware checks remain listed in the release notes.
 
 ## What it does
 
@@ -72,7 +72,8 @@ PIGEON. See the release notes for completed installation checks and remaining ph
 
 - [Start-to-finish tutorial](docs/KO_MODE.md)
 - [Quick control reference](docs/PIGEON_CONTROLS.md)
-- [v0.3 release status and pending checks](docs/PIGEON_V03_RELEASE.md)
+- [v0.3.1 release notes and validation limits](docs/PIGEON_V031_RELEASE.md)
+- [v0.3 release history](docs/PIGEON_V03_RELEASE.md)
 - [Sample storage and transfers](docs/KO_STORAGE.md)
 - [Sample library and complete archives](tools/pigeon_library.py)
 - [Contributing](CONTRIBUTING.md)
@@ -142,3 +143,5 @@ computer. Choose the real 496 KiB FM1 sample pool or unlimited browser storage.
 Connect a MIDI controller (including the FM1) to play its keys; use the on-screen
 knobs and buttons to edit. The emulator credits Charles Vestal’s FM1 X0X browser
 code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.
+
+In v0.3.1, press SEQ again to alternate the step grid and piano roll. Both support four notes per step: unarmed keys toggle notes; stopped REC entry advances when all chord keys are released. REC remains lit when armed in every LED mode.

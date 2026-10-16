@@ -416,6 +416,59 @@ static const char *ko_seq_status(void)
     if(song.rec & (1u<<song.sel)) return song.playing ? "RECORDING / OCT STEP SIZE" : "REC ARMED / OCT STEP SIZE";
     return song.playing ? "PLAYING / OCT STEP SIZE" : "STOPPED / REC TO ARM";
 }
+/* PIGEON piano roll: note/chop keys vertically, sixteen of up to 64 steps horizontally.
+ * Draw buffered columns only when their notes/cursor change; never clear the whole
+ * graph during playback. PRESETS scrolls the visible note range. */
+static void ko_piano_draw(int force, uint32_t current, uint32_t base, uint32_t length)
+{
+    static uint32_t signatures[16];
+    static uint32_t last_low=~0u, last_part=~0u;
+    uint32_t low=ko_piano_low[song.sel];
+    int labels=force || last_low!=low || last_part!=song.sel;
+    last_low=low;last_part=song.sel;
+    if(labels) {
+        cv_begin(39,80,T_BG);
+        for(uint32_t row=0;row<8;row++) {
+            uint32_t n=low+7u-row;
+            int black=(n%12u==1u || n%12u==3u || n%12u==6u || n%12u==8u || n%12u==10u);
+            char label[12];note_name(label,n);
+            uint16_t key_bg=black?T_MID:T_TEXT;
+            cv_rect(0,row*10,38,9,key_bg);
+            /* Blend glyph edges against the key, rather than the graph background. */
+            cv_text_on(4,(int32_t)row*10-1,&AF_S,label,T_BG,key_bg);
+        }
+        cv_blit(6,112);
+    }
+    for(uint32_t col=0;col<16;col++) {
+        uint32_t index=base+col;const step_t *step=&TSEL->step[index];
+        uint32_t sig=low*131u+index+((uint32_t)song.sel<<16)+(index==current?0x800000u:0u)+step->time;
+        sig=sig*33u+step->vel;
+        sig=sig*33u+step->n;
+        sig=sig*33u+step->hit;
+        for(uint32_t n=0;n<step->n && n<4;n++)sig=sig*33u+step->note[n];
+        sig=sig*33u+length;
+        if(!labels && signatures[col]==sig)continue;
+        signatures[col]=sig;
+        cv_begin(11,80,T_BG);
+        for(uint32_t row=0;row<8;row++) {
+            cv_rect(0,row*10,11,1,T_MID);
+            if(index>=length)cv_rect(1,row*10+1,10,8,T_MID);
+        }
+        cv_rect(0,0,1,80,col%4u?T_MID:T_TEXT);
+        if(index<length && step->time==ST_NOTE)
+            for(uint32_t n=0;n<step->n && n<4;n++)if(step->note[n]>=low && step->note[n]<low+8u) {
+                uint32_t y=(low+7u-step->note[n])*10u;
+                cv_rect(2,y+2,8,7,T_THEME);
+            }
+        if(index<length && step->time==ST_NOTE)
+            for(uint32_t lane=0;lane<NLANE;lane++)if((step->hit>>lane)&1u) {
+                uint32_t n=DRUM_LANE_NOTE[lane];
+                if(n>=low && n<low+8u)cv_rect(2,(low+7u-n)*10u+2,8,7,T_THEME);
+            }
+        if(index==current)cv_rect(10,0,1,80,T_ACCENT);
+        cv_blit(46+col*11,112);
+    }
+}
 static void ko_seq_draw(int force)
 {
     ko_line(199,ko_seq_status(),T_THEME);
@@ -423,14 +476,19 @@ static void ko_seq_draw(int force)
     uint32_t current=song.playing ? TSEL->seq_idx : ko_seq[song.sel].cursor;
     uint32_t base=(current/16u)*16u, length=TSEL->p[P_SLEN];
     char status[48], value[12];fmt_int(value,length);
-    str_cpy(status,"K4 LENGTH ",sizeof status);str_cpy(status+str_len(status),value,sizeof status-str_len(status));
+    str_cpy(status,ko_piano_roll[song.sel]?"ROLL / K4 LEN ":"K4 LENGTH ",sizeof status);str_cpy(status+str_len(status),value,sizeof status-str_len(status));
     fmt_int(value,base/16u+1u);str_cpy(status+str_len(status)," / PAGE ",sizeof status-str_len(status));
     str_cpy(status+str_len(status),value,sizeof status-str_len(status));ko_line(93,status,T_THEME);
+    if(ko_piano_roll[song.sel]) {
+        ko_piano_draw(force,current,base,length);
+        return;
+    }
     for(uint32_t i=0;i<16;i++) {
         uint32_t step=base+i;const step_t *note=&TSEL->step[step];
         int filled=note->time==ST_NOTE && (note->n||note->hit), active=step==current, enabled=step<length;
         uint32_t sig=step | ((uint32_t)filled<<6) | ((uint32_t)active<<7) | ((uint32_t)enabled<<8) |
             ((uint32_t)song.sel<<9) | ((uint32_t)song.rec<<12) | ((uint32_t)song.playing<<20) | ((uint32_t)note->note[0]<<21);
+        sig=sig*5u+note->n;
         if(!force && state[i]==sig+1u) continue;
         state[i]=sig+1u;
         uint32_t x=12+(i&7u)*27,y=115+(i>>3)*30;
@@ -440,7 +498,8 @@ static void ko_seq_draw(int force)
         cv_rect(0,0,24,1,ink);cv_rect(0,27,24,1,ink);cv_rect(0,0,1,28,ink);cv_rect(23,0,1,28,ink);
         if(active && enabled) cv_rect(1,1,22,26,T_ACCENT);
         cv_text(0,3,&AF_S,number,active&&enabled?T_BG:ink);
-        if(enabled && filled) {char id[12];fmt_int(id,note->n ? note->note[0]-59u : 0);
+        if(enabled && filled) {char id[12];fmt_int(id,note->n>1 ? note->n : note->n ? note->note[0]-59u : 0);
+            if(note->n>1)str_cpy(id+str_len(id),"N",sizeof id-str_len(id));
             cv_text(0,14,&AF_S,id,active?T_BG:T_THEME);}
         else if(enabled) cv_rect(9,23,6,2,T_BG);
         else cv_rect(5,23,14,1,T_MID);
@@ -515,8 +574,8 @@ static void ko_draw(void)
         str_cpy(timing+str_len(timing),N_DIV[TSEL->p[P_SDIV]],sizeof timing-str_len(timing));
         ko_line(74,timing,T_THEME);
         ko_seq_draw(layout);
-        ko_line(178,"K3 STEP / EDIT CLEAR+NEXT",T_MID);
-        ko_line(220,"ENV DETAIL / LFO SWING",T_MID);
+        if(!ko_piano_roll[song.sel])ko_line(178,"K3 STEP / EDIT CLEAR+NEXT",T_MID);
+        ko_line(220,ko_piano_roll[song.sel]?"SEQ GRID / PRESETS ROWS":"SEQ ROLL / ENV / LFO",T_MID);
     } else if(ko.view==23) {
         ko_page("TEMPO / LOOP", "EDIT TAP TEMPO", "ENV BACK / FX SYNC");
         ko_fx_number(0,"K1 TEMPO",song.g[G_BPM],"BPM",0);
