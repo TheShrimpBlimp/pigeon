@@ -483,7 +483,7 @@ midiDisconnect.onclick=disconnect;
 window.addEventListener('pagehide',disconnect);
 document.addEventListener('visibilitychange',()=>{if(document.hidden && disconnectController)disconnect();});
 
-import {renderNixie,counterDigits,counterNote} from '../../nixie.js?v=load-base-1';
+import {renderNixie,counterDigits,counterNote} from '../../nixie.js?v=random-base-1';
 import {trialTotal,recordTrial} from './trial-count.js';
 const trialDigits=document.getElementById('trial-total'),trialCountStatus=document.getElementById('trial-count-status');
 renderNixie(trialDigits,'0000000');
