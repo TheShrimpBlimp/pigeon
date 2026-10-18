@@ -17,6 +17,11 @@ const browser=await chromium.launch({headless:true,args:['--autoplay-policy=no-u
 try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.error('browser:',m.text());});page.on('requestfailed',r=>console.error('request failed',r.url(),r.failure()));
  await page.goto(`http://127.0.0.1:${server.address().port}/webapp/emu/`);
+ const header=await fs.readFile('build/gen/ann_words.h','utf8'),dictionary=header.match(/https:[^"\n]+/)[0].split('/').at(-1);
+ const bundled=await page.request.get(`http://127.0.0.1:${server.address().port}/webapp/emu/words/${dictionary}`);
+ assert.equal(bundled.status(),200,'current reader dictionary must be bundled at its exact filename');
+ assert.equal(await bundled.text(),await fs.readFile(`web/words/${dictionary}`,'utf8'));
+
  assert.equal(await page.locator('#reader-enable').isChecked(),false);
  await page.locator('#go').click();try{await page.locator('#start').waitFor({state:'hidden'});}catch(error){console.error('Start status:',await page.locator('#status').textContent(),'Page errors:',errors,'Start button:',await page.locator('#go').textContent(),'disabled:',await page.locator('#go').isDisabled());throw error;}
  await page.waitForFunction(()=>Number(document.getElementById('screen').dataset.deviceTime)>3200);

@@ -29,6 +29,7 @@ emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -w ${EMU_CFLAGS:-} \
     -o build/emu/felucca.wasm web/emu/felucca_web.c firmware/src/ko_mp3.c $MAD_SOURCES
 [ "${EMU_PREVIEW:-1}" = 0 ] && PREVIEW='' || PREVIEW=' (preview)'
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@PREVIEW@/$PREVIEW/g" web/emu/index.html > build/emu/index.html
+rm -rf build/emu/words
 cp -R web/words build/emu/words
 cp web/emu/reader-words.js web/emu/reader.js build/emu/
 cp web/emu/worklet.js web/emu/controller.js web/emu/loader.js web/emu/file-editor.js web/emu/trial-count.js build/emu/
