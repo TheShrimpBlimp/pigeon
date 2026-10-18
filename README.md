@@ -5,10 +5,9 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **The Shrimp Blimp**. This checkout prepares **v0.4**;
-the public installer remains on v0.3.1 until release approval. v0.4 includes
+Created and directed by **The Shrimp Blimp**. The current release is **v0.4**; v0.4 includes
 screen-reader support in the standard firmware. See the [v0.4 tutorial](docs/PIGEON_V04_GUIDE.md)
-and [release checklist](docs/PIGEON_V04_RELEASE.md) before the final hardware test.
+and [release checklist](docs/PIGEON_V04_RELEASE.md) for controls and validation details.
 Both songs and drums share **496 KiB** of sample storage.
 
 ## What it does
@@ -175,6 +174,6 @@ Standard v0.4 builds include FM-1 Screen Reader support for hardware and the
 emulator, including the piano roll, chords, queue and scratch decks. It starts
 silent until connected/enabled. [Setup and dictionary](docs/SCREEN_READER.md).
 
-The [v0.4 guide](docs/PIGEON_V04_GUIDE.md) is the current control map. Earlier
-v0.4 development firmware was flashed during development; the final candidate
-still needs its own short hardware smoke test before deployment approval.
+The [v0.4 guide](docs/PIGEON_V04_GUIDE.md) is the current control map. The exact v0.4 release passed the owner’s hardware smoke test, including recording,
+queues, scratch, note timing and save/reboot. Samples and all ten stored
+project/settings objects were unchanged after flashing.

@@ -1,6 +1,6 @@
 # PIGEON performance and compatibility audit
 
-Source audit and host validation for the local v0.4 release candidate. Earlier development hardware checks are historical; the final candidate still needs the short physical smoke test before deployment.
+Source audit and host validation for PIGEON v0.4. The exact release passed the owner’s physical hardware smoke test, with samples and all ten project/settings objects preserved.
 
 ## Audio and display
 
@@ -83,7 +83,7 @@ same-stub update has none. AddressSanitizer and UndefinedBehaviorSanitizer pass
 on the stub and recovery tests. Existing tests confirm all reclaimed sample
 extents are preserved, and a legacy downgrade with an active bank is refused.
 
-Hardware verification is pending. A complete rebuild on 2026-10-13 reproduced
+Physical interrupted-update verification remains pending. A historical rebuild on 2026-10-13 reproduced
 both the application and installable package byte for byte, without changing the
 pinned stub. SHA-256:
 

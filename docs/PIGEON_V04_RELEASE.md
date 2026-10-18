@@ -1,9 +1,10 @@
 # PIGEON v0.4 release checklist
 
-This is a local release candidate. Public v0.3.1 stays online until deployment is
-explicitly approved. Do not flash or publish as part of candidate preparation.
-The final automated validation report and candidate manifest identify the exact
-files to test; they do not claim a physical hardware pass.
+PIGEON v0.4 passed automated release validation and the owner’s hardware smoke
+test. The exact package was flashed successfully; the complete sample bank and
+all ten project/settings objects matched the pre-flash archive byte for byte.
+The owner approved deployment. Physical interrupted-update testing remains
+separate and unverified.
 
 ## What changes
 

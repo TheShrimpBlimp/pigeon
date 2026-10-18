@@ -1,7 +1,7 @@
 # PIGEON screen-reader support
 
-Screen-reader support is included in standard v0.4 firmware. The published v0.3.1
-release does not include it. A separate reader fork is no longer needed.
+Screen-reader support is included in standard v0.4 firmware. Earlier v0.3.1
+firmware does not include it. A separate reader fork is no longer needed.
 
 ## Connect an FM1
 
@@ -11,16 +11,16 @@ release does not include it. A separate reader fork is no longer needed.
 3. Choose browser speech or your own screen reader.
 4. Use **WHERE** to read the current page and control values again.
 
-For this local release candidate, load `web/words/84859cb5f4.json` into the
-reader manually. The matching hosted dictionary will accompany the release.
+If the reader requests a dictionary, download the matching
+[dictionary](https://theshrimpblimp.com/pigeon/webapp/emu/words/84859cb5f4.json)
+and load it into the reader manually.
 Connecting the reader does not change samples, sessions or settings.
 
 ## Emulator
 
 Enable **screen announcements**, then choose **My screen reader** or **Browser
 voice**. Use **Read current screen** to repeat the page. Announcements start off.
-The development emulator includes its dictionary; this support is not yet on the
-published emulator.
+The published v0.4 emulator includes its matching dictionary.
 
 ## Announcements
 

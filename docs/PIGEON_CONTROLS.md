@@ -46,13 +46,13 @@ SCL opens Patterns. Choose A–D, stop playback and release the pads, then press
 
 ## Installing from another firmware
 
-Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; basic installation and sample/chop preservation were checked; extended hardware verification remains pending.
+Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; the v0.4 hardware smoke test passed, with samples and all project/settings objects preserved.
 
 ## Unsaved patterns
 
 Patterns shows UNSAVED when the current phrase differs from its saved state or the destination is empty. Selecting an occupied slot with unsaved work warns first; select the same slot again to discard those edits and load it. SAVE stores the phrase, timing, automation and arrangement to the selected A–D destination. Sample/chop settings remain in the shared bank.
 
-See [the first-song walkthrough and v0.4 release gate](PIGEON_V04_RELEASE.md) for the complete workflow and pending physical checks.
+See [the first-song walkthrough and v0.4 release gate](PIGEON_V04_RELEASE.md) for the complete workflow and validation limits.
 
 ## Copy a whole chop to another key
 

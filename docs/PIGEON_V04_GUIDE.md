@@ -1,6 +1,6 @@
 # PIGEON v0.4 tutorial
 
-These controls describe the local v0.4 release candidate. The published release remains v0.3.1 until deployment is approved.
+These controls describe the released PIGEON v0.4 firmware, verified on physical FM1 hardware.
 For build status and verification notes, see [development notes](PIGEON_V04_DEVELOPMENT.md).
 
 ## Install and make your first phrase

@@ -1,24 +1,15 @@
 # PIGEON v0.4 development notes
 
-The published release remains v0.3.1. Use the [v0.4 guide](PIGEON_V04_GUIDE.md)
+PIGEON v0.4 is released. Use the [v0.4 guide](PIGEON_V04_GUIDE.md)
 for controls and the [note-timing guide](PIGEON_NOTE_TIMING.md) for editing limits.
 
 ## Current status
 
-The previously flashed development FM1 runs v0.4-dev with queue mode, SEL end audition, REC fixes,
-scratch controls, cent tuning, saved deck preferences, per-note timing and screen
-reader support. Boot and data preservation were verified after the October 16,
-2026 flash. The bank and stored settings/patterns matched the backup; the live
-project matched after migration from 111 to 115 parameters.
-
-The record-centre pigeon and illustrated empty-song page were added after that
-flash. They are implemented locally but are not yet on the FM1. No v0.4 build
-has been published.
-
-Focused checks cover playback, queue order/removal, timing, persistence, text
-layout and reader announcements. Remaining checks include hardware listening,
-recording behavior, real screen-reader use and physical FM1 panel control of the
-emulator. These checks are distinct from successful builds and USB verification.
+The exact v0.4 package passed the automated release suite and the owner’s
+hardware smoke test. Flashing and read-back preserved the complete bank and
+all ten project/settings objects. Queue, audition, recording, note timing,
+scratch, saving and busy playback were confirmed by the owner. Physical
+interrupted-update testing remains separate and unverified.
 
 ## Storage and audio
 
@@ -112,7 +103,7 @@ safe. It is a separate performance project, not a requirement for these backport
 Release preparation now runs the full product/recovery suites, target budgets,
 reader audit, WebAssembly and browser checks against the v0.4 candidate. See the
 [v0.4 release gate](PIGEON_V04_RELEASE.md) and local validation report for results.
-The final candidate has not been flashed or published.
+The final package passed flashing, read-back and the owner’s hardware smoke test.
 
 ## Release-candidate validation
 
@@ -125,6 +116,6 @@ with 104/111-parameter editing and all 15 conditions covered by compatibility
 tests. The stock V15 fixture matches its pinned checksum; stock-return and
 modified-stock rejection tests pass.
 
-The exact final candidate has not been flashed. Hardware verification and explicit
-deployment approval remain the final release gates. See the candidate manifest
+The exact final package passed the owner’s hardware smoke test and deployment
+was approved. See the candidate manifest
 and generated release report for hashes and detailed logs.

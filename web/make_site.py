@@ -63,7 +63,7 @@ def main(pkg, version, out):
         strip_module((HERE / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
         strip_module((HERE / "fm1backup.js").read_text(encoding="utf-8"))
     name = f"pigeon-{re.sub(r'[^A-Za-z0-9.-]', '-', version)}.fwsc"
-    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "PIGEON v0.4. Back up a complete session before updating; v0.3.1 cannot read v0.4 projects." if version == "0.4" else "Beta candidate: hardware verification pending." if "beta" in version else ("PIGEON v0.3.1. Installation, reboot, sample and session preservation verified on physical FM1; new control checks pending." if version == "0.3.1" else "PIGEON v0.3. Tested on physical M-VAVE FM1 hardware." if version == "0.3" else "Development build: see its validation notes before installing.")})
+    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "PIGEON v0.4. Verified on physical FM1 hardware. Back up a complete session before updating; v0.3.1 cannot read v0.4 projects." if version == "0.4" else "Beta candidate: hardware verification pending." if "beta" in version else ("PIGEON v0.3.1. Installation, reboot, sample and session preservation verified on physical FM1; new control checks pending." if version == "0.3.1" else "PIGEON v0.3. Tested on physical M-VAVE FM1 hardware." if version == "0.3" else "Development build: see its validation notes before installing.")})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")

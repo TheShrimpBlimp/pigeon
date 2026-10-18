@@ -4,7 +4,7 @@ PIGEON has three tracks: Song 1, Drums and Song 2. Each song is one audio
 source with up to 32 chops; a source can combine several imported files.
 There is no fourth playable track in the sampler profile.
 
-This guide describes PIGEON v0.4 and Sample Loader 2.0: 496 KiB shared storage, eight shared song voices and four dedicated drum voices. Basic hardware installation and sample/chop preservation were verified; extended hardware performance checks remain pending.
+This guide describes PIGEON v0.4 and Sample Loader 2.0: 496 KiB shared storage, eight shared song voices and four dedicated drum voices. The v0.4 hardware smoke test passed, including busy playback and sample/project preservation.
 
 ## 1. Prepare your FM1
 
@@ -14,7 +14,7 @@ documented stock-return procedure, then install PIGEON. Use a charged FM1,
 a direct USB data cable and desktop Chrome or Edge. Stop playback, release
 keys, close other MIDI apps and keep the computer awake during transfers.
 
-The public installer stays on v0.3.1 until release approval. The local v0.4 candidate is a separate package; building locally does not update your FM1.
+The public installer serves v0.4. Building locally does not update your FM1.
 See [building](https://github.com/TheShrimpBlimp/pigeon/blob/main/BUILDING.md) and [recovery](PIGEON_RECOVERY.md).
 
 ## 2. Make a song in Sample Loader 2.0
