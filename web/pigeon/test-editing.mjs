@@ -105,6 +105,16 @@ assert.equal(advanced.probability, 100);
 assert.throws(() => editStep(bytes, 0, 10, { pitch: 25 }));
 assert.throws(() => editStep(bytes, 0, 10, { nudge: 8 }));
 assert.throws(() => editStep(bytes, 0, 10, { condition: 16 }));
+// Editing the first chop/velocity must not silently replace a four-note chord.
+{
+ const chord=bytes.slice(),p=project(chord),o=68+p.np+2+13*9;
+ chord.set([60,63,67,70],o);chord[o+4]=(chord[o+4]&96)|4;
+ let hash=2166136261;for(const v of chord.subarray(0,3836))hash=Math.imul(hash^v,16777619)>>>0;
+ new DataView(chord.buffer).setUint32(3836,hash,true);
+ const edited=readStep(project(editStep(chord,0,13,{chop:9,velocity:110})),0,13);
+ assert.equal(edited.n,4);assert.deepEqual(edited.notes,[68,63,67,70]);
+ assert.equal(readStep(project(editStep(chord,0,13,{chop:0})),0,13).n,0);
+}
 // Repack real current-format data to older parameter counts: editing must retain
 // their actual strides, chain/motion locations, and opaque tail bytes.
 for(const np of [104,111]) {

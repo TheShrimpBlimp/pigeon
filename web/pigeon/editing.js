@@ -313,7 +313,7 @@ export function editStep(bytes, track, index, change) {
     if (!Number.isInteger(n) || n < 0 || n > 32) throw Error("Invalid chop");
     b[o] = (b[o] & 128) | (n ? 59 + n : 0);
     if (n) {
-      b[o + 4] = (b[o + 4] & 96) | 1;
+      b[o + 4] = (b[o + 4] & 96) | Math.max(1,s.n);
       if (!s.velocity) b[o + 5] = (b[o + 5] & 128) | 100;
     } else {
       b.fill(0, o, o + 9);
