@@ -1,0 +1,41 @@
+listen
+clear
+page 1
+wait 240
+said Effects amounts
+count 1
+not-said Knob
+not-said Home returns
+clear
+turn 2 1
+said delay
+not-said Knob
+not-said Effects
+count 1
+clear
+where
+said Knob 1, filter
+said Knob 2, delay
+not-said Edit resets
+clear
+page 7
+wait 240
+clear
+press SEQ
+said Piano roll
+count 1
+not-said Knob
+clear
+turn 3 1
+said Step 2
+count 1
+page 31
+chord 60 64 67 71
+clear
+where
+said Knob 2, length
+said Knob 3, nudge
+not-said Home returns
+message CANNOT SAVE
+said CANNOT SAVE
+disconnect

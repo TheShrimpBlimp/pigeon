@@ -4,3 +4,9 @@ footer.pigeon-footer{box-sizing:border-box;display:block;width:100%;max-width:11
 .pigeon-footer .footer-info{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}.pigeon-footer .footer-info>div{max-width:none;justify-self:stretch}.pigeon-footer p{font-size:12px;color:#a5af99;margin:0 0 12px;max-width:none;overflow-wrap:anywhere}.pigeon-footer a{color:#b9ef77}.pigeon-footer .footer-title{color:#edf0e6}.pigeon-footer .project-credits{display:block;width:100%;max-width:none;margin:12px 0 0;padding:12px 0;border-top:1px solid #354531;border-bottom:0}.pigeon-footer summary{cursor:pointer;color:#b9ef77;font-size:12px}.pigeon-footer .project-credits p{margin-top:12px}.pigeon-footer .footer-version{display:block;margin-bottom:12px}
 .pigeon-footer #font-story{font-family:inherit;box-sizing:border-box;max-width:38rem;width:calc(100% - 2rem);color:#edf0e6;background:#11150d;border:1px solid #b9ef77;padding:24px;line-height:1.7;text-align:left}.pigeon-footer #font-story::backdrop{background:#000b}.pigeon-footer #font-story p{color:#edf0e6;font-size:15px}.pigeon-footer #font-story button{font:inherit;background:#b9ef77;color:#11150d;border:0;padding:9px 14px;cursor:pointer}
 @media(max-width:650px){footer.pigeon-footer{margin-top:28px;padding:24px 0}.pigeon-footer .footer-info{grid-template-columns:minmax(0,1fr);gap:8px}.pigeon-footer .footer-actions{gap:8px}}
+
+/* Shared homepage branding replaces each page's existing brand/back link. */
+@font-face{font-family:ShrimpLittle;src:url("webapp/pigeon/fonts/LittleCharacterRegular.ttf") format("truetype");font-display:swap}
+.shrimp-brand{font:24px/1.4 ShrimpLittle,monospace;letter-spacing:.025em;color:#b9ef77;text-decoration:none;flex-shrink:0}
+.shrimp-brand:hover{color:#d2ffa0}.shrimp-brand:focus-visible{outline:2px solid #b9ef77;outline-offset:5px}
+header:has(>.shrimp-brand){flex-wrap:wrap}header:has(>.shrimp-brand) nav{flex-wrap:wrap}

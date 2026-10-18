@@ -12,7 +12,8 @@ set -e
 cd "$(dirname "$0")/../.."
 [ -f build/gen/felucca_tables.h ] || { echo "emu: run ./build.sh once first (build/gen)"; exit 1; }
 command -v emcc >/dev/null 2>&1 || { echo "emu: no emcc (Emscripten)"; exit 1; }
-VERSION=PIGEON-0.3.1
+VERSION=PIGEON-0.4
+"${PYTHON:-python3}" tools/gen_words.py firmware/words.tsv web/words build/gen/ann_words.h
 mkdir -p build/emu/fonts
 rm -f build/emu/fonts/DotGothic16-subset.woff build/emu/fonts/OFL.txt
 # shellcheck disable=SC2086
@@ -28,6 +29,8 @@ emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -w ${EMU_CFLAGS:-} \
     -o build/emu/felucca.wasm web/emu/felucca_web.c firmware/src/ko_mp3.c $MAD_SOURCES
 [ "${EMU_PREVIEW:-1}" = 0 ] && PREVIEW='' || PREVIEW=' (preview)'
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@PREVIEW@/$PREVIEW/g" web/emu/index.html > build/emu/index.html
+cp -R web/words build/emu/words
+cp web/emu/reader-words.js web/emu/reader.js build/emu/
 cp web/emu/worklet.js web/emu/controller.js web/emu/loader.js web/emu/file-editor.js web/emu/trial-count.js build/emu/
 cp web/pigeon/fonts/LittleCharacterRegular.ttf web/pigeon/fonts/LittleCharacter-OFL.txt build/emu/fonts/
 echo "emu: build/emu ($(wc -c < build/emu/felucca.wasm | tr -d ' ') B wasm, $VERSION)"

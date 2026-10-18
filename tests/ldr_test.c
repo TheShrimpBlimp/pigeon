@@ -139,6 +139,26 @@ static uint32_t flash_off(const uint8_t *lg)        /* flash.bin offset in the l
 
 static int check(const char *what, int ok) { printf("%-56s %s\n", what, ok ? "ok" : "FAIL"); return ok ? 0 : 1; }
 
+static void set_fl_size(uint8_t *lg, uint32_t size)
+{
+    uint8_t h[0x40 + 11 * 0x50];
+    uint32_t i, n;
+    memcpy(h, lg, sizeof h);
+    ota_jl_enc(h, 0x40);
+    n = ota_rd16(h + 8);
+    for (i = 0; i < n; i++) {
+        uint8_t *e = h + 0x40 + i * 0x50u;
+        ota_jl_enc(e, 0x50);
+        if (ota_rd16(e) == 0)
+            ota_wr32(e + 12, size);
+        ota_jl_enc(e, 0x50);
+    }
+    ota_wr16(h + 2, ota_crc16(h + 0x40, n * 0x50u, 0));   /* (over the entries as stored) */
+    ota_wr16(h, ota_crc16(h + 2, 0x3E, 0));
+    ota_jl_enc(h, 0x40);
+    memcpy(lg, h, 0x40 + n * 0x50u);
+}
+
 int main(int argc, char **argv)
 {
     size_t olen;
@@ -183,6 +203,15 @@ int main(int argc, char **argv)
         for (i = 0; i < 0x1000u; i++) nor[0xA0000 + i] = (uint8_t)(i * 7u);
         memcpy(nor + 0xA0F00, r, sizeof r);
         memcpy(user, nor + 0xA0000, sizeof user);
+    }
+    { /* Board-size rejection must precede any erase or commit-marker change. */
+        uint8_t keep[0x40+11*0x50];memcpy(keep,logical,sizeof keep);
+        const uint32_t sizes[]={0x92000u,0x9D000u};
+        for(uint32_t j=0;j<2;j++){
+            set_fl_size(logical,sizes[j]);erases=0;rc=ldr_session();
+            bad+=check("wrong board area refused without erasing application or marker",rc==-14&&!erases&&nor[0xE4F06]==0x41);
+            memcpy(logical,keep,sizeof keep);requests=0;
+        }
     }
     /* a damaged package (one byte deep in the app area): refused before anything is erased */
     {

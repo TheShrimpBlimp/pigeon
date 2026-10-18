@@ -22,11 +22,11 @@ static void reset_page(uint32_t track)
 }
 static void capture(const char *category,const char *slug,const char *label)
 {ko_ui_invalidate();ui.force=1;ui.head_sig=~0u;ui_draw();save_raw(category,slug,label);}
-static const char *const views[29]={"Waveform / home","FX amounts","Drive / shared delay","Compressor dynamics","Compressor makeup","Chop settings","Mute / solo","Sequence grid","Patterns A-D","Arrangement","Mixer levels","Mixer delay sends","Mixer chorus sends","Mixer reverb sends","Step details","Swing / timing","Drum pad settings",0,"Arrangement tools","Chop envelopes","Chop copy / split / merge","Recording preferences","Pattern variations","Tap / loop tempo","Step pitch / nudge / condition","Chop groups / layouts","Drum rolls","Speed sync","Chop swap / move"};
+static const char *const views[KO_VIEW_COUNT]={"Waveform / home","FX amounts","Drive / shared delay","Compressor dynamics","Compressor makeup","Chop settings","Mute / solo","Sequence grid","Patterns A-D","Arrangement","Mixer levels","Mixer delay sends","Mixer chorus sends","Mixer reverb sends","Step details","Swing / timing","Drum pad settings",0,"Arrangement tools","Chop envelopes","Chop copy / split / merge","Recording preferences","Pattern variations","Tap / loop tempo","Step pitch / nudge / condition","Chop groups / layouts","Drum rolls","Speed sync","Chop swap / move","Chop queue","Scratch deck","Individual note timing","Sequence tools"};
 static int allowed(uint32_t track,uint32_t view)
 {
     if(!views[view])return 0;
-    if(track==1 && (view==5||view==19||view==20||view==25||view==27||view==28))return 0;
+    if(track==1 && (view==5||view==19||view==20||view==25||view==27||view==28||view==29||view==30))return 0;
     if(track!=1 && (view==16||view==26))return 0;
     return 1;
 }
@@ -47,8 +47,10 @@ int main(int argc,char **argv)
     chain_config.count=3;chain_config.row[0]=chain_row_of(0,2);chain_config.row[1]=chain_row_of(1,1);chain_config.row[2]=chain_row_of(0,1);
     ko_pattern_refresh();ko_section=1;
     reset_page(0);draw_splash();save_raw("Boot","splash","Three-second splash");
-    for(uint32_t k=0;k<3;k++)for(uint32_t v=0;v<29;v++)if(allowed(k,v)){
+    for(uint32_t k=0;k<3;k++)for(uint32_t v=0;v<KO_VIEW_COUNT;v++)if(allowed(k,v)){
         char slug[96],label[128];reset_page(k);ko.view=(uint8_t)v;
+        if(v==29){uint32_t id=k==2;ko_queue[id].on=1;ko_queue[id].head=0;ko_queue[id].count=3;ko_queue[id].note[0]=60;ko_queue[id].note[1]=62;ko_queue[id].note[2]=60;}
+        if(v==31){trk[k].step[4]=(step_t){.note={60,63,67},.n=3,.time=ST_NOTE,.vel=100};ko_note_put(&trk[k],4,0,3u<<4);ko_note_put(&trk[k],4,1,0x1F);}
         snprintf(slug,sizeof slug,"track-%u-view-%02u",k+1,v);snprintf(label,sizeof label,"%s / %s",k==1?"Drums":k==2?"Song 2":"Song 1",views[v]);
         capture(k==1?"Drums":k==2?"Song 2":"Song 1",slug,label);
     }

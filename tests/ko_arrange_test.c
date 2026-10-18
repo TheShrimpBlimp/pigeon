@@ -22,6 +22,7 @@ int main(void)
     trk[0].step[5]=trk[0].step[0];trk[0].step[5].note[0]=62;trk[0].step[5].probability=55;trk[0].step[5].flags=SF_RATCH;
     motion_set_lock(&trk[0],5,P_REV,40);ko_pattern_copy();
     ko_pattern_select(1);trk[0].p[P_LEVEL]=107;ko_pattern_paste();
+    bad+=check("paste asks before replacing phrase data",ko_paste_target==1 && !project_used(1));ko_pattern_paste();
     bad+=check("copy includes unsaved edits, probability and ratchets",project_used(1) && proj_scratch.t[0].step[5].note[0]==62 && proj_scratch.t[0].step[5].probability==55 && proj_scratch.t[0].step[5].flags==SF_RATCH);
     bad+=check("paste retains motion locks and current mixer levels",proj_scratch.motion.count==motion.count && motion.count && trk[0].p[P_LEVEL]==107);
     trk[0].step[0].note[0]=63;ko_pattern_save();ko_pattern_select(0);

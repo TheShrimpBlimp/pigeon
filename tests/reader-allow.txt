@@ -1,0 +1,15 @@
+# Correct music terms, ordinary irregular words missing from the system dictionary,
+# and credited proper names. Abbreviations belong in words.tsv, not here.
+waveform
+held
+copies
+shortcuts
+automation
+kuroshita
+hugelton
+disastrid
+dendy
+felucca
+pigeon
+including
+applies

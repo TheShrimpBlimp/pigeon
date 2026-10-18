@@ -216,7 +216,7 @@ int KO_TEST_MAIN(void)
     render_blocks(2);
     bad += check("song one shot does not revive a stolen voice", voices_busy() == 0);
     ko_flag_turn(KO_NO_LOOP, 1); ko_select(selection);
-    press(B_FX); bad += check("FX tap opens filter and send controls", ko.view == 1 && ui.home);
+    press(B_HOME); press(B_FX); bad += check("FX tap opens filter and send controls", ko.view == 1 && ui.home);
     press(B_ENV); bad += check("ENV opens independent compression", ko.view == 3 && ui.home);
     song.sel = 1; host_enc[panel.enc[EN_K2]] = 3; frame();
     bad += check("kit compressor ratio does not change song compressor", ko.comp[1].ratio == 4 && ko.comp[0].ratio == 1);

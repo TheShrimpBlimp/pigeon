@@ -59,3 +59,8 @@ rev_side_mix 9
 track_insert 3
 ins_drive 277
 ins_swept 230
+
+# PIGEON v0.4 scratch deck: separately compiled render/cache paths.
+# Measured after hoisting block-stable controls; normal slice/reverse budgets above are unchanged.
+ko_scratch_render 183
+ko_scratch_read 50

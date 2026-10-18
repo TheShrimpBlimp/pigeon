@@ -43,6 +43,17 @@ static int ko_restore(const ko_table_t *in)
     for (uint32_t j = 0; j < d->n; j++) d->chop[j].st = slc_state_at(s, d->chop[j].a);
     ko_publish(0); return 1;
 }
+static void ko_scratch_tune(uint32_t id,int32_t cents) {
+    int32_t ct=clamp(cents,-100,100),q=ct*16/100,rem=ct*16-q*100;
+    if(rem<0){q--;rem+=100;}
+    uint32_t a=pow2_q16(q),b=pow2_q16(q+1);
+    ko_scratch[id].cents=(int16_t)ct;
+    ko_scratch[id].tuning=(uint32_t)(((uint64_t)(a+(b-a)*(uint32_t)rem/100u)<<16)/pow2_q16(0));
+}
+static void ko_scratch_defaults(uint32_t id) {
+    ko_scratch[id].sensitivity=4;ko_scratch[id].record=0;ko_scratch[id].rate=100;
+    ko_scratch[id].brake_ms=250;ko_scratch[id].release_ms=60;ko_scratch_tune(id,0);
+}
 static void ko_prepare_one(void)
 {
     uint32_t sc = usr_nz[ko_id()?2:0] ? ((const smp_user_hdr_t *)smp_user_xip(ko_id()?2:0))->crc : 0;
@@ -58,6 +69,7 @@ static void ko_prepare_one(void)
 #endif
     if (ko.loaded && ko.generation == smp_user_gen) return;
     if (!ko.loaded || ko.song_crc != sc || (!usr_nz[ko_id()?2:0] && ko_table()->n)) {
+        ko_scratch_defaults(ko_id());
         memset(&ko_alternate[ko_id()],0,sizeof ko_alternate[0]);ko_layout[ko_id()]=0;ko_sync[ko_id()]=(ko_sync_t){.beats=4};ko_choke[ko_id()]=0;ko_quantize[ko_id()?2:0]=0;ko_auto(); ko.comp[0] = KO_COMP_DEFAULT; ko.dirty = 0;
         memset(&ko_seq[ko_id()?2:0],0,sizeof ko_seq[0]);
     }

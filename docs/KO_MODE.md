@@ -1,10 +1,10 @@
-# PIGEON tutorial — v0.3
+# PIGEON sample workflow — v0.4
 
 PIGEON has three tracks: Song 1, Drums and Song 2. Each song is one audio
 source with up to 32 chops; a source can combine several imported files.
 There is no fourth playable track in the sampler profile.
 
-This guide describes PIGEON v0.3 and Sample Loader 2.0: 496 KiB shared storage, eight shared song voices and four dedicated drum voices. Basic hardware installation and sample/chop preservation were verified; extended hardware performance checks remain pending.
+This guide describes PIGEON v0.4 and Sample Loader 2.0: 496 KiB shared storage, eight shared song voices and four dedicated drum voices. Basic hardware installation and sample/chop preservation were verified; extended hardware performance checks remain pending.
 
 ## 1. Prepare your FM1
 
@@ -14,7 +14,7 @@ documented stock-return procedure, then install PIGEON. Use a charged FM1,
 a direct USB data cable and desktop Chrome or Edge. Stop playback, release
 keys, close other MIDI apps and keep the computer awake during transfers.
 
-The published installer provides the v0.3 package. Building locally does not update your FM1.
+The public installer stays on v0.3.1 until release approval. The local v0.4 candidate is a separate package; building locally does not update your FM1.
 See [building](https://github.com/TheShrimpBlimp/pigeon/blob/main/BUILDING.md) and [recovery](PIGEON_RECOVERY.md).
 
 ## 2. Make a song in Sample Loader 2.0
@@ -117,9 +117,10 @@ playback of compressed songs. MIDI controllers (including the FM1) can play
 the browser instrument. Full physical panel relay requires compatible firmware
 and still needs hardware verification.
 
-Read [storage formats](KO_STORAGE.md), the [v0.3 release checklist](PIGEON_V03_RELEASE.md)
-and the [historical technical reference](KO_LEGACY_REFERENCE.md) for more detail.
+Read [storage formats](KO_STORAGE.md) and the [v0.4 release checklist](PIGEON_V04_RELEASE.md) for more detail.
 
-Page buttons respond on press. HOME returns to the waveform; HOME on the waveform opens Settings. Hold EDIT and play a chop key to audition its ending without recording it. Merged clips occupy the first keys as whole sections, followed by automatic slices in the remaining slots.
+Page buttons respond on press. HOME returns to the waveform; HOME on the waveform opens Settings. Hold SEL on the waveform and play a chop key to audition its ending, then loop from the beginning while held, without recording it. Merged clips occupy the first keys as whole sections, followed by automatic slices in the remaining slots.
 
 To update an existing merged bank that only has one chop per section, reopen the original audio clips in the loader, Apply the song again, save a backup, and send the resulting bank. Reapplying replaces that song’s chop layout; export any custom chop work first. A firmware reflash alone does not regenerate the bank’s chops.
+
+The [v0.4 tutorial](PIGEON_V04_GUIDE.md) covers queues, scratch decks, per-note timing, sequence tools, fills, screen-reader support and MIDI routing. Back up before updating: v0.4 projects are not readable by public v0.3.1.

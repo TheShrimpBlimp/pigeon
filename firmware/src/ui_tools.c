@@ -11,6 +11,8 @@
  * A step that held something and is empty after loses its locks (as EDIT's step clear); REVERSE and SHIFT move the
  * steps' automation and locks with them. RANDOM and COOK draw from libc.c rng(): no seed is kept, each press
  * differs. A sequence of ties reversed keeps its note first: N T T -> N T T at the mirrored place */
+static void step_undo_take(track_t *t,uint32_t tag);
+static void motion_undo_done(track_t *t);
 enum { TL_CLEAR, TL_REV, TL_LEFT, TL_RIGHT, TL_RANDOM, TL_COOK, TL_BEAT, TL_GAP, TL_LCLR, TL_LREV, TL_LFILL, TL_LRND,
        TL_N };
 
@@ -411,4 +413,41 @@ static const char *tl_do(track_t *t, uint32_t p, uint32_t l)
     }
     tl_unlock(t, was, len);
     return msg;
+}
+
+/* PIGEON adaptations of Felucca 1.6 DOUBLE/HALF and Euclidean tools.
+ * Preserve every motion record (including per-note lengths/nudges); reject capacity overflow before editing. */
+static motion_store_t ko_tool_motion __attribute__((section(".pool")));
+static int ko_resize_pattern(track_t *t,int twice) {
+    uint32_t len=tl_len(t),nl=twice?(len*2u<NSTEP?len*2u:NSTEP):len/2u,k=trk_index(t),n=0;
+    if((twice && len==NSTEP)||(!twice && len<2)){ui_message(twice?"64 STEPS: NO ROOM":"1 STEP: NO HALF");return 0;}
+    memset(&ko_tool_motion,0,sizeof ko_tool_motion);ko_tool_motion.on=motion.on;
+    for(uint32_t i=0;i<motion.count;i++){
+        motion_event_t e=motion.event[i];uint32_t step=e.place&63u;
+        if((e.place>>6)==k && (twice?(step>=len && step<nl):(step>=nl && step<len)))continue;
+        if(n>=MOTION_MAX){ui_message("AUTOMATION FULL");return 0;}ko_tool_motion.event[n++]=e;
+        if(twice && (e.place>>6)==k && step<nl-len){
+            if(n>=MOTION_MAX){ui_message("AUTOMATION FULL");return 0;}
+            e.place=(uint8_t)(k<<6|(step+len));ko_tool_motion.event[n++]=e;
+        }
+    }
+    ko_tool_motion.count=(uint8_t)n;step_undo_take(t,0);
+    uint32_t f=motion_guard();motion_restore(t);
+    if(twice){for(uint32_t i=len;i<nl;i++)t->step[i]=t->step[i-len];}
+    else for(uint32_t i=nl;i<len;i++)step_clear(&t->step[i]);
+    motion=ko_tool_motion;t->p[P_SLEN]=(int16_t)nl;motion_unguard(f);motion_undo_done(t);return 1;
+}
+static void ko_euclid_pattern(track_t *t,uint32_t hits,uint32_t cycle,uint32_t rot) {
+    uint32_t len=tl_len(t);cycle=(uint32_t)clamp(cycle,1,64);hits=hits>cycle?cycle:hits;rot%=cycle;
+    step_undo_take(t,0);
+    uint32_t f=motion_guard();motion_restore(t);
+    for(uint32_t i=0;i<len;i++){
+        uint32_t p=(i+cycle-rot)%cycle;step_t *s=&t->step[i];
+        if((p*hits)%cycle<hits){
+            if(s->time!=ST_NOTE || (!s->n&&!s->hit)){
+                step_clear(s);s->time=ST_NOTE;s->n=1;s->note[0]=60;s->vel=100;
+            }
+        }else{step_clear(s);(void)motion_clear_locks(t,i);}
+    }
+    motion_unguard(f);motion_undo_done(t);
 }

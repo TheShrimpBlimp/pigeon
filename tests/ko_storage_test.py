@@ -80,7 +80,7 @@ for sanitize in (False,True):
                             '-fno-sanitize-recover=undefined']
     for test,args in [('ko_mp3_test',[str(out/'minute-mp3.kob')]),
                       ('ko_storage_test',[str(out/'minute-mp3.kob'),str(out/'minute-ima.kob')]+([str(out/'dual.kob')] if os.environ.get('FELUCCA_KO_DUAL')=='1' else [])),
-                      *([('pigeon_expanded_bank_test',[])] if os.environ.get('FELUCCA_SAMPLER_ONLY')=='1' and os.environ.get('FELUCCA_KO_DUAL')=='1' else [])]:
+                      *([('pigeon_expanded_bank_test',[]),('pigeon_scratch_mp3_test',[str(out/'minute-mp3.kob')])] if os.environ.get('FELUCCA_SAMPLER_ONLY')=='1' and os.environ.get('FELUCCA_KO_DUAL')=='1' else [])]:
         exe=host/test
         subprocess.run([os.environ.get('CC','cc'),*linkflags,f'tests/{test}.c',*objs,'-lm','-o',str(exe)],check=True,cwd=ROOT)
         subprocess.run([str(exe),*args],check=True,cwd=ROOT,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})

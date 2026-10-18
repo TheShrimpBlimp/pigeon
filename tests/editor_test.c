@@ -33,7 +33,8 @@ static void fm1_wdt_feed(void)
 }
 static void fm1_irq_off(void) {}
 static void fm1_irq_on(void) {}
-static int32_t fm1_enc_take(uint32_t e) { (void)e; return 0; }
+static int32_t host_encoder_deltas[7];
+static int32_t fm1_enc_take(uint32_t e) {int32_t n=host_encoder_deltas[e];host_encoder_deltas[e]=0;return n;}
 static void lcd_sync(void) {}
 static void lcd_power(uint32_t s) { (void)s; }   /* (MENU > SCREEN OFF: lcd.c) */
 static void lcd_wake_now(void) {}

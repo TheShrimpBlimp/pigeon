@@ -398,7 +398,7 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
     if (t->p[P_MUTE]) return;
 #endif
 #if FELUCCA_KO
-    if (ko_song(t) && !(ko_seq_firing & (1u<<(t-trk)))) {
+    if (ko_song(t) && !((ko_seq_firing|ko_queue_firing) & (1u<<(t-trk)))) {
         int stopped = 0;
         for (i = 0; i < NVOICE; i++) {
             voice_t *v = &t->v[i];
@@ -431,7 +431,7 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         t->xp_vel[i] = (uint8_t)vel;
         return;
     }
-    mod_note(t, note, vel);                             /* the matrix's VEL / KEY / RAND */
+    vel = mod_note(t, note, vel);                             /* the matrix's VEL / KEY / RAND */
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;
     if (!any) {                                        /* fresh phrase: LFO retrigger (TRIG NOTE) and fade */

@@ -1,3 +1,6 @@
+#ifndef PIGEON_READER
+#define PIGEON_READER 0
+#endif
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Host test of the UI (firmware/src/ui*.c with the sound sources of hostsim.c;

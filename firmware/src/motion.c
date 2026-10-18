@@ -35,7 +35,7 @@ static int motion_param(uint32_t id)
 {
     /* Sound only: transport, routing, voice allocation and discrete engine
      * changes never become automation. FX sends and continuous mix are safe. */
-    return id < P_COUNT && (id == P_SGATE || (FELUCCA_KO && id==P_TRANS) || id <= P_REL || (id >= P_ED_FLT && id <= P_LD_AMP) ||
+    return id < P_COUNT && ((FELUCCA_KO && id>=P_NOTE0 && id<=P_NOTE3) || id == P_SGATE || (FELUCCA_KO && id==P_TRANS) || id <= P_REL || (id >= P_ED_FLT && id <= P_LD_AMP) ||
         (id >= P_DIST && id <= P_REV) || id == P_GLIDE || id == P_PAN ||
         id == P_DETUNE || (id >= P_FM1_ATK && id <= P_FM4_LEVEL) || (id >= P_LN0 && id <= P_LN7) ||
         id == P_SPRD || (id >= P_ITYPE && id <= P_IMIX) || id >= P_E0);   /* (not the chord keys, nor 1.2's LFO SYNC TRIG
@@ -280,6 +280,7 @@ static __attribute__((noinline)) void motion_step(track_t *t, uint32_t step, con
         const motion_event_t *e = &m->event[i];
         uint32_t id = MOTION_ID(e);
         if (e->place != (k << 6 | step) || ((e->param & MOTION_LOCK) && !play)) continue;
+        if(id>=P_NOTE0 && id<=P_NOTE3)continue; /* note metadata is not sound automation */
         const param_desc_t *d = param_desc_of(eng_idx(t->eng_req), id);
         t->p[id] = (int16_t)param_fit(d, e->value);
         motion_active[k][id / 32u] |= 1u << (id % 32u);
@@ -320,18 +321,21 @@ static int32_t motion_find(const track_t *t, uint32_t step, uint32_t id)
             return (int32_t)i;
     return -1;
 }
-/* the indices of track k's records in list order (by step, then by id): n of them into idx[MOTION_MAX] */
+/* the indices of track k's records in list order (by step, then as they were added: their place in motion.event,
+ * which a record keeps when its parameter or value changes): n of them into idx[MOTION_MAX]. 1.5.5 (#199): up to 1.5.1
+ * a step's records were by parameter, so turning SEQ > AUTOMATION's KNOB 3 (the parameter) past another record of the
+ * step moved the row being edited above or below it, and the selection with it (the "jump") */
 static uint32_t motion_rows(uint32_t k, uint8_t *idx)
 {
     uint32_t i, j, n = 0;
     for (i = 0; i < motion.count; i++) {
         const motion_event_t *e = &motion.event[i];
-        uint32_t key = (uint32_t)(e->place & 63u) << 7 | MOTION_ID(e);
+        uint32_t key = e->place & 63u;
         if ((e->place >> 6) != k)
             continue;
-        for (j = n; j > 0u; j--) {                       /* (insertion: at most MOTION_MAX) */
+        for (j = n; j > 0u; j--) {                       /* (insertion, stable: at most MOTION_MAX) */
             const motion_event_t *o = &motion.event[idx[j - 1u]];
-            if (((uint32_t)(o->place & 63u) << 7 | MOTION_ID(o)) <= key)
+            if ((uint32_t)(o->place & 63u) <= key)
                 break;
             idx[j] = idx[j - 1u];
         }
@@ -390,3 +394,42 @@ static uint32_t motion_sound_loaded(track_t *t, uint32_t from, uint32_t to)
     motion_unguard(f);
     return gone;
 }
+
+#if FELUCCA_KO
+/* One existing 3-byte lock per edited note: length index (0=track gate) and
+ * signed sixteenth-of-a-step nudge. No project/step size increase. */
+static const uint8_t ko_note_lengths[]={0,1,2,3,4,6,8,12,16,24,32,64};
+static uint8_t ko_note_selected[SAMPLER_PARTS];
+static uint32_t ko_note_data(const motion_store_t *m,const track_t *t,uint32_t step,uint32_t note) {
+    if(!m || note>=4)return 0;
+    uint32_t place=(uint32_t)(t-trk)*64u+step;
+    for(uint32_t i=0;i<m->count;i++)if(m->event[i].place==place && MOTION_ID(&m->event[i])==P_NOTE0+note)
+        return (uint32_t)((int32_t)m->event[i].value+64);
+    return 0;
+}
+static int32_t ko_note_nudge(uint32_t data){return (int32_t)((data&15u)^8u)-8;}
+static uint32_t ko_note_length(uint32_t data){uint32_t i=data>>4;return ko_note_lengths[i<12?i:0];}
+static int ko_note_put(track_t *t,uint32_t step,uint32_t slot,uint32_t data){
+    if(!data){
+        uint32_t f=motion_guard(),place=(uint32_t)(t-trk)*64u+step,n=0;
+        for(uint32_t j=0;j<motion.count;j++)if(motion.event[j].place!=place || MOTION_ID(&motion.event[j])!=P_NOTE0+slot)motion.event[n++]=motion.event[j];
+        memset(motion.event+n,0,(MOTION_MAX-n)*sizeof motion.event[0]);motion.count=(uint8_t)n;motion_unguard(f);return 0;
+    }
+    return motion_set_lock(t,step,P_NOTE0+slot,(int16_t)((int32_t)data-64));
+}
+static void ko_note_remove(step_t *s,uint32_t slot){
+    for(uint32_t k=0;k<SAMPLER_PARTS;k++)for(uint32_t step=0;step<NSTEP;step++)if(s==&trk[k].step[step]){
+        /* Relabel in place: deletion must work even when every record is used. */
+        uint32_t f=motion_guard(),place=k*64u+step,n=0;
+        for(uint32_t j=0;j<motion.count;j++){
+            motion_event_t event=motion.event[j];uint32_t id=MOTION_ID(&event);
+            if(event.place==place && id>=P_NOTE0 && id<=P_NOTE3){
+                if(id==P_NOTE0+slot)continue;
+                if(id>P_NOTE0+slot)event.param--;
+            }
+            motion.event[n++]=event;
+        }
+        memset(motion.event+n,0,(MOTION_MAX-n)*sizeof motion.event[0]);motion.count=(uint8_t)n;motion_unguard(f);return;
+    }
+}
+#endif

@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Main-loop pattern editing; project slots A-D retain the existing FUNA ABI. */
 static chain_pattern_t ko_clipboard __attribute__((section(".pool")));
-static uint8_t ko_clip_valid;
+static uint8_t ko_clip_valid,ko_paste_target=255;
+static uint32_t ko_paste_fingerprint,ko_paste_clip;
 static uint32_t ko_saved_fingerprint,ko_discard_fingerprint;
 static uint8_t ko_fingerprint_valid,ko_discard_target=255;
 static uint32_t ko_hash_bytes(uint32_t h,const void *data,uint32_t bytes){const uint8_t *p=data;while(bytes--)h=(h^*p++)*16777619u;return h;}
@@ -14,7 +15,14 @@ static uint32_t ko_phrase_fingerprint(void){
  }
  h=ko_hash_bytes(h,&motion,sizeof motion);return ko_hash_bytes(h,&chain_config,sizeof chain_config);
 }
-static void ko_phrase_clean(void){ko_saved_fingerprint=ko_phrase_fingerprint();ko_fingerprint_valid=1;ko_discard_target=255;}
+static void ko_pattern_prompt(char *text,uint32_t size) {
+    if(ko_discard_target<4 && ko_discard_fingerprint==ko_phrase_fingerprint()){
+        str_cpy(text,"LOAD A? AGAIN / SAVE TO KEEP",size);if(size>5)text[5]=(char)('A'+ko_discard_target);
+    }else if(ko_paste_target==ko_pattern_sel && ko_paste_fingerprint==ko_phrase_fingerprint()){
+        str_cpy(text,"PASTE TO A? LFO AGAIN",size);if(size>9)text[9]=(char)('A'+ko_pattern_sel);
+    }
+}
+static void ko_phrase_clean(void){ko_saved_fingerprint=ko_phrase_fingerprint();ko_fingerprint_valid=1;ko_discard_target=ko_paste_target=255;}
 static int ko_phrase_dirty(void){return !ko_fingerprint_valid || ko_saved_fingerprint!=ko_phrase_fingerprint() || !(ko_pattern_mask&(1u<<ko_pattern_sel));}
 static void ko_pattern_refresh(void)
 {
@@ -56,6 +64,7 @@ static void ko_pattern_apply(const chain_pattern_t *p)
 }
 static void ko_pattern_poll(void)
 {
+    if(ko.view!=8)ko_paste_target=ko_discard_target=255;
     uint32_t slot=ko_pattern_commit;
     if(slot<4 && !transport_busy()) {
         ko_pattern_commit=255;ko_pattern_sel=(uint8_t)slot;
@@ -77,6 +86,7 @@ static int ko_pattern_select(uint32_t slot)
 }
 /* UI-only guard: internal launch/restore paths keep their existing behavior. */
 static int ko_pattern_request(uint32_t slot){
+ ko_paste_target=255;
  if(slot>=4)return 0;
  if(!transport_busy() && (ko_pattern_mask&(1u<<slot)) && ko_phrase_dirty()){
   uint32_t fingerprint=ko_phrase_fingerprint();
@@ -92,7 +102,7 @@ static void ko_pattern_copy(void)
         for(uint32_t j=0;j<4;j++) ko_clipboard.timing[k][j]=motion_base_value(&trk[k],P_SLEN+j);
         ko_clipboard.qnt[k]=(uint8_t)trk[k].p[P_SQNT];
     }
-    ko_clipboard.motion=motion;ko_clip_valid=1;ko_copy_slot=ko_pattern_sel;
+    ko_clipboard.motion=motion;ko_clip_valid=1;ko_copy_slot=ko_pattern_sel;ko_paste_target=255;
     ui.force=1;ui_message("PATTERN COPIED");
 }
 static void ko_pattern_save(void)
@@ -107,7 +117,14 @@ static void ko_pattern_paste(void)
     if(transport_busy()) {ui_message("STOP TO PASTE");return;}
     if(voices_busy()) {ui_message("RELEASE PADS TO PASTE");return;}
     if(!ko_clip_valid) {ui_message("COPY A PATTERN FIRST");return;}
-    ko_pattern_apply(&ko_clipboard);ko_pattern_save();
+    uint32_t fingerprint=ko_phrase_fingerprint(),clip=ko_hash_bytes(2166136261u,&ko_clipboard,sizeof ko_clipboard);
+    if((ko_pattern_mask&(1u<<ko_pattern_sel)) || ko_phrase_dirty()){
+        if(ko_paste_target!=ko_pattern_sel || ko_paste_fingerprint!=fingerprint || ko_paste_clip!=clip){
+            ko_paste_target=ko_pattern_sel;ko_paste_fingerprint=fingerprint;ko_paste_clip=clip;ko_discard_target=255;
+            char label[]="PASTE ALL TO A? AGAIN=YES";label[13]=(char)('A'+ko_pattern_sel);ui_message(label);ui.force=1;return;
+        }
+    }
+    ko_paste_target=255;ko_pattern_apply(&ko_clipboard);ko_pattern_save();
 }
 static void ko_section_add(uint32_t slot)
 {
@@ -149,7 +166,7 @@ static void ko_arrange_turn(uint32_t k,int32_t steps)
         else if(k==1) {
             if(transport_busy()) {ui_message("STOP TO COPY");return;}
             uint32_t slot=(uint32_t)clamp((ko_copy_slot<4?ko_copy_slot:0)+steps,0,3);
-            if(project_used(slot) && chain_copy_source(slot)) {ko_clipboard=chain.source[slot];ko_clip_valid=1;ko_copy_slot=(uint8_t)slot;ui_message("SAVED PATTERN COPIED");}
+            if(project_used(slot) && chain_copy_source(slot)) {ko_clipboard=chain.source[slot];ko_clip_valid=1;ko_copy_slot=(uint8_t)slot;ko_paste_target=255;ui_message("SAVED PATTERN COPIED");}
             else ui_message("EMPTY PATTERN");
         } else if(k==2) {if(steps>0) ko_section_add(ko_pattern_sel);else ko_section_delete();}
         else if(k==3) {if(steps>0) ko_pattern_paste();else ko_pattern_copy();}

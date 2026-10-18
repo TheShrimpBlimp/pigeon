@@ -24,27 +24,45 @@ export async function connectController({navigator,select,status,send}) {
 // command 111 contains logical button bits, keys, encoder deltas and master.
 export async function connectPanel({navigator,inputSelect,outputSelect,status,send}) {
   const access=await navigator.requestMIDIAccess({sysex:true});
-  let input=null,output=null,timer=null,timeout=null,seen=false,closed=false;
+  let input=null,output=null,timer=null,timeout=null,seen=false,closed=false,lastReply=0,recovering=false;
+  const connected=()=>{status.textContent='FM1 panel connected: keys, knobs and buttons control the browser. Sound comes from your computer.';};
   const command=on=>output?.send([240,125,70,76,110,on?1:0,247]);
   const clear=()=>{if(timer)clearInterval(timer);if(timeout)clearTimeout(timeout);timer=timeout=null;
     try{command(false);}catch{}if(input)input.onmidimessage=null;input=output=null;
     send({type:'buttons',mask:0});send({type:'keys',mask:0});};
   const choose=()=>{
-    clear();seen=false;input=access.inputs.get(inputSelect.value);output=access.outputs.get(outputSelect.value);
+    const nextInput=access.inputs.get(inputSelect.value),nextOutput=access.outputs.get(outputSelect.value);
+    // Opening MIDI ports also raises statechange; it must not restart a healthy lease.
+    if(timer && input===nextInput && output===nextOutput && input?.state==='connected' && output?.state==='connected')return;
+    clear();seen=false;recovering=false;lastReply=Date.now();input=nextInput;output=nextOutput;
     if(!input||!output){status.textContent='Choose the FM1 MIDI input and output.';return;}
     input.onmidimessage=({data:d})=>{
       if(d.length<7||d[0]!==240||d[1]!==125||d[2]!==70||d[3]!==76||d.at(-1)!==247)return;
       if(d[4]===110&&d[5]!==0){clear();status.textContent='This firmware does not support browser panel control.';return;}
+      if(d[4]===110 && d.length===8 && d[5]===0){
+        lastReply=Date.now();recovering=false;
+        if(d[6]!==1){clear();status.textContent='FM1 panel control ended. Reconnect the panel to control the emulator.';return;}
+        if(seen)connected();return;
+      }
       if(d[4]!==111||d.length!==22||d[5]!==1)return;
+      lastReply=Date.now();recovering=false;
       seen=true;if(timeout)clearTimeout(timeout);timeout=null;
       send({type:'buttons',mask:d[6]|d[7]<<7});
       send({type:'keys',mask:d[8]|d[9]<<7|d[10]<<14|d[11]<<21});
       for(let role=0;role<7;role++)if(d[12+role]!==64)send({type:'enc',role,n:d[12+role]-64});
       send({type:'master',value:d[19]|d[20]<<7});
-      status.textContent='FM1 panel connected: keys, knobs and buttons control the browser. Sound comes from your computer.';
+      connected();
     };
     try{command(true);}catch(e){clear();throw e;}
-    timer=setInterval(()=>{try{command(true);}catch{clear();status.textContent='FM1 disconnected.';}},500);
+    timer=setInterval(()=>{
+      const silent=Date.now()-lastReply;
+      if(silent>2500){clear();status.textContent='FM1 panel connection lost. Reconnect the panel; keys alone do not confirm panel control.';return;}
+      if(seen && silent>1000 && !recovering){
+        recovering=true;send({type:'buttons',mask:0});send({type:'keys',mask:0});
+        status.textContent='Reconnecting the FM1 panel…';
+      }
+      try{command(true);}catch{clear();status.textContent='FM1 disconnected.';}
+    },500);
     timeout=setTimeout(()=>{if(!seen){clear();status.textContent='No panel response. This mode needs PIGEON firmware with browser panel support; ordinary MIDI keys can still be used.';}},2500);
     status.textContent='Waiting for the FM1 panel…';
   };

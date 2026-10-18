@@ -61,6 +61,7 @@ try{
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  await page.locator('#kit-files').setInputFiles([{name:'pad.wav',mimeType:'audio/wav',buffer:wav(.1)}]);
  await page.getByText('Drum files selected. Edit each pad, then press Apply drum kit.',{exact:true}).waitFor();
+ await page.locator('#pad-editors .trim-end').evaluate(e=>{for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});
  await page.locator('#pad-editors .trim-end').fill('0.05');
  await page.locator('#apply-kit').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();

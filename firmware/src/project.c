@@ -123,6 +123,7 @@ typedef struct {
     uint8_t phys;                              /* PROJ_PHYS: PHYS MODEL values as today; 1: MODEL 4 was DRUM;
                                                 * 0 (a reserved byte before 1.0): MODEL 2 was DUST */
     uint8_t rsv;
+    uint8_t mch[NTRK];
     proj_trk_t t[NTRK];
     chain_config_t chain;
     motion_store_t motion;
@@ -157,6 +158,7 @@ _Static_assert(sizeof(project_v5_t) == 3352u && sizeof(project_v6_t) == 3388u, "
 #define PROJ_STORE_V7 3388u                    /* FUN7 */
 #define PROJ_NAME_OFF (PROJ_STORE_SIZE - 4u - PROJ_NAME_LEN)
 #define PROJ_FM6_OFF (PROJ_NAME_OFF - NTRK * FM6_PACKED)
+#define PROJ_MIDI_CHANNELS 3u /* PIGEON header bytes 65,67: three 5-bit offsets + TRACK flag */
 typedef union { uint32_t align; uint8_t raw[PROJ_STORE_SIZE]; } project_store_t;
 _Static_assert(G_COUNT == 27u, "FUN7 globals retain original IDs");
 _Static_assert(sizeof(project_store_t) == 3840u && PROJ_STORE_V7 == sizeof(project_v6_t), "FUN10 / FUN7 sizes");
@@ -548,7 +550,7 @@ static int proj_import_old(project_t *q, const void *b, int n)
                 }
             }
             if (bytes == sizeof *v6) q->chain = c6; else chain_defaults(&q->chain);
-            q->sum = proj_sum(q); proj_drums_to_part(q); proj_phys(q);
+    q->sum = proj_sum(q); proj_drums_to_part(q); proj_phys(q);
             return 1;
         }
     }
@@ -574,6 +576,18 @@ static uint32_t proj_name_get(char *d, const uint8_t *s)   /* its length */
     return i;
 }
 
+static void proj_midi_pack(uint8_t *b,const project_t *q) {
+    uint32_t v=0;
+    for(uint32_t k=0;k<PROJ_MIDI_CHANNELS;k++) v|=(uint32_t)(q->mch[k]<MCH_N?q->mch[k]:0u)<<(5u*k);
+    if(q->g[G_ROUTE]==ROUTE_TRACK){int16_t r=0;memcpy(b+8+2u*G_ROUTE,&r,2);v|=1u<<15;}
+    b[65]=(uint8_t)v;b[67]=(uint8_t)(v>>8);
+}
+static void proj_midi_unpack(project_t *q,const uint8_t *b) {
+    uint32_t v=b[65]|(uint32_t)b[67]<<8;
+    for(uint32_t k=0;k<PROJ_MIDI_CHANNELS;k++){uint32_t c=(v>>(5u*k))&31u;q->mch[k]=(uint8_t)(c<MCH_N?c:0u);}
+    if(v&0x8000u)q->g[G_ROUTE]=ROUTE_TRACK;
+}
+
 /* A stable serialized schema: first header retains FUN6's fields; at byte66
  * np, format flags, then four byte-param tracks and nine-byte steps; FUN8: the patches at PROJ_FM6_OFF. */
 static int proj_pack(project_store_t *out, const project_t *q)
@@ -595,7 +609,7 @@ static int proj_pack(project_store_t *out, const project_t *q)
             const step_t *s = &q->t[t].step[i];
             uint32_t r = step_ratchet(s) - 1u;          /* RATCH: bit 7 of the velocity and chance bytes (see the top) */
             uint32_t nd = (uint32_t)step_nudge(s) & 15u;   /* NUDGE (FUN10): bit j in bit 7 of note j */
-            if (s->n > 4u || s->time > ST_REST || (s->flags & ~(3u | SF_RATCH | SF_NUDGE)) || s->probability > 105u)
+            if (s->n > 4u || s->time > ST_REST || (s->flags & ~(3u | SF_RATCH | SF_NUDGE)) || s->probability > KO_PROB_MAX)
                 return 0;
             for (uint32_t j = 0; j < 4u; j++)           /* what proj_unpack checks, so a saved project always loads: */
                 b[pos++] = (uint8_t)((s->note[j] > 127u ? 127u : s->note[j]) | (nd >> j & 1u) << 7);   /* notes and
@@ -610,6 +624,7 @@ static int proj_pack(project_store_t *out, const project_t *q)
     memcpy(b + pos, &q->chain, sizeof q->chain); pos += sizeof q->chain;
     memcpy(b + pos, &q->motion, sizeof q->motion);
     memcpy(b + PROJ_FM6_OFF, q->fm6, sizeof q->fm6);
+    proj_midi_pack(b,q);
     {   /* the name (0-padded; stops at the first 0) */
         char n[PROJ_NAME_LEN + 1u];
         memcpy(b + PROJ_NAME_OFF, n, proj_name_get(n, (const uint8_t *)q->name));
@@ -689,7 +704,7 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
             s->vel = b[pos] & 127u; meta |= (b[pos++] & 128u) << 1;      /* (RATCH bit 0 at bit 8 of meta) */
             s->hit = b[pos++]; s->acc = b[pos++];
             s->probability = b[pos] & 127u; meta |= (b[pos++] & 128u) << 2;   /* (bit 1 at bit 9) */
-            if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability > 105u) return 0;
+            if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability > KO_PROB_MAX) return 0;
             if (s->acc & ~s->hit) return 0;
             step_set_ratchet(s, (meta >> 8) + 1u);
             step_set_nudge(s, (int32_t)(nd ^ 8u) - 8);
@@ -719,6 +734,7 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
         char n[PROJ_NAME_LEN + 1u];
         memcpy(q->name, n, proj_name_get(n, b + name_off));
     }
+    if(v10) proj_midi_unpack(q,b);
     q->sum = proj_sum(q); proj_drums_to_part(q); proj_phys(q);
     return 1;
 }
@@ -783,7 +799,7 @@ static void proj_bound(project_t *q)
             step_t *s = &q->t[t].step[i];
             s->flags &= 3u | SF_RATCH | SF_NUDGE;
             s->vel &= 127u;
-            if (s->probability > 105u) s->probability = 0;
+            if (s->probability > KO_PROB_MAX) s->probability = 0;
         }
         for (i = 0; i < P_COUNT; i++) {
             if (FELUCCA_SAMPLER_ONLY && !eng_ok(q->t[t].engine % NENGINES)) continue;
@@ -821,6 +837,7 @@ static void project_capture(project_t *p)
     p->size = sizeof *p;
     for (i = 0; i < G_COUNT; i++)
         p->g[i] = song.g[i];
+    memcpy(p->mch,song.mch,sizeof p->mch);
     p->sel = song.sel;
     p->parts = NPART;
     p->phys = PROJ_PHYS;
@@ -972,7 +989,7 @@ static int project_restore_runtime(const project_t *input)
     if (!proj_ok(input) || !proj_engines_ok(input)) return 1;
     mom_back(0);                                  /* (ui_input.c MOMENTARY: the values as they were, then the load) */
     #if FELUCCA_KO
-    ko_solo=-1;ko_seq_firing=0;
+    ko_queue_reset();ko_solo=-1;ko_seq_firing=0;
     for(uint32_t p=0;p<SAMPLER_PARTS;p++) {ko_seq[p].enabled=ko_seq[p].cursor=0;memset(ko_seq[p].age,0,sizeof ko_seq[p].age);}
     #endif
     memset(drum_mute, 0, sizeof drum_mute);       /* (1.4.1: the DRUM lanes' mutes, performance state) */
@@ -1017,6 +1034,8 @@ static int project_restore_runtime(const project_t *input)
             fm6_adopt(k);
         }
     }
+    memcpy(song.mch,p->mch,sizeof song.mch);
+    midi_route=MIDI_ROUTE_AGAIN;
     song.sel = (uint8_t)(p->sel < NTRK ? p->sel : 0u);
     fm1_irq_on();
     proj_name_get(proj_name, (const uint8_t *)p->name);
@@ -1264,6 +1283,7 @@ static uint32_t autosave_sig(void)
     for (i = 0; i < G_COUNT; i++)
         if (i != G_SLOT && i != G_NAME && i != G_LOAD && i != G_SAVE)
             h = as_mix(h, &song.g[i], sizeof song.g[i]);
+    h = as_mix(h,song.mch,sizeof song.mch);
     h = as_mix(h, &motion, sizeof motion);
     h = as_mix(h, &chain_config, sizeof chain_config);
     return as_mix(h, proj_name, sizeof proj_name);

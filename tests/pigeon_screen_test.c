@@ -27,7 +27,7 @@ int main(void) {
     song.sel=2;ko_setup_second();render_blocks(32);song.sel=0;go_home();
     for(screen_track=0;screen_track<SAMPLER_PARTS;screen_track++) {
         song.sel=screen_track;
-        for(screen_view=0;screen_view<29;screen_view++) {
+        for(screen_view=0;screen_view<KO_VIEW_COUNT;screen_view++) {
             ko.view=screen_view;ko_ui_invalidate();ui.force=1;lint_active=1;ko_draw();lint_active=0;
             if(screen_view==7) {
                 ko_piano_roll[song.sel]=1;

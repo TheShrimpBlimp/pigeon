@@ -1,4 +1,6 @@
-# PIGEON controls — v0.3
+# PIGEON controls — v0.4
+
+Start with the [v0.4 tutorial](PIGEON_V04_GUIDE.md); [per-note timing](PIGEON_NOTE_TIMING.md) documents the longer-note and individual-nudge controls.
 
 PIGEON is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
 Choose the track first; edits belong to that track. Song 2 can hold drum loops.
@@ -31,7 +33,7 @@ reference; it follows project BPM within 50–200% speed. Changing chop boundari
 does not recapture the reference until a sync control is adjusted. SPEED % shows
 the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
 
-v0.3 firmware and web tools share 496 KiB between both songs and the kit. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
+v0.4 firmware and web tools share 496 KiB between both songs and the kit. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
 cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
 Drums have 16 one-shot pads. Held loops default on, latch defaults off.
 
@@ -50,7 +52,7 @@ Before installing PIGEON from another custom firmware, revert to official M-VAVE
 
 Patterns shows UNSAVED when the current phrase differs from its saved state or the destination is empty. Selecting an occupied slot with unsaved work warns first; select the same slot again to discard those edits and load it. SAVE stores the phrase, timing, automation and arrangement to the selected A–D destination. Sample/chop settings remain in the shared bank.
 
-See [the first-song walkthrough and v0.3 release gate](PIGEON_V03_RELEASE.md) for the complete workflow and pending physical checks.
+See [the first-song walkthrough and v0.4 release gate](PIGEON_V04_RELEASE.md) for the complete workflow and pending physical checks.
 
 ## Copy a whole chop to another key
 
@@ -73,16 +75,33 @@ Page buttons open their pages immediately on press; releasing them does not navi
 
 ## Reading the screen
 
-Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 on the bottom row. Page actions and navigation appear along the bottom. The top strip shows track, phrase, transport/record state, BPM and battery. FX labels EDIT as RESET; HOME returns to the waveform. See [the UI reference](PIGEON_UI.md) for the v0.3 layout and render workflow.
+Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 on the bottom row. Page actions and navigation appear along the bottom. The top strip shows track, phrase, transport/record state, BPM and battery. FX labels EDIT as RESET; HOME returns to the waveform. See [building and rendering](../BUILDING.md) for the render workflow.
 
 ### Audition a chop ending
 
-Hold **EDIT** and press a chop key to audition its final two seconds. Short chops play from the start. ADPCM uses the nearest decoder checkpoint after the two-second position; MP3 seeks directly to that position. The audition plays once, leaves chop boundaries unchanged, and bypasses recording, quantization and MIDI output. Release EDIT for normal playback. Available on both song tracks; drums keep their normal behavior.
+On either song's waveform, hold **SEL** and trigger a chop to hear its final two
+seconds, then loop from the beginning while the key stays held. Short chops start
+at the beginning. Releasing the note stops the audition. This bypasses recording,
+quantization and MIDI output without changing chop boundaries. A plain SEL tap
+opens Patterns; it resets cent tuning inside Scratch instead.
 
-## v0.3.1 sequencer grid and piano roll
+## Sequencer grid and piano roll
 
 Press SEQ to open the grid; press SEQ again to switch to the piano roll. SEQ alternates views and HOME exits. Both edit the same **1–64-step sequence**. K3 selects the step, K4 changes length while stopped, and PRESETS scrolls piano-roll rows.
 
 Both views support **four notes per step**. While unarmed and stopped, tap keys to add/remove individual notes on the selected step. With REC armed and transport stopped, hold a chord and release all keys to advance once. During playback, REC records live. A fifth note does not replace a stored note. The grid displays `2N`, `3N` or `4N` for chords; the roll draws each note. REC stays lit when armed in every LED mode.
 
-See [v0.3.1 release notes and validation limits](PIGEON_V031_RELEASE.md).
+See [v0.4 release preparation and validation](PIGEON_V04_RELEASE.md).
+
+For sequence tools, conditional fills and per-track MIDI routing, see
+the [v0.4 guide](PIGEON_V04_GUIDE.md#sequence-tools).
+
+## Queue, scratch and MIDI
+
+EDIT → ARP opens the queue; K1 enables it. EDIT → FX opens Scratch; EDIT switches
+its performance/motor controls. HOME returns to the waveform. From the piano
+roll, FX opens individual note length/nudge. The [v0.4 guide](PIGEON_V04_GUIDE.md)
+has full controls for these pages, fills, sequence tools and per-track MIDI.
+
+v0.4 projects use 115 parameters and are not readable by public v0.3.1. Export
+a complete recovery archive before updating or downgrading.

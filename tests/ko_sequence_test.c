@@ -75,10 +75,10 @@ int main(void)
     bad+=check("delayed attack retains complete-chop timing",!ko_seq[0].pending && pending_ok && trk[0].seq_idx==0);seq_stop();
     clear_voices();go_home();song.sel=0;ko.view=7;ko_seq[0].enabled=1;song.rec=1;transport_req=0;
     press(B_PLAY);
-    bad+=check("PLAY after step entry starts playback and disarms recording",transport_req==1 && !(song.rec&1));
-    song.playing=1;transport_req=0;trk[0].seq_idx=4;trk[0].v[0].active=1;trk[0].v[0].note=63;trk[0].v[0].s[6]=1;
+    bad+=check("PLAY after step entry starts playback and keeps recording armed",transport_req==1 && (song.rec&1));
+    song.rec=0;song.playing=1;transport_req=0;trk[0].seq_idx=4;trk[0].v[0].active=1;trk[0].v[0].note=63;trk[0].v[0].s[6]=1;
     bad+=check("step five playing seventh physical key lights chop seven, not step five",ko_key_leds()==(1u<<6));
-    rec_tap();bad+=check("REC during playback restores current-step recording LED",(song.rec&1) && ko_key_leds()==(1u<<7));
+    song.rec=0;rec_tap();bad+=check("REC during playback restores current-step recording LED",(song.rec&1) && ko_key_leds()==(1u<<7));
     song.rec=0;seq_stop();clear_voices();
     const char *screens=getenv("KO_SCREEN_DIR");if(screens) {ko_palette_on=1;palette_set(settings.palette);song.sel=0;go_home();ko.view=7;screen_save(screens,"sequencer");ko.view=6;screen_save(screens,"performance");}
     printf("KO sequencer: %s\n",bad?"FAILED":"PASSED");return bad!=0;

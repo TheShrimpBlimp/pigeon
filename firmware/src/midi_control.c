@@ -138,6 +138,7 @@ static void midi_note_event(uint32_t ch, uint32_t note, uint32_t vel)
         midi_expression(t, c);
         if (t != TSEL)
             midi_hint = (uint8_t)(trk_index(t) + 1u);
+        midi_seen |= (uint8_t)(1u << trk_index(t));
         c->targets |= (uint8_t)(1u << trk_index(t));
         midi_play(t, ch, note, vel);
         midi_notes[ch][note] = (uint8_t)(trk_index(t) + 1u);
@@ -367,15 +368,20 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
 static void __attribute__((noinline)) midi_route_block(void)
 {
     uint32_t ch, note;
+    for(uint32_t k=0;k<NTRK;k++){midi_bend_target[k]=midi_bend_q8[k]=0;trk[k].mw=trk[k].at=trk[k].ex_off=0;}
     for (ch = 0; ch < 16u; ch++) {
         midi_channel_t *c = midi_channel(ch);
         if (midi_in_block(ch)) {
+            uint32_t id=trk_index(midi_track(ch))+1u;
+            for(note=0;note<128u;note++) if(midi_notes[ch][note] && (midi_notes[ch][note]&127u)!=id) midi_release(ch,note);
+            c->targets=(uint8_t)(1u<<(id-1u));
             midi_expression(midi_track(ch), c);
             continue;
         }
         for (note = 0; note < 128u; note++)
             if (midi_notes[ch][note])
                 midi_release(ch, note);
+        c->targets=0;
         c->pedal = c->wheel = 0;
         c->bend = 0;
         c->rpn_msb = c->rpn_lsb = 127;

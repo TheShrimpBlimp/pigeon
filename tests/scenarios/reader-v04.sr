@@ -1,0 +1,76 @@
+# Focused v0.4 announcements; no full firmware suite.
+listen
+page 5
+press FX
+said Scratch deck
+where
+said Knob 1, scratch
+said Knob 2, level
+clear
+turn 3 1
+said view record
+turn 4 2
+said sensitivity 7
+clear
+press PLAY
+said motor off
+where
+said Knob 4, sensitivity
+press EDIT
+said motor controls
+where
+said Knob 1, seek
+said Knob 2, speed
+said Knob 3, brake
+said Knob 4, glide
+said Presets, tuning 0 cents
+clear
+preset 1
+said Tuning 1 cents
+press SCL
+said TUNING RESET
+where
+said Presets, tuning 0 cents
+turn 2 -50
+said speed 50 percent
+press EDIT
+press HOME
+page 5
+press ARP
+said Chop queue
+turn 1 1
+note 60
+note 61
+note 61
+where
+said Knob 3, selected waiting entry 1
+said Knob 1, queue
+said Next chops 2, 2
+press ENV
+said QUEUED CHOP REMOVED
+press HOME
+listen
+page 7
+where
+said Sequence grid
+clear
+press SEQ
+said Piano roll
+where
+said Knob 3, step
+listen
+chord 60 64 67 71
+said notes 60, 64, 67, 71
+clear
+chord 60 64 67 72
+said notes 60, 64, 67, 72
+# Renew the real reader heartbeat during this longer scenario.
+listen
+page 0
+where
+said Knob 1, start
+disconnect
+clear
+page 30
+turn 4 1
+silent

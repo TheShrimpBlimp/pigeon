@@ -47,11 +47,12 @@ static void ko_arrange_draw(int force)
         if(ko_launch_pending<4) {str_cpy(text,chain_config.rsv[0]==1?"PATTERN END: ":"NEXT BAR: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_launch_pending);text[n+1]=0;}
         else if(chain.running && ko_launch_mode) {str_cpy(text,"PLAYING: ",sizeof text);n=str_len(text);text[n]=(char)('A'+ko_pattern_active);text[n+1]=0;}
         else str_cpy(text,"KEYS 1-4 SELECT A-D",sizeof text);
+        ko_pattern_prompt(text,sizeof text);
         ko_line(140,text,T_MID);
         ko_pattern_tiles(force);
         ko_line(158,"K1 SLOT / K2 COPY FROM",T_MID);
         ko_line(176,"K3 CHAIN ADD+ / REMOVE-",T_MID);
-        ko_line(194,"K4 PASTE+ / COPY-",T_MID);
+        ko_line(194,"FX COPY / LFO PASTE",T_MID);
         ko_line(205,"SAVE ALL / PLAY LOOP",T_MID);
         ko_line(224,"SCL ARRANGE / EDIT BACK",T_MID);
     } else {

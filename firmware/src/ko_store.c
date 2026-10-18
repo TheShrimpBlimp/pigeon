@@ -27,6 +27,18 @@ _Static_assert(KO_EXTRA_REC_OFF+sizeof(ko_extra_record_t)<=4096u,"alternate layo
 #define KO_SYNC_MAGIC 0x3159534bu /* KSY1 */
 typedef struct {uint32_t magic,song_crc[2];ko_sync_t sync[2];uint32_t crc;} ko_sync_record_t;
 _Static_assert(KO_SYNC_REC_OFF+sizeof(ko_sync_record_t)<=4096u,"sync fits existing metadata");
+/* Versioned, audio-bound scratch preferences in unused metadata bytes. Runtime
+ * voices, cue, motor on/off and fader level are deliberately never restored. */
+#define KO_SCRATCH_REC_OFF 3584u
+#define KO_SCRATCH_MAGIC 0x31524353u /* SCR1 */
+typedef struct {int16_t rate,cents;uint16_t brake_ms,release_ms;uint8_t sensitivity,record;uint8_t rsv[2];} ko_scratch_pref_t;
+typedef struct {uint32_t magic,song_crc[2];ko_scratch_pref_t pref[2];uint32_t crc;} ko_scratch_record_t;
+_Static_assert(KO_SYNC_REC_OFF+sizeof(ko_sync_record_t)<=KO_SCRATCH_REC_OFF && KO_SCRATCH_REC_OFF+sizeof(ko_scratch_record_t)<=4096u,"scratch record has no overlap");
+static int ko_scratch_record_ok(const ko_scratch_record_t *r) {
+    if(r->magic!=KO_SCRATCH_MAGIC || r->crc!=st_crc32(r,sizeof *r-4))return 0;
+    for(uint32_t i=0;i<2;i++){const ko_scratch_pref_t *p=&r->pref[i];if(p->rate<-400 || p->rate>400 || p->cents<-100 || p->cents>100 || p->brake_ms>2000 || p->release_ms>500 || p->sensitivity>7 || p->record>1)return 0;}
+    return 1;
+}
 static int ko_sync_ok(const ko_sync_record_t *r) {
     if(r->magic!=KO_SYNC_MAGIC || r->crc!=st_crc32(r,sizeof *r-4))return 0;
     for(uint32_t i=0;i<2;i++)if(r->sync[i].on>1 || r->sync[i].whole>1 || r->sync[i].beats>64 || r->sync[i].samples>8000000u || (r->sync[i].on && (!r->sync[i].beats || !r->sync[i].samples)))return 0;
@@ -65,6 +77,11 @@ static void ko_store_load(void)
     }
     const ko_sync_record_t *sync=(const ko_sync_record_t *)(smp_user_xip(0)+SLC_REC_OFF+KO_SYNC_REC_OFF);
     if(ko_sync_ok(sync) && sync->song_crc[ko_id()]==ko.song_crc)ko_sync[ko_id()]=sync->sync[ko_id()];
+    const ko_scratch_record_t *scratch=(const ko_scratch_record_t *)(smp_user_xip(0)+SLC_REC_OFF+KO_SCRATCH_REC_OFF);
+    if(ko_scratch_record_ok(scratch) && scratch->song_crc[ko_id()]==ko.song_crc){
+        const ko_scratch_pref_t *p=&scratch->pref[ko_id()];uint32_t id=ko_id();
+        ko_scratch[id].rate=p->rate;ko_scratch_tune(id,p->cents);ko_scratch[id].brake_ms=p->brake_ms;ko_scratch[id].release_ms=p->release_ms;ko_scratch[id].sensitivity=p->sensitivity;ko_scratch[id].record=p->record;
+    }
     if (!ko_record_ok(r)) return;
     if (r->song_crc == ko.song_crc) {
         (void)ko_restore(&r->table);
@@ -118,6 +135,13 @@ static int ko_store_sector(int update)
     if(update){sync.magic=KO_SYNC_MAGIC;for(uint32_t i=0;i<1u+FELUCCA_KO_DUAL;i++){sync.song_crc[i]=ko_states[i].song_crc;sync.sync[i]=ko_sync[i];}sync.crc=st_crc32(&sync,sizeof sync-4);}
     else if(ko_sync_ok(oldsync))sync=*oldsync;
     changed|=sync.magic && memcmp(&sync,oldsync,sizeof sync);
+    ko_scratch_record_t scratch;memset(&scratch,0,sizeof scratch);
+    const ko_scratch_record_t *oldscratch=(const ko_scratch_record_t *)(smp_user_xip(0)+SLC_REC_OFF+KO_SCRATCH_REC_OFF);
+    if(update){scratch.magic=KO_SCRATCH_MAGIC;for(uint32_t i=0;i<1u+FELUCCA_KO_DUAL;i++){
+        scratch.song_crc[i]=ko_states[i].song_crc;scratch.pref[i]=(ko_scratch_pref_t){.rate=ko_scratch[i].rate,.cents=ko_scratch[i].cents,.brake_ms=ko_scratch[i].brake_ms,.release_ms=ko_scratch[i].release_ms,.sensitivity=ko_scratch[i].sensitivity,.record=ko_scratch[i].record};
+    }scratch.crc=st_crc32(&scratch,sizeof scratch-4);}
+    else if(ko_scratch_record_ok(oldscratch))scratch=*oldscratch;
+    changed|=scratch.magic && memcmp(&scratch,oldscratch,sizeof scratch);
     if (!changed) return 0;
     if (st_erase(off) || st_prog(off,&slices,sizeof slices)) return 2;
     for (uint32_t i=0;i<1u+FELUCCA_KO_DUAL;i++)
@@ -126,6 +150,7 @@ static int ko_store_sector(int update)
     if(perf.magic && st_prog(off+KO_PERF_REC_OFF,&perf,sizeof perf))return 2;
     if(extra.magic && st_prog(off+KO_EXTRA_REC_OFF,&extra,sizeof extra))return 2;
     if(sync.magic && st_prog(off+KO_SYNC_REC_OFF,&sync,sizeof sync))return 2;
+    if(scratch.magic && st_prog(off+KO_SCRATCH_REC_OFF,&scratch,sizeof scratch))return 2;
     return 3;
 }
 static void ko_store_poll(void)

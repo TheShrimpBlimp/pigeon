@@ -99,6 +99,8 @@ def generate():
     for old in ("felucca_font.h", "felucca_icons.h"):     # headers of the bitmap font and icon atlas
         (GEN / old).unlink(missing_ok=True)
     tools = SRC / "tools"
+    subprocess.run([sys.executable,str(tools / "gen_words.py"),str(SRC / "firmware/words.tsv"),
+                    str(SRC / "web/words"),str(GEN / "ann_words.h")],check=True)
     cmds = [[tools / "gen_aa_font.py", GEN / "ui_fonts.h", "--preset", "little-character"],
             [tools / "gen_aa_icons.py", GEN / "ui_icons.h"],
             [tools / "gen_aa_keycaps.py", GEN / "ui_keycaps.h"],

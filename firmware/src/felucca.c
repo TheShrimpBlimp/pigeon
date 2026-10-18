@@ -75,6 +75,9 @@
 #include "audio.c"
 
 /* -------------------------------------------------------------- UI --- */
+#ifndef PIGEON_READER
+#define PIGEON_READER FELUCCA_SAMPLER_ONLY
+#endif
 #include "panel.c"
 #include "ui.c"
 #include "menu_items.c"          /* MENU's rows and settings (ui_menu.c, editor_menu.c) */
@@ -100,6 +103,14 @@
 #endif
 #if FELUCCA_CDC
 #include "console.c"
+#endif
+#if PIGEON_READER
+static int ann_wire_send(const uint8_t *p,uint32_t n)
+{
+    if(!usb.config || usb.suspended || SXQ-(so_w-so_r)<(n+2u)/3u)return -1;
+    int rc=ota_wire_send(p,n);if(!rc)pr_wire_sent++;return rc;
+}
+#include "pigeon_reader.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
 #include "main.c"

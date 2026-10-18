@@ -310,7 +310,7 @@ static void draw_head(void)
 {
 #if FELUCCA_SAMPLER_ONLY
     char phrase[3], tempo[12];int has_phrase=head_slot(phrase);
-    uint32_t signature=song.sel*13131u+song.playing*3u+song.rec*7u+(uint32_t)song.g[G_BPM]*101u+
+    uint32_t signature=(uint32_t)midi_lit(song.sel)*17171u+song.sel*13131u+song.playing*3u+song.rec*7u+(uint32_t)song.g[G_BPM]*101u+
         (uint32_t)batt_shown()*7777u+(has_phrase?str_hash(11u,phrase):0u)+
         (ui.msg_t?str_hash(7u,ui.msg):ui.layer*7919u)+seq_counting()*17u;
     if(!ui.force && signature==ui.head_sig)return;
@@ -319,7 +319,7 @@ static void draw_head(void)
     if(ui.msg_t)cv_text_fit(8,5,&AF_S,ui.msg,T_THEME,T_BG,204);
     else if(ui.layer)cv_text_fit(8,5,&AF_S,layer_head(),T_THEME,T_BG,204);
     else {
-        cv_text(8,5,&AF_S,song.sel==1?"KIT":song.sel==2?"S2":"S1",T_THEME);
+        cv_text(8,5,&AF_S,song.sel==1?"KIT":song.sel==2?"S2":"S1",midi_lit(song.sel)?T_ACCENT:T_THEME);
         if(has_phrase)cv_text(34,5,&AF_S,phrase,T_MID);
         cv_text(64,5,&AF_S,seq_counting()?"COUNT":(song.rec&(1u<<song.sel))?song.playing?"REC":"ARMED":song.playing?"PLAY":"STOP",T_THEME);
         fmt_int(tempo,song.g[G_BPM]);cv_text(124,5,&AF_S,tempo,T_THEME);cv_text(151,5,&AF_S,"BPM",T_MID);
@@ -1286,7 +1286,7 @@ static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l
     cv_blit(SPL_X0, y);
 }
 #ifndef PIGEON_SPLASH_TITLE
-#define PIGEON_SPLASH_TITLE "PIGEON V0.3.1"
+#define PIGEON_SPLASH_TITLE "PIGEON V0.4 DEV"
 #endif
 static void draw_splash(void)
 {
@@ -1535,6 +1535,10 @@ static void ui_draw(void)
         counting = (uint8_t)seq_counting();
         ui.force = 1;
     }
+#if PIGEON_READER
+    /* The reader remains useful when the physical screen is asleep. */
+    pigeon_reader_frame(fm1_ms);
+#endif
     if (!scr_frame())                                   /* MENU > SCREEN OFF: dark (or waking), nothing drawn */
         return;
     ui_draw_page(counting);

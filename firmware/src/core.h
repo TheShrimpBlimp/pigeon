@@ -99,6 +99,7 @@ enum {                          /* per-track parameters */
     P_ITYPE, P_IA, P_IB, P_IC, P_IMIX,         /* 1.5 (#78, #177): the INSERT, its TYPE, three values and MIX (fx.c) */
     P_FTYPE,                                   /* 1.5 (#104): ANALOG's filter TYPE, LP (as before) / BP / HP (eng_analog.c) */
     P_ESYNC,                                   /* 1.5 (#175): ENV SYNC: ATK DEC REL as note values of the tempo (voice.c) */
+    P_NOTE0, P_NOTE1, P_NOTE2, P_NOTE3, /* v0.4 per-note timing locks; consumes FUN10's four spare parameter bytes */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -266,7 +267,7 @@ typedef struct {                 /* acid-style step: up to 4 notes (POLY), time,
     uint8_t vel;
     uint8_t hit;                 /* bit l: lane l hits (its GM note, on any engine): the DRUM grid */
     uint8_t acc;                 /* bit l: that hit is accented (velocity 127) */
-    uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent */
+    uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent; PIGEON 102..116 = conditions */
 } step_t;
 typedef struct {                 /* a step as formats 1..4 (projects to FUN4) stored it: no hits */
     uint8_t note[4];
@@ -274,8 +275,11 @@ typedef struct {                 /* a step as formats 1..4 (projects to FUN4) st
 } step8_t;
 
 /* Probability keeps zero-initialized and legacy patterns at 100%. */
-static uint32_t step_condition(const step_t *s) {return s->probability>=102u && s->probability<=105u ? s->probability-101u:0u;}
-static void step_set_condition(step_t *s,uint32_t c) {s->probability=(uint8_t)(c?101u+(c>4u?4u:c):0u);}
+/* Preserve PIGEON's existing 102..105 meanings; appended conditions never reinterpret old projects. */
+#define KO_CONDITIONS 15u
+#define KO_PROB_MAX (101u+KO_CONDITIONS)
+static uint32_t step_condition(const step_t *s) {return s->probability>=102u && s->probability<=KO_PROB_MAX ? s->probability-101u:0u;}
+static void step_set_condition(step_t *s,uint32_t c) {s->probability=(uint8_t)(c?101u+(c>KO_CONDITIONS?KO_CONDITIONS:c):0u);}
 static uint32_t step_chance(const step_t *s) { return (!s->probability || step_condition(s)) ? 100u : s->probability <= 100u ? s->probability : 0u; }
 static void step_set_chance(step_t *s, uint32_t chance) { s->probability = (uint8_t)(chance >= 100u ? 0u : chance ? chance : 101u); }
 /* RATCH: a NOTE step plays its notes and hits this many times (1..4), in equal parts of the step; every older
@@ -386,7 +390,7 @@ typedef struct track {
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST insert state (fx.c) */
     uint8_t tail;                /* blocks to mix after the last voice (the DIST / INSERT tail) */
     uint8_t ins_run;             /* the INSERT still sounds (fx.c track_insert: its wet share above 0) */
-    uint8_t rsv_sz[15];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[7];          /* (sizeof(track_t) a multiple of 16: below) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
     uint8_t xf_on, xf;           /* fading; blocks of the fade still to render */
@@ -417,10 +421,27 @@ typedef struct {
     uint32_t cpu_q8;             /* audio ISR load, 1/256 */
     uint32_t master_q12;
     int32_t batt_raw;            /* smoothed ADC ch3 (battery divider), 0 = not read yet */
+    uint8_t mch[NTRK]; /* per-track channels, encoded as upstream 1.6 */
 } song_t;
+#define ROUTE_SEL 1
+#define ROUTE_TRACK 5                /* G_ROUTE: TRACK, each track on its own channel (song.mch) */
+#define MCH_OMNI 16u
+#define MCH_OFF 17u
+#define MCH_N 18u                    /* channels 1..16, OMNI, OFF */
 
 static track_t trk[NTRK];        /* the instrument: four parts */
 static song_t song;
+/* MIDI IN TRACK: track i's channel 0..15, MCH_OMNI or MCH_OFF (song.mch), and set */
+static inline uint32_t mch_get(uint32_t i)
+{
+    uint32_t v = song.mch[i % NTRK];
+    return v < 16u ? (v + i) & 15u : v < MCH_N ? v : (i & 15u);
+}
+static inline void mch_set(uint32_t i, uint32_t ch) { song.mch[i % NTRK] = (uint8_t)(ch < 16u ? (ch - i) & 15u : ch < MCH_N ? ch : 0u); }
+
+
+
+
 #if FELUCCA_KO
 #include "ko_state.h"
 #endif

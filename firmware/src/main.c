@@ -256,6 +256,11 @@ static void fm1_main(void)
             }
         }
 #if FELUCCA_OTA
+#if PIGEON_READER
+        {const uint8_t *p;uint32_t n;
+            if(ota_frame_get(&p,&n) && ann_frame(p,n,m))ota_frame_done();
+        }
+#endif
         ed_service();                                   /* web editor SysEx */
         ota_service();                                  /* M-UPGRADE handshake */
         if (usb.ota_req) {                              /* M-UPGRADE upgrade command */

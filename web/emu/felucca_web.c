@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #define FELUCCA_WEB 1
+#define PIGEON_READER 1
 #include "../../firmware/hal/fm1_web_sample.h"
 #define FELUCCA_KO 1
 #define FELUCCA_KO_DUAL 1
@@ -215,6 +216,17 @@ static void fl_plain_window_init(void) {}
 #include "../../firmware/src/storage.c"
 #include "../../firmware/src/upreset.c"
 #include "../../firmware/src/project.c"
+/* The browser exposes the same complete protocol frames as the hardware port. */
+static uint8_t web_ann_frames[16][ANN_MAX+8];
+static uint16_t web_ann_length[16];static uint32_t web_ann_w,web_ann_r;
+static uint8_t web_ann_in[ANN_MAX+8];
+static int ann_wire_send(const uint8_t *p,uint32_t n)
+{
+    if(n>ANN_MAX+8 || web_ann_w-web_ann_r>=16)return -1;
+    uint32_t slot=web_ann_w++%16;memcpy(web_ann_frames[slot],p,n);web_ann_length[slot]=n;pr_wire_sent++;return 0;
+}
+#include "../../firmware/src/pigeon_reader.c"
+
 
 /* ------------------------------------------------- main.c and its HAL --- */
 typedef struct { uint32_t magic, count, vec, pc, emu, dbg, rets; } fm1_crash_t;
@@ -349,6 +361,14 @@ static void web_ms(void)
 #undef __attribute__
 
 static float out_l[1024], out_r[1024];
+EXPORT uint8_t *web_sysex_buffer(void){return web_ann_in;}
+EXPORT uint32_t web_sysex(uint32_t n){
+    if(n<6 || n>sizeof web_ann_in || web_ann_in[0]!=0xf0 || web_ann_in[n-1]!=0xf7)return 0;
+    return ann_frame(web_ann_in+1,n-2,fm1_ms);
+}
+EXPORT uint32_t web_said_size(void){return web_ann_r==web_ann_w?0:web_ann_length[web_ann_r%16];}
+EXPORT const uint8_t *web_said_buf(void){return web_ann_r==web_ann_w?0:web_ann_frames[web_ann_r%16];}
+EXPORT void web_said_done(void){if(web_ann_r!=web_ann_w)web_ann_r++;}
 EXPORT float *web_out_l(void) { return out_l; }
 EXPORT float *web_out_r(void) { return out_r; }
 /* n frames (<= 1024) into out_l / out_r: the device runs until they exist */

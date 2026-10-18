@@ -81,8 +81,10 @@ static int32_t ko_pcm_next(uint32_t pos, uint32_t voice)
         return ((ko_pcm_first_t *)ENG_MEM(voice>=NVOICE ? 2 : 0))->tail[voice%NVOICE][pos-bridge];
     ko_pcm_underruns++; return 0;
 }
+static void ko_scratch_poll(void);
 static void ko_pcm_poll(void)
 {
+    ko_scratch_poll();
     static uint32_t cursor;
     uint32_t now=KO_DIAG_NOW(), sounding=0;
     for (uint32_t v=0;v<KO_PCM_VOICES;v++) sounding |= ko_pcm_voice(v)->active;
@@ -125,8 +127,12 @@ static void ko_pcm_poll(void)
         uint32_t rank = ko_pcm_voice(v)->s[6] ? 0u : 2u;
         if (ko_pcm[v].frame[0] == want || ko_pcm[v].frame[1] == want) {
             rank = ko_pcm_voice(v)->s[6] ? 1u : 2u;
-            want++;
             const voice_t *voice=ko_pcm_voice(v);
+            if(((uint32_t)voice->s[4]&KO_V_SCRATCH) && ko_scratch_speed(v>=NVOICE)<0) {
+                uint32_t chop=((uint32_t)voice->s[4]>>8)&63u;
+                const ko_chop_t *c=&(*ko_pcm_table(v)).chop[chop];
+                want=want*KO_PCM_N<=c->a+bank->skip || !want ? (c->b-1u+bank->skip)/KO_PCM_N : want-1u;
+            } else want++;
             if (voice->gate && !((uint32_t)voice->s[4]&KO_V_NO_LOOP) &&
                 want*KO_PCM_N >= voice->ph[2]+bank->skip) {
                 uint32_t chop=((uint32_t)voice->s[4]>>8)&63u;

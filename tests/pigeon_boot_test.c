@@ -38,6 +38,8 @@ int main(void)
     fm1_in.buttons=host_pressed=1u<<panel.btn[B_HOME];ui_input();
     bad+=check("HOME closes settings on press",!ui.menu&&ko.view==0);
     fm1_in.buttons=0;ui_input();
+    /* Settle pending project-restore panic/engine switches before auditioning. */
+    render_blocks(32);
     /* A long ADPCM chop uses an exact checkpoint near its end. */
     ui.menu=0;ko.view=0;song.sel=0;ko_context=~0u;ui_input();
     slc_usr[0].rate=16384;
@@ -48,15 +50,31 @@ int main(void)
     for(uint32_t i=0;i<NVOICE;i++)voice_kill(&trk[0].v[i]);
     song.rec=1;ko_seq[0].enabled=1;ko_seq[0].cursor=0;
     step_t before_step=trk[0].step[0];
-    fm1_in.buttons=1u<<panel.btn[B_EDIT];
-    fm1_in.notes=host_notes=1u;keyboard_block();
+    int16_t audition_pitch=ko_table()->chop[0].pitch;
+    fm1_in.buttons=host_pressed=1u<<panel.btn[B_SCL];ui_input();
+    bad+=check("holding SEL preserves waveform and pitch",ko.view==0&&ko_table()->chop[0].pitch==audition_pitch);
+    fm1_in.notes=host_notes=1u;keyboard_block();ui_input();
     voice_t *tail_voice=0;
     for(uint32_t i=0;i<NVOICE;i++)if(trk[0].v[i].active)tail_voice=&trk[0].v[i];
-    bad+=check("EDIT plus chop previews near end",tail_voice&&tail_voice->ph[0]>0&&tail_voice->ph[2]==slc_usr[0].len);
-    bad+=check("end preview cannot loop or latch",tail_voice&&(tail_voice->s[4]&KO_V_NO_LOOP)&&!(tail_voice->s[4]&KO_V_LATCH));
+    bad+=check("SEL plus chop previews near end",tail_voice&&tail_voice->ph[0]>0&&tail_voice->ph[2]==slc_usr[0].len);
+    bad+=check("end preview loops while held without latching",tail_voice&&!(tail_voice->s[4]&KO_V_NO_LOOP)&&!(tail_voice->s[4]&KO_V_LATCH));
+    if(tail_voice){
+        uint32_t start=tail_voice->ph[0];int wrapped=0;
+        for(uint32_t b=0;b<8000 && !wrapped;b++){render_blocks(1);wrapped=tail_voice->active&&tail_voice->ph[0]<start;}
+        bad+=check("end audition wraps to original chop start",wrapped && tail_voice->gate && tail_voice->s[6]!=2);
+    }
     bad+=check("preview leaves chop boundaries untouched",!memcmp(&unchanged,ko_table(),sizeof unchanged));
     bad+=check("preview never records a step",ko_seq[0].cursor==0&&!memcmp(&before_step,&trk[0].step[0],sizeof before_step));
-    fm1_in.notes=host_notes=0;keyboard_block();fm1_in.buttons=0;
+    fm1_in.notes=host_notes=0;keyboard_block();fm1_in.buttons=0;ui_input();
+    bad+=check("end-audition gesture preserves waveform and stored pitch",ko.view==0&&ko_table()->chop[0].pitch==audition_pitch);
+    fm1_in.buttons=host_pressed=1u<<panel.btn[B_SCL];ui_input();
+    bad+=check("plain SEL waits for release on waveform",ko.view==0);
+    fm1_in.buttons=0;ui_input();bad+=check("plain SEL tap opens patterns",ko.view==8);
+    press(B_HOME);
+    fm1_in.buttons=host_pressed=1u<<panel.btn[B_OCTDN];ui_input();fm1_in.buttons=0;ui_input();
+    bad+=check("ordinary OCT- tap still lowers pitch",ko_table()->chop[0].pitch==audition_pitch-1);
+    ko_pitch_turn(1);
+    bad+=check("releasing audition note stops its loop",tail_voice&&!tail_voice->gate&&tail_voice->stage==3);
     for(uint32_t i=0;i<NVOICE;i++)voice_kill(&trk[0].v[i]);
     trk_note_on(trk,60,100);tail_voice=0;
     for(uint32_t i=0;i<NVOICE;i++)if(trk[0].v[i].active)tail_voice=&trk[0].v[i];

@@ -63,7 +63,7 @@ def main(pkg, version, out):
         strip_module((HERE / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
         strip_module((HERE / "fm1backup.js").read_text(encoding="utf-8"))
     name = f"pigeon-{re.sub(r'[^A-Za-z0-9.-]', '-', version)}.fwsc"
-    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "Beta candidate: hardware verification pending." if "beta" in version else ("PIGEON v0.3.1. Installation, reboot, sample and session preservation verified on physical FM1; new control checks pending." if version == "0.3.1" else "PIGEON v0.3. Tested on physical M-VAVE FM1 hardware." if version == "0.3" else "Development build: see its validation notes before installing.")})
+    meta = json.dumps({"version": version, "product": product, "pkg": "../../firmware/" + name, "sha256": hashlib.sha256(raw).hexdigest(), "releaseStatus": "PIGEON v0.4. Back up a complete session before updating; v0.3.1 cannot read v0.4 projects." if version == "0.4" else "Beta candidate: hardware verification pending." if "beta" in version else ("PIGEON v0.3.1. Installation, reboot, sample and session preservation verified on physical FM1; new control checks pending." if version == "0.3.1" else "PIGEON v0.3. Tested on physical M-VAVE FM1 hardware." if version == "0.3" else "Development build: see its validation notes before installing.")})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
@@ -81,7 +81,7 @@ def main(pkg, version, out):
     for n in names:
         shutil.copy(lic / n, fw / "LICENSES" / n)
     (fw / "LICENSES" / "index.html").write_text(    # the installer links this folder: Pages lists no folders
-        '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PIGEON licences</title><link rel="stylesheet" href="../../site.css"><main><div class="support-row"><a class="coffee-link" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a></div><h1>Licence texts</h1><ul>'
+        '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PIGEON licences</title><link rel="stylesheet" href="../../site.css"><link rel="stylesheet" href="../../footer.css"><main><div class="support-row"><a class="coffee-link" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a></div><h1>Licence texts</h1><ul>'
         + "".join(f'<li><a href="{n}">{n}</a></li>' for n in names)
         + '</ul><p><a href="../LICENSING.md">LICENSING.md</a> · <a href="../LICENSE">LICENSE (GPL-3.0)</a></p></main>\n',
         encoding="utf-8")
@@ -92,6 +92,7 @@ def main(pkg, version, out):
         if (HERE / f).exists():
             shutil.copy(HERE / f, ed / f)
     # Standalone sample GUI; these parent modules keep the same relative URLs as web/.
+    shutil.copytree(HERE / "words",out / "words",dirs_exist_ok=True)
     shutil.copytree(HERE / "pigeon", out / "webapp" / "pigeon", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("test*.mjs"))
     for dependency in ("fm1backup.js", "ko_bank.js", "fm1pkg.js", "fm1ota.js"):
@@ -106,17 +107,18 @@ def main(pkg, version, out):
     tokens={"VERSION":safe_version,"BUILD_DATE":datetime.now(ZoneInfo("America/Toronto")).strftime("%B %d, %Y"),"PACKAGE_BYTES":f"{len(raw):,}","SHA256":hashlib.sha256(raw).hexdigest()}
     for key,value in tokens.items():landing=landing.replace("{{"+key+"}}",html_escape.escape(value))
     (out / "index.html").write_text(landing,encoding="utf-8")
+    shutil.copytree(HERE / "site" / "home", out / "home", dirs_exist_ok=True)
     for asset in ("site.css","nixie.css","nixie.js"):
         shutil.copy(HERE / "site" / asset,out / asset)
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
     for asset in ("footer.css", "footer.js"):
         shutil.copy(HERE / asset, out / asset)
     guide=out / "guide";guide.mkdir(exist_ok=True)
-    for doc in ("KO_MODE.md","KO_LEGACY_REFERENCE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_BETA.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md","PIGEON_V05_RELEASE.md","PIGEON_FIRMWARE_PROFILE.md","PIGEON_UI.md","PIGEON_V031_RELEASE.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
+    for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md","PIGEON_FIRMWARE_PROFILE.md","PIGEON_V031_RELEASE.md","PIGEON_V04_RELEASE.md","PIGEON_V04_GUIDE.md","PIGEON_NOTE_TIMING.md","SCREEN_READER.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)
     # Matching working source, excluding user audio, build artifacts, and hosting state.
     root=HERE.parent
     tracked=subprocess.check_output(["git","ls-files","--cached","--others","--exclude-standard","-z"],cwd=root).decode().split("\0")
-    extra=["web/pigeon/install-count.js","web/pigeon-installer.html","tools/pigeon_site_ui.c","tests/pigeon_expansion_test.c","tests/pigeon_performance_test.c","docs/NEXT_WORK.md","web/pigeon/editing.js","web/pigeon/editors.js","web/pigeon/wave-editor.js","web/pigeon/test-editing.mjs","web/site/index.html","web/site/site.css"]
+    extra=["web/pigeon/install-count.js","web/pigeon-installer.html","tools/pigeon_site_ui.c","tests/pigeon_expansion_test.c","tests/pigeon_performance_test.c","web/pigeon/editing.js","web/pigeon/editors.js","web/pigeon/wave-editor.js","web/pigeon/test-editing.mjs","web/site/index.html","web/site/site.css"]
     # The independently versioned website supplies templates and render assets.
     extra += [str(p.relative_to(root)) for p in (HERE / "site").glob("*")
               if p.is_file() and p.suffix in (".html", ".css", ".js", ".md")]
@@ -127,6 +129,13 @@ def main(pkg, version, out):
             path=root / relative
             if relative and path.is_file() and not relative.startswith(("build/","web/site/.openai/","web/site/dist/")):
                 archive.add(path,arcname="pigeon/"+relative,recursive=False)
+    icons='<link rel="icon" type="image/png" sizes="192x192" href="https://theshrimpblimp.com/home/face-icon.png"><link rel="shortcut icon" href="https://theshrimpblimp.com/favicon.ico">'
+    for page in out.rglob('*.html'):
+        text=page.read_text()
+        text=re.sub(r'<link\b(?=[^>]*\brel\s*=\s*["\x27](?:icon|shortcut icon)["\x27])[^>]*>\s*','',text,flags=re.I)
+        if '</head>' in text:text=text.replace('</head>',icons+'</head>',1)
+        elif '<main' in text:text=text.replace('<main',icons+'<main',1)
+        page.write_text(text)
     if worker_root:
         server=worker_root / 'server';server.mkdir(parents=True,exist_ok=True)
         shutil.copy(HERE / 'site' / 'worker' / 'index.js',server / 'index.js')

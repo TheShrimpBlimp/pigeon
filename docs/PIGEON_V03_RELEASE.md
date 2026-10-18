@@ -1,6 +1,6 @@
-# PIGEON v0.3 release gate
+# PIGEON v0.3 release history
 
-The main release is v0.3, without the experimental screen reader. This package was flashed successfully to an FM1, and sample-bank/chop metadata matched before and after the update. Extended physical checks below remain pending. No chop-naming feature is planned for this milestone.
+This records the v0.3 release, without the experimental screen reader. The published release is now v0.3.1; current development is v0.4. This package was flashed successfully to an FM1, and sample-bank/chop metadata matched before and after the update. Extended physical checks below remain pending. No chop-naming feature is planned for this milestone.
 
 ## Software acceptance
 

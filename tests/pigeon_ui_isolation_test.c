@@ -11,7 +11,7 @@ int main(void) {
  ui_prefs2=0;ui.home=0;ui.page=255;song.sel=3;ko.on=0;ko.view=255;
  ui_input();bad+=check("old settings cannot disable PIGEON or select a legacy page",ko.on&&ui.home&&ui.page==0&&song.sel==0&&ko.view==0);
  ko_setup();song.sel=2;ko_setup_second();song.sel=0;
- for(uint32_t fam=0;fam<FAM_COUNT;fam++){open_family(fam);bad+=check("every page family stays inside PIGEON",ui.home&&ui.page==0&&ko.on&&ko.view<=28);}
+ for(uint32_t fam=0;fam<FAM_COUNT;fam++){open_family(fam);bad+=check("every page family stays inside PIGEON",ui.home&&ui.page==0&&ko.on&&ko.view<KO_VIEW_COUNT);}
  ui.home=0;ui.page=255;song.sel=3;ui.force=1;ui_draw();
  bad+=check("drawing repairs stale page state before page access",ui.home&&ui.page==0&&song.sel==0);
  const uint8_t buttons[]={B_HOME,B_EDIT,B_ENV,B_LFO,B_FX,B_SCL,B_ARP,B_SEQ,B_GLO,B_SAVE};
@@ -50,7 +50,7 @@ int main(void) {
  const uint8_t removed[]={B_FX,B_SCL,B_REC};int removed_ok=1;
  for(uint32_t i=0;i<sizeof removed;i++) {
    ui.menu=0;go_home();ko.view=0;btn_down(removed[i]);frames(700);
-   removed_ok&=!ui.layer&&!ui.lock&&!layer_open()&&!kb_mask&&!perf_mask;
+   removed_ok&=!ui.layer&&!ui.lock&&!layer_open()&&!(fm1_in.buttons&kb_mask)&&!kb_lock&&!(fm1_in.buttons&perf_mask);
    ui.force=1;ui_draw();btn_up(removed[i]);frames(400);
    removed_ok&=!ui.layer&&!ui.lock&&!lys.dt_l;
  }

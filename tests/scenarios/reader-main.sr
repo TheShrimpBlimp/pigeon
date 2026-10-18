@@ -1,0 +1,55 @@
+# The device remains silent until a reader opts in.
+wait 300
+silent
+listen
+said Waveform
+said Knob 1, start
+where
+said Knob 1, start
+clear
+page 1
+wait 240
+said Effects amounts
+turn 2 1
+said delay
+clear
+page 19
+wait 240
+said Chop envelope
+where
+said Knob 1, attack
+clear
+page 7
+wait 240
+said Sequence grid
+where
+said Knob 4, length
+clear
+track 1
+page 16
+wait 240
+said Drum pad
+turn 3 1
+said decay
+clear
+message CANNOT SAVE. STOP PLAYBACK FIRST
+said CANNOT SAVE
+said STOP PLAYBACK FIRST
+clear
+block 1
+where
+silent
+block 0
+wait 200
+said Drum pad
+disconnect
+clear
+page 1
+turn 1 1
+silent
+listen
+clear
+wait 5400
+page 2
+turn 1 1
+silent

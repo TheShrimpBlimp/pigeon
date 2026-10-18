@@ -1,0 +1,54 @@
+# PIGEON screen-reader words. Generated JSON files are immutable.
+# url: https://theshrimpblimp.com/pigeon/words/
+S1	song 1
+S2	song 2
+K1	knob 1
+K2	knob 2
+K3	knob 3
+K4	knob 4
+SCL	patterns button
+SEL	select
+PRESETS	presets
+CHOP	chop
+CHOPS	chops
+DUPE	duplicate
+FEEDBK	feedback
+COMPRESSOR	compressor
+st	semitones
+semis	semitones
+QNT	quantization
+DIV	division
+SCROFF	screen off
+CLKLVL	click level
+BPMLOCK	tempo lock
+MIDIIN	midi input
+LOWCUT	low cut
+STEPS	steps
+PADS	pads
+SYNC	synchronization
+UNSAVED	not saved
+KO	sampler
+1/8D	dotted eighth
+1/16D	dotted sixteenth
+1/4D	dotted quarter
+8T	eighth triplet
+16T	sixteenth triplet
+2BAR	2 bars
+4BAR	4 bars
+CH#-#	channels # through #
+U#	user slot #
+T#	track #
+v#	version #
+Dendy0097	Dendy double zero nine seven
+ANIM	animation
+INV	inverted
+EQ	equalization
+INFO	information
+LEDS	lights
+DIM HI	bright while dimmed
+DIM LO	low while dimmed
+QUEUE	queue
+SCRATCH	scratch
+SEL	select
+
+OMNI	all channels

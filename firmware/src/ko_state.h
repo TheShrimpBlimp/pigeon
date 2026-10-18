@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* KO metadata belongs to its sample slots, not to projects. No engine/parameter IDs added.
  * Main-loop edits publish an entire table with one byte; audio never reads a partial edit. */
+#define KO_VIEW_COUNT 33u
 #define KO_PADS 27u
 #define KO_CHOPS 32u
 /* Reserved metadata bits: zero means LOOP on / LATCH off, including old FKO1 records. */
@@ -12,6 +13,7 @@
 #define KO_GATE 4096u /* nonlooping hold: release follows the key */
 #define KO_CHOKE_SHIFT 14u
 #define KO_FLAGS_MASK (KO_NO_LOOP|KO_LATCH|(31u<<KO_ATTACK_SHIFT)|(31u<<KO_RELEASE_SHIFT)|KO_GATE|KO_ONE|(3u<<KO_CHOKE_SHIFT))
+#define KO_V_SCRATCH (1u << 20)
 #define KO_VOICE (1u << 23)
 #define KO_V_NO_LOOP (1u << 22)
 #define KO_V_LATCH (1u << 21)
@@ -36,11 +38,16 @@ static void (*ko_load_hook)(void);
 /* Set only around a local end-audition trigger, never MIDI or sequencer notes. */
 /* Existing project steps hold four note IDs; both sequencer views share them. */
 static volatile uint8_t ko_chord_full;
+static volatile uint8_t ko_fill; /* performance only: hold ARP on a sequencer page */
+static uint8_t ko_note_fresh[SAMPLER_PARTS];
+static void ko_note_clear(track_t *t,int defaults);
 /* Keep chord editing out of the per-audio-block inline path. */
+static void ko_note_remove(step_t *s,uint32_t slot);
 static __attribute__((noinline)) int ko_step_note(step_t *s,uint32_t note,uint32_t vel,int toggle) {
-    if(s->time!=ST_NOTE){memset(s,0,sizeof *s);s->time=ST_NOTE;}
+    if(s->time!=ST_NOTE){for(uint32_t j=4;j;j--)ko_note_remove(s,j-1);memset(s,0,sizeof *s);s->time=ST_NOTE;}
     for(uint32_t i=0;i<s->n;i++)if(s->note[i]==note){
         if(!toggle)return 1;
+        ko_note_remove(s,i);
         for(uint32_t j=i+1;j<s->n;j++)s->note[j-1]=s->note[j];
         s->note[--s->n]=0;
         if(!s->n&&!s->hit)s->time=ST_REST;
@@ -55,6 +62,7 @@ static uint8_t ko_piano_roll[SAMPLER_PARTS];
 static uint8_t ko_piano_low[SAMPLER_PARTS] = {60,60,60};
 static uint8_t ko_tail_preview;
 static volatile uint32_t ko_tail_button_mask;
+static volatile uint8_t ko_tail_used;
 static int ko_song(const track_t *t)
 {
     return ko_states[0].on && (t == &trk[0] || (FELUCCA_KO_DUAL && t==trk+2)) && t->eng_req == 13u && t->p[P_E0] == (t==trk+2 ? 3 : 1) && t->p[P_E1] == 5;
@@ -89,6 +97,41 @@ static struct {
 static int ko_seq_on(const track_t *t) { return ko_states[0].on && t>=trk && t<trk+SAMPLER_PARTS && (FELUCCA_SAMPLER_ONLY || ko_seq[t-trk].enabled) && (ko_song(t)||ko_kit(t)); }
 static int ko_seq_end(const track_t *t) { return ko_seq_on(t) && ko_seq[t-trk].end_mode; }
 static volatile uint8_t ko_seq_firing;
+#define KO_QUEUE_CAP 64u
+/* Performance queues are transient: one FIFO per song, never serialized. */
+static struct {
+    uint8_t note[KO_QUEUE_CAP],vel[KO_QUEUE_CAP];
+    volatile uint8_t on,count,head,active;
+    uint8_t voice,current,selected;
+    uint32_t age,generation;
+} ko_queue[1+FELUCCA_KO_DUAL];
+/* Scratch decks are transient and deliberately excluded from bank/project data. */
+static struct {
+    volatile uint8_t on, motor;
+    uint8_t record, sensitivity, controls;
+    int16_t rate, cents; /* signed percent and fine motor tuning */
+    uint32_t tuning; /* Q16 ratio, calculated outside the audio IRQ */
+    uint16_t brake_ms, release_ms;
+    int32_t velocity, ramp_target, slew;
+    volatile uint8_t level; /* 0..16 crossfader, independent of platter motion */
+    int32_t gain;
+    uint32_t cue;
+    volatile int32_t jog;
+    volatile uint32_t touched;
+    uint32_t generation;
+} ko_scratch[1+FELUCCA_KO_DUAL];
+/* Cue positions belong to the current audio/bounds, not a running voice. */
+static struct {uint32_t pos[KO_CHOPS],a[KO_CHOPS],b[KO_CHOPS],generation,valid;} ko_cues[1+FELUCCA_KO_DUAL] __attribute__((section(".pool")));
+static void ko_scratch_stop(track_t *t) {
+    uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
+    ko_scratch[id].on=ko_scratch[id].motor=0;ko_scratch[id].jog=0;
+    for(uint32_t i=0;i<NVOICE;i++)if((uint32_t)t->v[i].s[4]&KO_V_SCRATCH)t->v[i].active=0;
+}
+static int32_t ko_scratch_speed(uint32_t id) {
+    return ko_scratch[id].touched ? ko_scratch[id].jog : ko_scratch[id].motor?(int32_t)ko_scratch[id].rate*(int32_t)ko_scratch[id].tuning/100:0;
+}
+static uint8_t ko_queue_firing;
+static volatile uint8_t ko_queue_full;
 
 /* Pad settings are bound to the kit CRC in a separate optional metadata record. */
 typedef struct { int8_t pitch;uint8_t level,decay,choke; } ko_pad_params_t;

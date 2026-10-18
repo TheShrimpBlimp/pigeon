@@ -1,5 +1,19 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+
+#ifndef PIGEON_READER
+#define PIGEON_READER 0
+#endif
+#if PIGEON_READER
+#define ANN_NAME FW_DISPLAY_NAME " " FW_DISPLAY_VERSION
+#define ANN_DATA __attribute__((section(".pool")))
+#include "ann_words.h"
+#include "announce.c"
+static uint32_t pr_wire_sent;
+static void pigeon_reader_frame(uint32_t now);
+static void pigeon_reader_message(const char *text,const char *suffix);
+static void pigeon_reader_calibration(const char *action,const char *control);
+#endif
 /* FELUCCA user interface.
  * Flat: SURF cards and panels on the palette's background, no rules, one type family (Inter Tight, three sizes), tracks
  * named by their numbers 1..4 on a cushion (icons.c trk_icon). Four columns <-> KNOB 1..4. Rendering is lazy:
@@ -62,6 +76,8 @@ static uint32_t up_gen;                      /* bumped on every user bank change
 #define ui_rec_prefs (favorites.factory[15][28])
 #define PREF_REC 0xFF00u                       /* (menu_items.c MENU_FLAGS: a bit of ui_rec_prefs, << 8) */
 #define PREF_SCALE_LEDS (0x40u << 8)
+#define PREF_MIDI_FOLLOW (0x80u << 8)
+#define PREF_MIDI_PANEL (0x10u << 16)
 /* 1.2: three more two-valued MENU settings, bits of another byte no engine uses, saved with the settings; 0 in older
  * settings = today's behaviour (append-only, as ui_prefs): bit 0 DISPLAY > SCOPE MIX (Discussion #165, fx.c scope_mix),
  * bit 1 CONTROL > STEP PREVIEW ON (Discussion #169, ui_input.c step_preview), bit 2 CONTROL > CHORD ENTRY ADD (#155,
@@ -261,6 +277,9 @@ static void scr_wake_now(void)                         /* main.c: the crash scre
     scrn.idle = fm1_ms;
 }
 /* ui_input, every pass: 1 = the pass is swallowed (the screen dark or waking, or the wake gesture going on) */
+static uint8_t mf_seen;
+static uint32_t midi_lit_ms[NTRK];
+static int midi_lit(uint32_t k){return midi_lit_ms[k%NTRK] && (fm1_ms|1u)-midi_lit_ms[k%NTRK]<100u;}
 static int scr_input(uint32_t pressed, uint32_t notes)
 {
     uint32_t held = fm1_in.buttons | fm1_in.notes, k;
@@ -268,6 +287,7 @@ static int scr_input(uint32_t pressed, uint32_t notes)
     if (pressed | notes | held | panel_moved)
         scrn.idle = fm1_ms;
     panel_moved = 0;
+    if(mf_seen && !(ui_prefs2 & (PREF_MIDI_PANEL>>16))){scrn.idle=fm1_ms;if(scrn.st==SCR_OFF)scrn.st=SCR_WAKE;}
     if (scrn.st == SCR_ON && !scrn.eat)
         return 0;
     for (k = 0; k < NE; k++)                           /* (every knob's turns go) */
@@ -349,7 +369,10 @@ static void pigeon_ui_guard(void)
     if (!ko_states[0].on) {ko_states[0].on=1;ko_palette_on=1;palette_set(settings.palette);ui.force=1;}
     if (song.sel>=SAMPLER_PARTS) {song.sel=0;ui.force=1;}
     if (!ui.home || ui.page>=NPAGES) {ui.home=1;ui.page=0;ui.plk_src=0;ui.entry_open=0;ui.force=1;}
-    if (ko.view>28) {ko.view=0;ui.force=1;}
+    for(uint32_t id=0;id<1u+FELUCCA_KO_DUAL;id++)
+        if(ko_scratch[id].on && (ko.view!=30 || song.sel!=(id?2u:0u) || song.rec || song.playing))ko_scratch_stop(&trk[id?2:0]);
+    if (song.sel==1 && (ko.view==29 || ko.view==30)) {ko.view=0;ui.force=1;}
+    if (ko.view>=KO_VIEW_COUNT) {ko.view=0;ui.force=1;}
     if ((ui.layer && !layer_supported(ui.layer)) || (ui.lock && !layer_supported(ui.lock))) {ui.layer=ui.lock=ui.ly=0;ui.force=1;}
 #endif
 }
@@ -446,6 +469,9 @@ static void ui_say(const char *a, const char *b)
     str_cpy(ui.msg + n, b, sizeof ui.msg - n);
     ui.msg_t = 40;
     ui.msg2[0] = 0;
+#if PIGEON_READER
+    pigeon_reader_message(a,b);
+#endif
 }
 
 static void ui_message(const char *s) { ui_say(s, ""); }

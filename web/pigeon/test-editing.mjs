@@ -68,7 +68,7 @@ assert.equal(scanChops(new Float32Array(1000), 50).length, 1);
 const fixture = new URL("../../build/expansion-project.funa", import.meta.url);
 let bytes = new Uint8Array(fs.readFileSync(fixture));
 const p = project(bytes);
-assert.equal(p.np, 111);
+assert.equal(p.np, 115);
 for (const probability of [0, 1, 70, 99, 100]) {
   const changed = editStep(bytes, 0, 5, {
       chop: 10,
@@ -104,7 +104,31 @@ assert.equal(advanced.condition, 2);
 assert.equal(advanced.probability, 100);
 assert.throws(() => editStep(bytes, 0, 10, { pitch: 25 }));
 assert.throws(() => editStep(bytes, 0, 10, { nudge: 8 }));
-assert.throws(() => editStep(bytes, 0, 10, { condition: 5 }));
+assert.throws(() => editStep(bytes, 0, 10, { condition: 16 }));
+// Repack real current-format data to older parameter counts: editing must retain
+// their actual strides, chain/motion locations, and opaque tail bytes.
+for(const np of [104,111]) {
+ const source=project(bytes),old=bytes.slice();old.fill(0,68,3312);old[66]=np;
+ for(let track=0;track<4;track++) {
+  const a=68+track*source.stride,b=68+track*(np+578);
+  old.set(source.b.subarray(a,a+np-8),b);
+  old.set(source.b.subarray(a+source.np-8,a+source.np),b+np-8);
+  old.set(source.b.subarray(a+source.np,a+source.stride),b+np);
+ }
+ old.set(source.b.subarray(source.chain,source.motion+388),68+4*(np+578));
+ const view=new DataView(old.buffer);let hash=2166136261;
+ for(const value of old.subarray(0,3836))hash=Math.imul(hash^value,16777619)>>>0;
+ view.setUint32(3836,hash,true);
+ assert.equal(project(old).np,np);
+ const changed=editStep(old,0,12,{chop:4,condition:2});
+ assert.equal(readStep(project(changed),0,12).condition,2);
+ assert.throws(()=>editStep(old,0,12,{condition:15}),/v0.4/);
+ assert.deepEqual(changed.subarray(3312,3836),old.subarray(3312,3836));
+}
+for (let condition=0;condition<=15;condition++) {
+ const changed=editStep(bytes,0,11,{condition});
+ assert.equal(readStep(project(changed),0,11).condition,condition);
+}
 const out = new URL("../../build/expansion-edited.funa", import.meta.url);
 fs.writeFileSync(out, bytes);
 const result = spawnSync(native, [out.pathname, "performance"], {

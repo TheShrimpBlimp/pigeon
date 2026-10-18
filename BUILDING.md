@@ -1,193 +1,141 @@
 # Building PIGEON
 
-The standalone PIGEON development profile is built with `./build-sampler.sh`.
-It enables the sampler interface and expanded sample storage, producing
-`build/pigeon.fwsc` and `build/pigeon.bin`. The underlying build also produces
-the compatibility filenames below. `./build.sh` alone builds the inherited
-Felucca baseline for regression work.
+## Prerequisites
 
-The underlying build makes three files in `build/`:
+- Python 3 with Pillow and fontTools. Pillow needs libraqm support for font
+  rasterization. The repository `.venv` already provides these dependencies.
+- The JieLi pi32v2 toolchain, installed with `tools/get_toolchain.sh` under
+  `~/.jieli/toolchain`.
+- On macOS, Docker Desktop with access to the repository folder. The toolchain
+  runs in a Linux amd64 container. Linux x86-64 runs it natively.
+- The AC79 SDK, whose packaging files are not bundled in this repository:
 
-| File | What |
-| --- | --- |
-| `felucca.bin` | the firmware app |
-| `loader/ota.bin` | the update loader |
-| `felucca.fwsc` | the installable package (app + loader) |
+```sh
+git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+  https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
+```
 
-## Prerequisites (macOS)
+`JIELI_TOOLCHAIN` and `AC79_SDK` override those locations. Node.js is needed for
+browser checks; Emscripten is needed for the emulator build.
 
-- Python 3 with Pillow and fontTools: `pip3 install Pillow fonttools` (the UI font and icons are
-  rasterised at build time). Pillow must include libraqm support for OpenType font features; check with `python3 -c "from PIL import features; assert features.check('raqm')"`. The project `.venv` already provides this support
-- Docker Desktop. The JieLi toolchain is Linux x86-64 only; the build runs each tool in a
-  `linux/amd64` `debian:bookworm-slim` container (Rosetta on Apple silicon). Keep the source
-  tree in a folder Docker can share, e.g. under `/Users`.
-- The JieLi Linux toolchain (clang 4.0.1 for pi32v2, from JieLi's package server):
-
-  ```
-  tools/get_toolchain.sh            # installs to ~/.jieli/toolchain
-  ```
-
-- The JieLi AC79 SDK (Apache-2.0). The package uses three of its files
-  (`cpu/wl82/tools/uboot.boot`, `cfg_tool.bin`, `cfg/eq_cfg_hw.bin`); they are not part of this tree.
-
-  ```
-  git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-      https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
-  ```
-
-- Node.js (optional, for the web tests).
-- Emscripten (optional, `emcc`: the browser emulator, `web/emu/`).
-
-On Linux x86-64 the toolchain runs natively and Docker is not needed.
-
-## Build PIGEON
+## Firmware
 
 ```sh
 PYTHON=.venv/bin/python ./build-sampler.sh
 ```
 
-This produces `build/pigeon.fwsc` and `build/pigeon.bin`.
-`./build.sh` remains the baseline compatibility build.
+Outputs:
 
-`JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations
-(`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`).
+| File | Purpose |
+| --- | --- |
+| `build/pigeon.fwsc` | Installable firmware package |
+| `build/pigeon.bin` | Application binary |
+| `build/loader/ota.bin` | Update loader |
 
-`./build.sh --release 1.0` makes a release build: the package identity becomes `FM-1_910`
-and the version string `v1.0`; the package is `build/felucca-1.0.fwsc`, and
-`build/release-1.0/` holds what a release ships: the package, the app
-(`felucca-1.0-app.bin`), `SHA256SUMS`, the sample attribution, `LICENSE`, `LICENSING.md` and
-`LICENSES/` (the package contains Apache-2.0 SDK files, so the licence texts travel with it).
+The underlying build also emits `build/felucca.bin` and `build/felucca.fwsc` as
+compatibility filenames. The PIGEON wrapper enables dual songs, shared sample
+storage and the sampler-only profile, disables the serial console, and audits
+the resulting image for inherited screens and unused synth renderers.
 
-The PIGEON script selects `FELUCCA_KO=1`, `FELUCCA_KO_STORAGE=1`,
-`FELUCCA_SAMPLER_ONLY=1`, and `FELUCCA_KO_DUAL=1` for two songs and the drum kit.
-The shared flash bank and MP3 decoder replace factory
-sample audio and changes the application reservation; see
-[Expanded KO storage](docs/KO_STORAGE.md) for migration and validation details.
-It requires flash storage, the editor upload protocol and the SLICE engine.
+Version identity comes from `firmware/src/project_identity.h`. Do not use the
+inherited `build.sh --release` path to package PIGEON. Plain `build.sh` remains
+available for baseline regression work; it is not the PIGEON product build.
+Factory sample generators and compatibility fixtures remain used by that
+baseline. PIGEON starts with user-loaded samples and does not need those factory
+instruments at runtime. See [the profile reference](docs/PIGEON_FIRMWARE_PROFILE.md).
 
-Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `core.h` and `icons.c`):
+## Emulator
 
-| Flag | Default | |
-| --- | --- | --- |
-| `FELUCCA_FLASH` | 1 | settings, presets and projects in flash |
-| `FELUCCA_OTA` | 1 | update entry (needs `FELUCCA_FLASH`) |
-| `FELUCCA_CDC` | 1 | USB serial console |
-| `FELUCCA_CDC_DEFAULT` | 1 | `0`: the console is built in but left out of USB from boot (as MENU > USB SERIAL OFF) |
-| `FELUCCA_UAC` | 1 | USB audio input (the master output, stereo, 44.1 or 48 kHz) |
-| `FELUCCA_UAC_48K` | 1 | `0`: the USB audio input at 44.1 kHz only, as up to 1.0.5.2 (`firmware/src/usb.c`) |
-| `FELUCCA_UAC_AS_FIRST` | 1 | the audio control header lists the audio streaming interface before the MIDI one, so the USB audio driver of older macOS (up to 15) finds it; `0`: 1.0 to 1.5's order, byte for byte (`firmware/src/usb.c`) |
-| `FELUCCA_UART` | 1 | TRS MIDI IN |
-| `FELUCCA_SLICE` | 1 | the SLICE engine |
-| `FELUCCA_ICONS` | 1 | parameter icons on the knob cards |
-| `FELUCCA_FM4` | 0 | the retired DIGITAL engine (4-operator FM) instead of its FM6 conversion |
+Build the firmware once to generate tables and fonts, then activate Emscripten:
 
-`FELUCCA_USB_LAYOUT` (`0` to `3`, default `0`) picks other USB descriptor layouts for testing; see
-`firmware/src/usb.c`.
-
-## Samples
-
-The CC0 instrument samples that the SAMPLE engine uses are in `assets/samples-cc0/`
-(Versilian Studios, see `ATTRIBUTION.txt` there). `tools/fetch_cc0.py` downloads them
-again from the source repositories. Without that folder the build still works, with no
-instrument sets in the SAMPLE engine and no PIANO in SLICE (the PIANO set's middle C): they play a plain sine
-at the note's pitch instead, and the screen says NO SAMPLE.
-
-## Browser emulator
-
-```
-./build.sh
-sh web/emu/build.sh
-python3 -m http.server -d build/emu 8790     # open http://localhost:8790/
+```sh
+source build/emsdk/emsdk_env.sh
+PYTHON=.venv/bin/python sh web/emu/build.sh
+python3 -m http.server -d build/emu 8790
 ```
 
-`web/emu/felucca_web.c` builds the firmware's sources as the host tests do, against a simulated FM-1, and
-Emscripten compiles it to WebAssembly (`build/emu/felucca.wasm`, with `index.html`, `worklet.js` and the font in `fonts/`). The page
-keeps the flash's storage sectors (projects, user presets, settings) in the browser. Not emulated: USB (audio,
-MIDI out, the editor, updates), TRS MIDI and the user sample slots. A build of it is on the site:
-<https://hugelton.github.io/Felucca/webapp/try/>.
+Open `http://localhost:8790/`. The emulator compiles the product firmware to
+WebAssembly and keeps its simulated flash in browser storage. It starts empty
+and accepts users' samples and sessions. Real USB audio, firmware installation
+and TRS MIDI hardware are not emulated. Web MIDI/panel connections use the browser
+controller bridge.
 
-## Tests
+## Sample tool and local site
 
-```
-tests/run_tests.sh
-```
-
-Runs the host tests and, with Node.js, the web page tests (and, with Emscripten too, the browser emulator's). Run it after `./build.sh`
-(it uses `build/` and needs `AC79_SDK` set as for the build). The suites cover flash storage,
-user presets, projects of every format, backup, the keys and knobs, MIDI (USB, TRS, clock,
-control), USB audio, the update entry and loader, the command-line installer, the UI (the real
-drawing code against stubs: every screen in every palette is rendered and checked for clipped or
-overlapping text; PNGs land in `build/ui_new/`), every engine (DRUM, NOISE, PHYS, FM6, SLICE, the
-DIGITAL conversion), the chord keys, the modulation matrix, the FX layer, the reverbs, the SLICER
-and swing. With `DAISYSP` pointing at a DaisySP checkout, the PHYS models are also compared with
-their floating-point originals; without it that test is skipped.
-
-The regression suite (`tests/regress.c`) renders every engine and preset and compares a
-hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU
-cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended change of
-the sound, `GOLDEN_UPDATE=1 sh tests/run_tests.sh` rewrites the hashes; `BUDGET_UPDATE=1`
-does the same for the cost files.
-
-## Install
-
-Use the web installer in Chrome or Edge:
-<https://theshrimpblimp.com/pigeon/webapp/installer/>. It installs the released PIGEON package.
-
-From the command line (needs `pip3 install mido python-rtmidi`):
-
-```
-python3 tools/fm1_install.py build/pigeon.fwsc
-python3 tools/fm1_install.py --info          # identity of the connected FM-1
+```sh
+.venv/bin/python tools/pigeon_gui.py
 ```
 
-Or, to install your own build from the web installer, make a local copy of the site and open it from `localhost`
-(Web MIDI needs a secure context):
+Open `http://127.0.0.1:8765/pigeon/` in Chrome or Edge. See the
+[sample-tool guide](web/pigeon/README.md) for editing, bank/session transfers,
+backups and offline use.
 
+`web/make_site.py` assembles a local website from a package and version label.
+It uses the separate website checkout in `web/site/`. Building a local site does
+not deploy it. Match the label to the actual embedded firmware version.
+
+## Checks and UI renders
+
+Use focused checks for the affected behavior during development. For the full
+product and recovery suites:
+
+```sh
+PYTHON=.venv/bin/python sh tests/run_pigeon_tests.sh
+PYTHON=.venv/bin/python sh tests/run_pigeon_recovery_tests.sh
 ```
-python3 web/make_site.py build/pigeon.fwsc 0.3.1 /tmp/pigeon-site
-cd /tmp/pigeon-site && python3 -m http.server 8000
-# open http://localhost:8000/webapp/installer/
+
+Recovery tests create synthetic fixtures under `build/pigeon-tests/recovery/`;
+those are not installable firmware. The broader inherited `tests/run_tests.sh`
+suite supports baseline compatibility work. Do not regenerate golden audio or
+CPU baselines merely to make a failing check pass.
+
+`tools/render_pigeon_ui.c` renders the actual firmware against synthetic
+fixtures. `tools/package_pigeon_ui.py` creates a gallery, contact sheets, PDF and
+ZIP under `build/pigeon-ui-atlas/`. `tests/pigeon_screen_test.c` checks product
+text layout. Emulator/browser check commands are documented in the
+[sample-tool guide](web/pigeon/README.md); screen-reader checks are in
+[v0.4 development notes](docs/PIGEON_V04_DEVELOPMENT.md).
+
+## Prepare a package
+
+```sh
+.venv/bin/python tools/prepare_pigeon_beta.py --version 0.4 --verify-reproducible
 ```
 
-For an interrupted update or a dark device, follow [the recovery guide](docs/PIGEON_RECOVERY.md). It distinguishes resuming a staged update from ROM/unbricker recovery and documents the first-stub-install protection gap.
+The script builds firmware, checks target budgets, compares repeated builds when
+requested, and copies packages, checksums, memory metrics and documentation to
+`build/releases/pigeon-<label>/`. The default label follows the embedded PIGEON
+version. `--version` overrides the output label; it does not set the firmware's
+embedded version. Add `--run-tests` to run the product and recovery
+suites. The manifest records whether they ran. Building a package does not create
+a release or deploy it.
 
-The standalone profile sets `FELUCCA_SAMPLER_ONLY=1`: only SONG 1 (SLICE), DRUM KIT (SAMPLE),
-and SONG 2 (SLICE) render. Synth engines, extra track processing, continuous
-oscilloscope capture, and the USB serial console are excluded. USB audio, MIDI,
-sample transfer, updates, sequencer and effects remain. Four serialized track
-slots and original engine IDs are retained; unavailable tracks stay silent.
-The ordinary `build.sh` Felucca profile remains available.
+## Install and recover
 
-`build-sampler.sh` also sets `FELUCCA_KO_DUAL=1` for independent Song 2.
+Back up the connected instrument before installing. The
+[published installer](https://theshrimpblimp.com/pigeon/webapp/installer/) serves
+the released package. To install a local build, with `mido` and `python-rtmidi`:
 
-## PIGEON sample GUI
+```sh
+.venv/bin/python tools/fm1_install.py --info
+.venv/bin/python tools/fm1_install.py build/pigeon.fwsc
+```
 
-Run `python3 tools/pigeon_gui.py` (Windows: `py tools/pigeon_gui.py`) and open
-<http://127.0.0.1:8765/pigeon/> in Chrome or Edge. The same GUI is included at
-`webapp/pigeon/` by `web/make_site.py` for HTTPS hosting. Wait for **Offline ready**
-before disconnecting the network. See [the GUI guide](web/pigeon/README.md) for
-imports, device transfers, recovery backups, offline caching, and browser tests.
+The ChoralRoot-derived boot stub is pinned by `firmware/stub/stub.lock`; its
+marker is at flash sector `0x76000`, below the sample pool. Intended stub changes
+require a version bump and `FM1_STUB_LOCK=update`. Follow the
+[recovery guide](docs/PIGEON_RECOVERY.md) for interrupted updates, first-install
+limits and dark-device recovery.
 
-For a local PIGEON candidate with checksums, repeated-build comparison and host
-validation, see [PIGEON beta preparation](docs/PIGEON_BETA.md). Control reference:
-[PIGEON controls](docs/PIGEON_CONTROLS.md). Static allocation and audio/display
-findings: [performance audit](docs/PIGEON_PERFORMANCE_AUDIT.md).
+Current controls: [published control reference](docs/PIGEON_CONTROLS.md) and
+[v0.4 development guide](docs/PIGEON_V04_GUIDE.md). Storage details:
+[KO_STORAGE.md](docs/KO_STORAGE.md). Performance findings:
+[PIGEON_PERFORMANCE_AUDIT.md](docs/PIGEON_PERFORMANCE_AUDIT.md).
 
-## PIGEON v0.3 recovery
+## v0.4 release gate
 
-PIGEON builds include the ChoralRoot-derived boot stub pinned by
-`firmware/stub/stub.lock`. Its marker occupies flash sector `0x76000`, below
-KOPOOL2; the existing sample layout remains intact. See
-[recovery and first-install limits](docs/PIGEON_RECOVERY.md).
-
-After building, run `PYTHON=.venv/bin/python tests/run_pigeon_recovery_tests.sh`
-and the existing product checks. The recovery suite generates synthetic host
-fixtures under `build/pigeon-tests/recovery/`; never install those on hardware.
-Intended stub changes require a version bump and `FM1_STUB_LOCK=update`.
-
-The PIGEON browser trial starts empty and accepts users’ own samples with hardware-limited or browser-only expanded storage. Verify it with
-`node web/emu/pigeon_test.mjs` and `node web/emu/test-browser.mjs` (the latter
-uses the repository-local Playwright setup described in web/pigeon/README.md).
-Firmware controller lease tests: compile `tests/browser_controller_test.c` with
-`-Ibuild/gen -Ifirmware/src -lm`. Full panel USB control requires the updated
-PIGEON firmware; physical-device verification remains pending.
+The [v0.4 release checklist](docs/PIGEON_V04_RELEASE.md) identifies the exact
+local candidate and short physical smoke test. Candidate generation does not
+flash, publish, tag or push a release. Keep the generated manifest and checksums
+with the package actually tested. Full host/recovery/reader and browser checks
+are required for this release; see the final validation report under `build/`.

@@ -40,6 +40,7 @@ OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_
 if os.environ.get("FELUCCA_SAMPLER_ONLY") == "1":
     FUNCS = FUNCS[FUNCS.index("slice_render"):]
     FUNCS.insert(0, "sample_render")
+    FUNCS.extend(["ko_scratch_render", "ko_scratch_read"])
 TOL = 0.10                      # exact (no noise): small edits pass, a grown render loop does not
 DIV_W = 8                       # a divide weighs 1 + 8 instructions
 NEST = 4                        # an instruction in a loop inside a loop weighs 4, two deep 16, ...

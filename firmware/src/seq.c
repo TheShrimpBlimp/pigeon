@@ -49,6 +49,7 @@ static volatile uint8_t kb_asleep;       /* MENU > SCREEN OFF (ui.c): the screen
 static uint8_t last_note = 60;
 static volatile uint8_t transport_req;   /* 1 start, 2 stop, 3 restart (from the UI) */
 static volatile uint8_t panic_req;       /* bit per track: release every sounding note (preset / engine change) */
+static volatile uint8_t midi_seen;
 static volatile uint8_t midi_hint;       /* MIDI IN played track n - 1, which is not the selected one (the UI says so) */
 
 static uint32_t trk_index(const track_t *t) { return (uint32_t)(t - trk); }
@@ -59,10 +60,17 @@ static uint32_t trk_index(const track_t *t) { return (uint32_t)(t - trk); }
 static int32_t midi_base(void)
 {
     uint32_t r = (uint32_t)song.g[G_ROUTE];
-    return r == 1u ? -1 : r ? (int32_t)(r - 1u) * 4 : 0;
+    return r == ROUTE_SEL ? -1 : r == ROUTE_TRACK ? -2 : r ? (int32_t)(r - 1u) * 4 : 0;
 }
-/* MIDI channel 0..15 of track i (keys -> MIDI out): its channel in ROUT's block (SEL, CH1-4: 1..4) */
-static uint32_t trk_midi_ch(uint32_t i) { return (midi_base() > 0 ? (uint32_t)midi_base() : 0u) + i % NTRK; }
+/* MIDI channel 0..15 of track i (keys -> MIDI out): its channel in ROUT's block (SEL, CH1-4: 1..4); TRACK its own (OMNI,
+ * OFF: as CH1-4) */
+static uint32_t trk_midi_ch(uint32_t i)
+{
+    int32_t b = midi_base();
+    if (b == -2)
+        return mch_get(i) < 16u ? mch_get(i) : i % NTRK;
+    return (b > 0 ? (uint32_t)b : 0u) + i % NTRK;
+}
 
 static int drum_track(const track_t *t) { return ENGINES[eng_idx(t->eng_req)] == &ENG_DRUM; }
 
@@ -521,6 +529,9 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         && !ko_seq_on(t)
 #endif
         )) {
+#if FELUCCA_KO
+        if(ko_seq_on(t))for(uint32_t j=0;j<4;j++)(void)ko_note_put(t,idx,j,0);
+#endif
         s->n = 0;                                   /* a fresh step */
         s->flags = 0;
         s->vel = 0;
@@ -647,7 +658,76 @@ static uint8_t ko_pass_started[SAMPLER_PARTS];
 static int ko_condition_pass(const track_t *t,const step_t *s,uint32_t idx) {
     if(!ko_seq_on(t))return 1;
     uint32_t pass=ko_pass[t-trk]+(!idx && t->seq_idx && ko_pass_started[t-trk]),c=step_condition(s);
-    return !c || (c==1 ? (pass&1u)==1u : c==2 ? (pass&3u)==3u : c==3 ? pass==0 : pass!=0);
+    if(c<=4) return !c || (c==1 ? (pass&1u)==1u : c==2 ? (pass&3u)==3u : c==3 ? pass==0 : pass!=0);
+    if(c>=14) return c==14 ? ko_fill!=0 : ko_fill==0;
+    static const uint8_t a[]={0,1,0,1,2,0,1,2,3},b[]={2,2,3,3,3,4,4,4,4};
+    return pass%b[c-5]==a[c-5];
+}
+#endif
+#if FELUCCA_KO
+static uint32_t ko_queue_id(const track_t *t){return FELUCCA_KO_DUAL && t==trk+2;}
+/* Main loop calls with IRQ masked: drop the newest waiting item only. */
+static int ko_queue_remove(track_t *t,uint32_t index) {
+    uint32_t id=ko_queue_id(t),count=ko_queue[id].count;if(index>=count)return 0;
+    for(uint32_t i=index;i+1<count;i++){uint32_t to=(ko_queue[id].head+i)%KO_QUEUE_CAP,from=(to+1u)%KO_QUEUE_CAP;ko_queue[id].note[to]=ko_queue[id].note[from];ko_queue[id].vel[to]=ko_queue[id].vel[from];}
+    ko_queue[id].count--;if(index<ko_queue[id].selected)ko_queue[id].selected--;if(ko_queue[id].selected>=ko_queue[id].count)ko_queue[id].selected=ko_queue[id].count?ko_queue[id].count-1:0;
+    return 1;
+}
+static int ko_queue_pop(track_t *t) {uint32_t id=ko_queue_id(t);return ko_queue[id].count?ko_queue_remove(t,ko_queue[id].count-1u):0;}
+static void ko_queue_stop(track_t *t,int disable) {
+    uint32_t id=ko_queue_id(t);
+    if(ko_queue[id].active) {
+        voice_t *v=&t->v[ko_queue[id].voice];
+        if(v->active && v->age==ko_queue[id].age)voice_kill(v);
+    }
+    ko_queue[id].active=ko_queue[id].count=ko_queue[id].head=ko_queue[id].selected=0;
+    if(disable)ko_queue[id].on=0;
+}
+static void ko_queue_reset(void) {
+    for(uint32_t k=0;k<SAMPLER_PARTS;k++)ko_note_clear(&trk[k],0);
+    memset(ko_note_fresh,1,sizeof ko_note_fresh);
+    ko_scratch_stop(&trk[0]);
+#if FELUCCA_KO_DUAL
+    ko_scratch_stop(&trk[2]);
+#endif
+    ko_queue_stop(&trk[0],1);
+#if FELUCCA_KO_DUAL
+    ko_queue_stop(&trk[2],1);
+#endif
+}
+static __attribute__((noinline)) void ko_queue_tick(track_t *t) {
+    if(!ko_song(t))return;
+    uint32_t id=ko_queue_id(t);
+    if(!ko_queue[id].on)return;
+    if(song.playing || (song.rec&(1u<<(t-trk))) || cin_left || chain.running){ko_queue_stop(t,1);return;}
+    if((ko_queue[id].active || ko_queue[id].count) && ko_queue[id].generation!=smp_user_gen){ko_queue_stop(t,1);return;}
+    if(ko_queue[id].active) {
+        voice_t *v=&t->v[ko_queue[id].voice];
+        if(v->active && v->age==ko_queue[id].age && v->s[6]!=2)return;
+        ko_queue[id].active=0;
+    }
+    if(!ko_queue[id].count || ko_muted(t) || t->xf_on || t->eng_req!=t->engine)return;
+    uint32_t head=ko_queue[id].head,note=ko_queue[id].note[head],vel=ko_queue[id].vel[head];
+    uint32_t before[NVOICE];for(uint32_t i=0;i<NVOICE;i++)before[i]=t->v[i].age;
+    ko_queue[id].head=(uint8_t)((head+1u)%KO_QUEUE_CAP);ko_queue[id].count--;if(ko_queue[id].selected)ko_queue[id].selected--;
+    const ko_state_t *ks=ko_track_state(t);
+    if(note<60 || note>=60+ks->table[ks->current].n)return; /* edited/deleted while waiting */
+    ko_queue_firing=(uint8_t)(1u<<(t-trk));trk_note_on(t,note,vel);ko_queue_firing=0;
+    for(uint32_t i=0;i<NVOICE;i++)if(t->v[i].active && t->v[i].age!=before[i]) {
+        ko_queue[id].active=1;ko_queue[id].voice=(uint8_t)i;
+        ko_queue[id].age=t->v[i].age;ko_queue[id].current=(uint8_t)note;break;
+    }
+}
+static int ko_queue_enqueue(track_t *t,uint32_t note,uint32_t vel) {
+    if(!ko_song(t) || song.playing || cin_left || chain.running || (song.rec&(1u<<(t-trk))))return 0;
+    uint32_t id=ko_queue_id(t);if(!ko_queue[id].on)return 0;
+    const ko_state_t *ks=ko_track_state(t);const ko_table_t *tab=&ks->table[ks->current];
+    if(note<60 || note>=60+tab->n)return 1;
+    if(ko_queue[id].count>=KO_QUEUE_CAP){ko_queue_full=1;return 1;}
+    if(!ko_queue[id].active && !ko_queue[id].count)ko_queue[id].generation=smp_user_gen;
+    uint32_t at=(ko_queue[id].head+ko_queue[id].count)%KO_QUEUE_CAP;
+    ko_queue[id].note[at]=(uint8_t)note;ko_queue[id].vel[at]=(uint8_t)vel;ko_queue[id].count++;
+    ko_queue_tick(t);return 1;
 }
 #endif
 #if FELUCCA_KO
@@ -667,6 +747,11 @@ static __attribute__((noinline)) void ko_entry_release(track_t *t,uint32_t note)
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
 #if FELUCCA_KO
+    if(ko_song(t) && ko_scratch[ko_queue_id(t)].on) {
+        for(uint32_t i=0;i<NVOICE;i++)t->v[i].active=0;
+        trk_note_on(t,note,vel);return;
+    }
+    if(ko_queue_enqueue(t,note,vel))return;
     if(!ko_roll_firing && ko_live_enqueue(t,note,vel))return;
     if(ko_roll_enabled && ko_kit(t) && !ko_roll_firing)for(uint32_t k=0;k<NVOICE;k++)
         if(!ko_roll[k].on || ko_roll[k].note==note) {ko_roll[k].left=div_samples(ko_roll_div);ko_roll[k].note=(uint8_t)note;ko_roll[k].vel=(uint8_t)vel;ko_roll[k].on=1;break;}
@@ -677,6 +762,7 @@ static void input_on(track_t *t, uint32_t note, uint32_t vel)
         if(!ko_entry[part].active || ko_entry[part].step!=index) {
             memset(&ko_entry[part],0,sizeof ko_entry[part]);
             ko_entry[part].active=1;ko_entry[part].step=(uint8_t)index;
+            for(uint32_t j=0;j<4;j++)(void)ko_note_put(t,index,j,0);
             memset(s,0,sizeof *s);s->time=ST_NOTE;
         }
         if(note<128)ko_entry[part].held[note/32u]|=1u<<(note%32u);
@@ -699,6 +785,10 @@ static int midi_note_held(const track_t *t, uint32_t note);
 static int midi_local_held(const track_t *t, uint32_t note);
 static void input_off(track_t *t, uint32_t note)
 {
+#if FELUCCA_KO
+    if(ko_song(t) && ko_scratch[ko_queue_id(t)].on)return;
+    if(ko_song(t) && ko_queue[ko_queue_id(t)].on && !song.playing && !(song.rec&(1u<<(t-trk))))return;
+#endif
 #if FELUCCA_KO
     if(!ko_live_firing && t>=trk && t<trk+SAMPLER_PARTS)
         for(uint32_t k=0;k<NVOICE;k++)if(ko_live[t-trk][k].on && ko_live[t-trk][k].note==note) {ko_live[t-trk][k].up=1;return;}
@@ -897,6 +987,7 @@ static void keyboard_block(void)
 #if FELUCCA_KO && FELUCCA_SAMPLER_ONLY
             if (ko_song(&trk[kb_trk[k]]) && (fm1_in.buttons & ko_tail_button_mask)) {
                 /* Audition directly: no recording, quantization, arp or MIDI output. */
+                ko_tail_used = 1;
                 ko_tail_preview = 1;
                 trk_note_on(&trk[kb_trk[k]], kb_note[k], 100);
                 ko_tail_preview = 0;
@@ -933,6 +1024,7 @@ static void keyboard_block(void)
 static void seq_start(void)
 {
 #if FELUCCA_KO
+    ko_queue_reset();
     memset(ko_entry,0,sizeof ko_entry);
 #endif
     uint32_t i;
@@ -964,17 +1056,84 @@ static void seq_start(void)
     perf_start();                                  /* perform.c: its 1/16 grid too */
 }
 
+#if FELUCCA_KO
+#define KO_NOTE_JOBS 16u
+static struct {uint32_t delay,left,age;uint8_t note,vel,on,voice,explicit_length,hold;} ko_note_job[SAMPLER_PARTS][KO_NOTE_JOBS];
+static uint8_t ko_note_transitioning;
+static const motion_store_t *chain_motion(const track_t *t);
+static int32_t seq_nudge(const track_t *t,const step_t *s);
+static void ko_note_off(track_t *t,uint32_t j){
+    uint32_t k=(uint32_t)(t-trk);if(k>=SAMPLER_PARTS)return;
+    if(ko_note_job[k][j].on==2){voice_t *v=&t->v[ko_note_job[k][j].voice];
+        if(v->active && v->age==ko_note_job[k][j].age){v->gate=0;v->stage=3;
+            if(ko_note_job[k][j].explicit_length && ko_kit(t))voice_kill(v);
+        }}
+    ko_note_job[k][j].on=0;
+}
+static void ko_note_clear(track_t *t,int defaults){
+    uint32_t k=(uint32_t)(t-trk);if(k>=SAMPLER_PARTS)return;
+    for(uint32_t j=0;j<KO_NOTE_JOBS;j++)if(!defaults || (!ko_note_job[k][j].explicit_length && ko_note_job[k][j].hold))ko_note_off(t,j);
+}
+static void ko_note_tick(track_t *t,uint32_t n){
+    uint32_t k=(uint32_t)(t-trk);if(k>=SAMPLER_PARTS)return;
+    for(uint32_t j=0;j<KO_NOTE_JOBS;j++)if(ko_note_job[k][j].on){
+        if(ko_note_job[k][j].on==1){
+            if(ko_note_job[k][j].delay>n){ko_note_job[k][j].delay-=n;continue;}
+            if(t->xf_on || t->eng_req!=t->engine)continue;
+            ko_note_job[k][j].delay=0;uint8_t firing=ko_seq_firing;ko_seq_firing|=(uint8_t)(1u<<k);trk_note_on(t,ko_note_job[k][j].note,ko_note_job[k][j].vel);ko_seq_firing=firing;
+            voice_t *latest=0;uint32_t vi=0;
+            for(uint32_t v=0;v<NVOICE;v++)if(t->v[v].active && t->v[v].note==ko_note_job[k][j].note && (!latest || (int32_t)(t->v[v].age-latest->age)>0)){latest=&t->v[v];vi=v;}
+            if(!latest){ko_note_job[k][j].on=0;continue;}
+            ko_note_job[k][j].voice=(uint8_t)vi;ko_note_job[k][j].age=latest->age;ko_note_job[k][j].on=2;
+            if(ko_note_job[k][j].explicit_length && ko_song(t)){
+                latest->s[4]&=(int32_t)~KO_V_LATCH;
+                uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
+                ko_env_flags[id][vi]=(ko_env_flags[id][vi]&~(KO_ONE|KO_LATCH))|KO_GATE;
+            }
+        }else if(!t->v[ko_note_job[k][j].voice].active || t->v[ko_note_job[k][j].voice].age!=ko_note_job[k][j].age){
+            ko_note_job[k][j].on=0;
+        }else if(!ko_note_job[k][j].hold){
+            if(ko_note_job[k][j].left<=n)ko_note_off(t,j);else ko_note_job[k][j].left-=n;
+        }
+    }
+}
+static int ko_note_schedule(track_t *t,uint32_t note,uint32_t vel,uint32_t delay,uint32_t length,int explicit_length,int hold){
+    uint32_t k=(uint32_t)(t-trk);if(k>=SAMPLER_PARTS)return 0;
+    for(uint32_t j=0;j<KO_NOTE_JOBS;j++)if(!ko_note_job[k][j].on){
+        ko_note_job[k][j].note=(uint8_t)note;ko_note_job[k][j].vel=(uint8_t)vel;
+        ko_note_job[k][j].delay=delay;ko_note_job[k][j].left=length;ko_note_job[k][j].explicit_length=(uint8_t)explicit_length;ko_note_job[k][j].hold=(uint8_t)hold;ko_note_job[k][j].on=1;return 1;
+    }
+    ko_chord_full=1;return 0;
+}
+#endif
 static void seq_release(track_t *t)
 {
+#if FELUCCA_KO
+    if(!ko_note_transitioning)ko_note_clear(t,0);
+#endif
     uint32_t i;
 #if FELUCCA_KO
     /* Explicit kit gate locks opt into truncation; ordinary one-shots stay full. */
     if(ko_kit(t) && !ko_seq_end(t) && (motion_locked[trk_index(t)][P_SGATE/32u]&(1u<<(P_SGATE%32u))))
         for(uint32_t v=0;v<NVOICE;v++) if(t->v[v].active)
-            for(i=0;i<t->seq_n;i++) if(t->v[v].note==t->seq_notes[i]) {voice_kill(&t->v[v]);break;}
+            for(i=0;i<t->seq_n;i++) if(t->v[v].note==t->seq_notes[i]) {
+                int owned=0;if(ko_note_transitioning)for(uint32_t j=0;j<KO_NOTE_JOBS;j++)owned|=ko_note_job[t-trk][j].on==2 && ko_note_job[t-trk][j].voice==v && ko_note_job[t-trk][j].age==t->v[v].age;
+                if(!owned)voice_kill(&t->v[v]);break;
+            }
 #endif
-    for (i = 0; i < t->seq_n; i++)
+    for (i = 0; i < t->seq_n; i++) {
+#if FELUCCA_KO
+        if(ko_note_transitioning && ko_seq_on(t)){
+            uint32_t k=(uint32_t)(t-trk);
+            for(uint32_t vi=0;vi<NVOICE;vi++){voice_t *v=&t->v[vi];if(!v->active || !v->gate || v->note!=t->seq_notes[i])continue;
+                int owned=0;for(uint32_t j=0;j<KO_NOTE_JOBS;j++)owned|=ko_note_job[k][j].on==2 && ko_note_job[k][j].voice==vi && ko_note_job[k][j].age==v->age;
+                if(owned || (ko_song(t) && ((uint32_t)v->s[4]&KO_V_LATCH)))continue;
+                v->gate=0;v->stage=3;
+            }
+        }else
+#endif
         trk_note_off(t, t->seq_notes[i]);
+    }
     t->seq_n = 0;
     t->seq_hold = 0;
     t->slide_glide = 0;                             /* live MONO / LEG keys must not glide after it */
@@ -983,6 +1142,7 @@ static void seq_release(track_t *t)
 static void seq_stop(void)
 {
 #if FELUCCA_KO
+    ko_queue_reset();
     memset(ko_entry,0,sizeof ko_entry);
 #endif
 #if FELUCCA_KO
@@ -1016,8 +1176,18 @@ static void seq_stop(void)
  * part retriggered with GATE of the part; the chance is rolled once for the whole step (a failed roll: no part),
  * a slide into it glides into the first part only, and it never slides or ties out (its last part ends at its
  * gate). x1, what every older pattern holds, is the step exactly as before. */
+static void seq_release_step(track_t *t){
+#if FELUCCA_KO
+    ko_note_transitioning=1;
+#endif
+    seq_release(t);
+#if FELUCCA_KO
+    ko_note_transitioning=0;
+#endif
+}
 #define SEQ_REP (1u << 16)
 #define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
+#define SEQ_FIRST (1u << 19)
 #define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
 static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint32_t idx, uint32_t period, uint32_t skip)
 {
@@ -1037,10 +1207,23 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         t->rat_left = 0;
         if ((skip & SEQ_MISS) ||
             (!(skip & SEQ_ROLLED) && step_chance(s) < 100u && rng() % 100u >= step_chance(s))) {
+
+#if FELUCCA_KO
+            ko_note_clear(t,1);seq_release_step(t);
+#else
             seq_release(t);
+#endif
             return;
         }
     }
+#if FELUCCA_KO
+    if(t<trk+SAMPLER_PARTS){uint32_t k=(uint32_t)(t-trk);
+        for(uint32_t j=0;j<KO_NOTE_JOBS;j++)if(ko_note_job[k][j].on && !ko_note_job[k][j].explicit_length){
+            if(s->time==ST_TIE){ko_note_job[k][j].hold=(uint8_t)next_tie;ko_note_job[k][j].left=gate+period/2u;}
+            else if(ko_note_job[k][j].hold)ko_note_off(t,j);
+        }
+    }
+#endif
     if (s->time == ST_TIE) {
         if (t->seq_n) {
             t->seq_off = gate + period / 2u;
@@ -1049,7 +1232,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         return;
     }
     if (s->time == ST_REST || (!s->n && !s->hit)) {
-        seq_release(t);
+
+        seq_release_step(t);
         return;
     }
     if (hits > 1u) {                                /* RATCH: the gate of a part, no slide or tie out */
@@ -1078,9 +1262,27 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
             sk |= ((skip >> (8u + i)) & 1u) << m;
             m++;
         }
+#if FELUCCA_KO
+    const motion_store_t *note_motion=chain_motion(t);int custom=0;
+    if(ko_seq_on(t) && !ko_seq_end(t) && hits==1u && note_motion)
+        for(uint32_t z=0;z<s->n && z<4;z++)custom|=ko_note_data(note_motion,t,idx,z)!=0;
+    if(custom){
+        seq_release_step(t);
+        int32_t anchor=seq_nudge(t,s),global=t->p[P_SQNT]?0:step_nudge(s);
+        if((skip&SEQ_FIRST) && anchor<0)anchor=0;
+        for(uint32_t z=0;z<m;z++)if(!((sk>>z)&1u)){
+            uint32_t data=z<s->n?ko_note_data(note_motion,t,idx,z):0;
+            uint32_t length=ko_note_length(data);
+            int32_t at=t->p[P_SQNT]?0:clamp(global+ko_note_nudge(data),-8,7);
+            if(at<anchor)at=anchor;
+            ko_note_schedule(t,nn[z],vv[z],(uint32_t)(at-anchor)*period/NUDGE_DIV,length?length*period:gate,length!=0,!length && next_tie);
+        }
+        ko_note_tick(t,0);t->seq_n=0;t->seq_off=0;t->seq_hold=0;return;
+    }
+#endif
     t->slide_glide = (uint8_t)slide_in;
     if (!slide_in)
-        seq_release(t);
+        seq_release_step(t);
     for (i = 0; i < m; i++)
         if (!((sk >> i) & 1u))
             trk_note_on(t, nn[i], vv[i]);
@@ -1144,7 +1346,29 @@ static int32_t seq_nudge(const track_t *t, const step_t *s)
 {
     if (t->p[P_SQNT] || s->time != ST_NOTE || (!s->n && !s->hit) || step_ratchet(s) != 1u)
         return 0;
+#if FELUCCA_KO
+    int32_t earliest=step_nudge(s);
+    if(ko_seq_on(t) && !ko_seq_end(t)){
+        uint32_t idx=(uint32_t)(s-seq_steps(t));const motion_store_t *m=chain_motion(t);
+        if(m && idx<NSTEP){int any=0;earliest=7;
+            for(uint32_t z=0;z<s->n && z<4;z++){uint32_t data=ko_note_data(m,t,idx,z);any|=data!=0;int32_t at=clamp(step_nudge(s)+ko_note_nudge(data),-8,7);if(at<earliest)earliest=at;}
+            if(s->hit && step_nudge(s)<earliest)earliest=step_nudge(s);
+            if(!any)earliest=step_nudge(s);
+        }
+    }
+    return earliest;
+#else
     return step_nudge(s);
+#endif
+}
+
+static __attribute__((noinline)) uint32_t seq_time(track_t *t, uint32_t idx, uint32_t period)
+{
+    const step_t *s = &seq_steps(t)[idx];
+    uint32_t vel = (s->flags & SF_ACCENT) ? 127u : (s->vel ? s->vel : 96u);
+    if (s->time != ST_NOTE || (!s->n && !s->hit) || step_ratchet(s) != 1u)
+        return 0;
+    return mod_time(t, s->n ? s->note[0] : DRUM_LANE_NOTE[__builtin_ctz(s->hit) & (NLANE - 1u)], vel, period);
 }
 
 /* the automation a track plays: its slot's while a song plays (song_chain.c lanes; 0: a silent lane, none) */
@@ -1181,7 +1405,19 @@ static __attribute__((noinline)) void seq_play(track_t *t, uint32_t idx, uint32_
         }
         t->rskip_n = 0;
     }
+#if FELUCCA_KO
+    if(t<trk+SAMPLER_PARTS && ko_note_fresh[t-trk]){skip|=SEQ_FIRST;ko_note_fresh[t-trk]=0;}
+#endif
     seq_step(t, s, idx, period, skip);
+}
+
+static __attribute__((noinline)) void seq_play_on(track_t *t, uint32_t period)
+{
+    uint32_t h = seq_time(t, t->seq_idx, period);
+    if (h)
+        t->nd_late = h + 1u;
+    else
+        seq_play(t, t->seq_idx, period);
 }
 
 /* NUDGE (1.2, #162; QUANTIZE OFF): a step plays at its start + nudge x DIV / 16. When a step starts its own late play
@@ -1215,10 +1451,12 @@ static __attribute__((noinline)) void seq_nd_start(track_t *t, uint32_t period, 
     t->nd_early = ND_NONE;
     if (t->nd_fired == t->seq_idx + 1u)
         ;                                           /* (it played early) */
-    else if ((d = seq_nudge(t, &seq_steps(t)[t->seq_idx])) > 0)
-        t->nd_late = (uint32_t)d * period / NUDGE_DIV + 1u;
-    else
-        seq_play(t, t->seq_idx, period);
+    else {
+        uint32_t h=seq_time(t,t->seq_idx,period);
+        d=seq_nudge(t,&seq_steps(t)[t->seq_idx]);
+        if(d>0 || h)t->nd_late=(uint32_t)(d>0?d:0)*period/NUDGE_DIV+h+1u;
+        else seq_play(t,t->seq_idx,period);
+    }
     t->nd_fired = 0;
     if ((!chain.running || nx) && (d = seq_nudge(t, &seq_steps(t)[nx])) < 0) {
         uint32_t at = step_samples(t, period, t->seq_idx), back = (uint32_t)-d * period / NUDGE_DIV;
@@ -1230,9 +1468,12 @@ static __attribute__((noinline)) void seq_nd_start(track_t *t, uint32_t period, 
 static void seq_tick(track_t *t, uint32_t n)
 {
     uint32_t period, len;
+#if FELUCCA_KO
+    ko_note_tick(t,n);
+#endif
     if (t->seq_n && !t->seq_hold) {
         if (t->seq_off <= n)
-            seq_release(t);
+            seq_release_step(t);
         else
             t->seq_off -= n;
     }
@@ -1255,7 +1496,7 @@ static void seq_tick(track_t *t, uint32_t n)
 #endif
         rec_hold(t, t->seq_idx, len);
         if (t->p[P_SQNT] && !t->nd_fired)
-            seq_play(t, t->seq_idx, period);        /* QUANTIZE ON: every step on its start, as before 1.2 */
+            seq_play_on(t, period);        /* QUANTIZE ON: every step on its start, as before 1.2 */
         else
             seq_nd_start(t, period, len);
     }
@@ -1307,13 +1548,30 @@ static void ko_end_tick(track_t *t, uint32_t n)
 /* MIDI in: the track a channel plays (0..15): G_ROUTE CH1-4 (0) channels 1..4 their parts (5..16 never get
  * here: midi_event drops them), SEL (1) every channel the selected track; CH5-8 .. CH13-16 (2..4) as CH1-4 on
  * their four channels (midi_base) */
-static uint8_t midi_route;                 /* the G_ROUTE events_block last saw (a change to a block: midi_route_block) */
-static int midi_in_block(uint32_t ch)      /* ch is one of ROUT's block (not with SEL) */
+static uint8_t midi_route;                 /* the G_ROUTE events_block last saw (a change to a block: midi_route_block;
+                                            * MIDI_ROUTE_AGAIN: TRACK's channels changed, the same again) */
+#define MIDI_ROUTE_AGAIN 0xFFu
+static int32_t midi_slot(uint32_t ch)      /* the track channel ch plays, -1 none (and with SEL) */
 {
-    int32_t b = midi_base();
-    return b >= 0 && ch - (uint32_t)b < NPART;
+    int32_t b = midi_base(), omni = -1;
+    uint32_t i;
+    if (b != -2)
+        return b >= 0 && ch - (uint32_t)b < UI_TRACK_COUNT ? (int32_t)(ch - (uint32_t)b) : -1;
+    for (i = 0; i < UI_TRACK_COUNT; i++) {
+        uint32_t c = mch_get(i);
+        if (c == ch)
+            return (int32_t)i;
+        if (c == MCH_OMNI && omni < 0)
+            omni = (int32_t)i;
+    }
+    return omni;
 }
-static track_t *midi_track(uint32_t ch) { return midi_in_block(ch) ? &trk[ch - (uint32_t)midi_base()] : TSEL; }
+static int midi_in_block(uint32_t ch) { return midi_slot(ch) >= 0; }   /* ch is heard by a track (never with SEL) */
+static track_t *midi_track(uint32_t ch)
+{
+    int32_t k = midi_slot(ch);
+    return k >= 0 ? &trk[k] : TSEL;
+}
 
 #include "midi_control.c"
 #include "midi_clock.c"
@@ -1449,7 +1707,7 @@ static void events_block(uint32_t n)
         track_t *t = &trk[i];
         if ((pr >> i) & 1u) {
 #if FELUCCA_KO
-            if(i<SAMPLER_PARTS)memset(ko_live[i],0,sizeof ko_live[i]);if(i==1)memset(ko_roll,0,sizeof ko_roll);
+            if(i<SAMPLER_PARTS)memset(ko_live[i],0,sizeof ko_live[i]);if(ko_song(t))ko_queue_stop(t,1);if(i==1)memset(ko_roll,0,sizeof ko_roll);
 #endif
             midi_forget_track(i);
             trk_all_off(t);
@@ -1500,6 +1758,10 @@ static void events_block(uint32_t n)
     }
 #if FELUCCA_KO
     ko_live_tick(seq_n);ko_roll_tick(n);
+    ko_queue_tick(&trk[0]);
+#if FELUCCA_KO_DUAL
+    ko_queue_tick(&trk[2]);
+#endif
 #endif
     if (aud_req)
         seq_audition();                               /* (STEP PREVIEW: a step sounds, stopped) */

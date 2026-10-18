@@ -20,7 +20,7 @@ enum { MI_COLOR, MI_STYLE, MI_LARGE, MI_ANIM, MI_LEDS, MI_SCROFF, MI_SCOPE, MI_H
 #if FELUCCA_KO
        MI_KO,
 #endif
-       MI_COUNT };
+       MI_TCH1, MI_TCH2, MI_TCH3, MI_MFOLLOW, MI_MWAKE, MI_COUNT };
                                                        /* (1.1: the metronome's rows in AUDIO; 1.2: RESTORE LAST in
                                                         * SYSTEM, SCALE LEDS STEP PREVIEW CHORD ENTRY in CONTROL, SCOPE in
                                                         * DISPLAY, TUNE in AUDIO, MIDI IN in MIDI, INFO in SYSTEM;
@@ -30,17 +30,19 @@ static int menu_valued(uint32_t row) {
 #if FELUCCA_KO
     if (row == MI_KO) return 1;
 #endif
-    return row < MI_VALUES && row != MI_LCLEAR;
+    return (row>=MI_TCH1 || row < MI_VALUES) && row != MI_LCLEAR;
 }   /* (a row with a value) */
-#define MI_PROJECT(row) ((row) == MI_TUNE || (row) == MI_MIDIIN)   /* the project's values (song.g), not settings */
+#define MI_PROJECT(row) ((row) == MI_TUNE || (row) == MI_MIDIIN || ((row)>=MI_TCH1 && (row)<=MI_TCH3))   /* the project's values (song.g), not settings */
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "STYLE", "LARGE", "ANIM", "LEDS", "SCREEN OFF", "SCOPE", "HOME", "HOLD", "KNOB ACCEL",
                                               "FX LATCH", "BPM LOCK", "SCALE LEDS", "STEP PREVIEW", "CHORD ENTRY",
                                               "SPEAKER EQ", "USB LEVEL", "CLICK", "CLICK LEVEL", "COUNT-IN", "TUNE",
                                               "MIDI IN", "LEARN CLEAR", "USB SERIAL", "RESTORE LAST", "HELP", "CALIBRATION", "INFO",
-                                              "ABOUT"
+                                              "ABOUT",
 #if FELUCCA_KO
-                                              , "KO MODE"
+                                              "KO MODE",
 #endif
+    [MI_TCH1]="S1 CHANNEL", [MI_TCH2]="DRUM CHANNEL", [MI_TCH3]="S2 CHANNEL",
+    [MI_MFOLLOW]="AUTO SELECT", [MI_MWAKE]="SCREEN WAKE",
 };
 /* 1.0.5: the MENU's tabs (ui_menu.c: ALGORITHM steps between them, PRESETS among one tab's rows; the editor gets a
  * row's tab after its MENU_DESC reply). A tab's rows follow each other in MI order (tests/ui_test.c checks it); at
@@ -69,6 +71,7 @@ static const uint8_t MI_TAB[MI_COUNT] = {
 #if FELUCCA_KO
     MTAB_SYSTEM,
 #endif
+    [MI_TCH1]=MTAB_MIDI, [MI_TCH2]=MTAB_MIDI, [MI_TCH3]=MTAB_MIDI, [MI_MFOLLOW]=MTAB_MIDI, [MI_MWAKE]=MTAB_MIDI,
 };
 /* TUNE: the project's tuning in cents (G_TUNE, -50..+50); as a row its values 0..TUNE_N - 1 (value - TUNE_MIN). The
  * editor gets it as a number (EDM_INT: the cents, min..max, its unit) */
@@ -119,6 +122,8 @@ static const char *const STYLE_N[2] = {"FLAT", "LINE"};
  * second name (STYLE LINE, USB LEVEL FIXED); a step down the other (menu_step) */
 typedef struct { uint8_t row; uint32_t bit; const char *name[2]; } menu_flag_t;
 static const menu_flag_t MENU_FLAGS[] = {
+    {MI_MFOLLOW,PREF_MIDI_FOLLOW,{"OFF","ON"}},
+    {MI_MWAKE,PREF_MIDI_PANEL,{"+MIDI","PANEL"}},
 #if FELUCCA_KO
     {MI_KO, PREF_KO, {"OFF", "ON"}},
 #endif
@@ -185,12 +190,13 @@ static const menu_flag_t *menu_flag(uint32_t row)
 /* a row's value as 0..menu_n(row) - 1 in the order the menu steps it (LEDS: OFF DIM LO DIM HI INV, LEDS_MENU) */
 static uint32_t menu_n(uint32_t row)
 {
-    return row == MI_COLOR ? NPALETTES : row == MI_LOWCUT || (row >= MI_CLICK && row <= MI_COUNTIN) ? 3u :
+    return row>=MI_TCH1 && row<=MI_TCH3 ? MCH_N : row == MI_COLOR ? NPALETTES : row == MI_LOWCUT || (row >= MI_CLICK && row <= MI_COUNTIN) ? 3u :
            row == MI_HOLD ? 4u : row == MI_LEDS ? LEDS_COUNT : row == MI_SCROFF ? NELEM(SCROFF_N) :
            row == MI_TUNE ? TUNE_N : row == MI_MIDIIN ? NELEM(N_ROUTE) : row == MI_ANIM ? 3u : row == MI_HOME ? HV_COUNT : 2u;
 }
 static uint32_t menu_get(uint32_t row)
 {
+    if(row>=MI_TCH1 && row<=MI_TCH3) return mch_get(row-MI_TCH1);
 #if FELUCCA_SAMPLER_ONLY
     if (row==MI_KO) return 1;
 #endif
@@ -218,6 +224,7 @@ static uint32_t menu_get(uint32_t row)
 }
 static const char *menu_vname(uint32_t row, uint32_t v)
 {
+    if(row>=MI_TCH1 && row<=MI_TCH3){static char ch[4];if(v==MCH_OMNI)return "OMNI";if(v==MCH_OFF)return "OFF";fmt_int(ch,(int32_t)v+1);return ch;}
     const menu_flag_t *f = menu_flag(row);
     if (f)
         return f->name[v & 1u];
@@ -251,6 +258,8 @@ static const char *menu_vname(uint32_t row, uint32_t v)
  * kept with the project (PROJECT SAVE, the autosave), not by settings_save */
 static void menu_put(uint32_t row, uint32_t v)
 {
+    if(row>=MI_TCH1 && row<=MI_TCH3){fm1_irq_off();mch_set(row-MI_TCH1,v);midi_route=MIDI_ROUTE_AGAIN;fm1_irq_on();return;}
+
 #if FELUCCA_SAMPLER_ONLY
     if (!menu_visible(row)) return;
 #endif

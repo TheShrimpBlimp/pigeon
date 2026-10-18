@@ -187,3 +187,15 @@ The waveform uses the firmware’s 220-column envelope. Drag to select audio; Ba
 Use **Try this bank in emulator** to open the current bank or full session directly in the hosted emulator. Switch the emulator on to load it. **Load bank / session** also accepts saved `.kob` banks and `.pigeon` sessions; sessions retain their patterns. Banks must fit the connected device’s reported capacity before transfer.
 
 Existing merged banks retain their saved chop count. To generate the additional automatic chops, reapply the original clips in this loader and send the new bank to the FM1. Export custom chop layouts before reapplying; this regenerates the song’s chop assignments. Reflashing firmware alone does not change them.
+
+## PIGEON v0.4 sessions
+
+The pattern editor reads the current 115-parameter v0.4 format and older
+104–111-parameter projects without changing their storage strides. All 15 v0.4
+conditions are available; conditions beyond the original four require a v0.4
+project. Unedited note timing, automation, routing headers and opaque project
+tail bytes are preserved. The editor validates a project before writing it back.
+
+Keep the original full recovery archive before updating: public v0.3.1 cannot
+load v0.4 projects. The [v0.4 tutorial](../../docs/PIGEON_V04_GUIDE.md) covers
+queues, scratching, per-note timing, fills and MIDI routing.

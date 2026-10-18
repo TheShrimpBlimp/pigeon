@@ -20,7 +20,11 @@ def sha(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='0.3-beta-candidate')
+    identity = (ROOT / 'firmware/src/project_identity.h').read_text()
+    version = re.search(r'^#define FW_DISPLAY_VERSION "v([^"\n]+)"$', identity, re.MULTILINE)
+    if not version:
+        parser.error('PIGEON display version is missing from project_identity.h')
+    parser.add_argument('--version', default=version.group(1), help='output label (defaults to the embedded PIGEON version)')
     parser.add_argument('--verify-reproducible', action='store_true')
     parser.add_argument('--run-tests', action='store_true')
     args = parser.parse_args()
@@ -60,7 +64,7 @@ def main():
         dest = out / name.replace('pigeon.', 'pigeon-' + args.version + '.')
         shutil.copyfile(ROOT / 'build' / name, dest)
         artifacts[dest.name] = {'bytes': dest.stat().st_size, 'sha256': sha(dest)}
-    for name in ('KO_MODE.md', 'KO_LEGACY_REFERENCE.md', 'PIGEON_CONTROLS.md', 'PIGEON_BETA.md', 'PIGEON_PERFORMANCE_AUDIT.md', 'PIGEON_RECOVERY.md', 'PIGEON_V03_RELEASE.md'):
+    for name in ('KO_MODE.md', 'PIGEON_CONTROLS.md', 'PIGEON_PERFORMANCE_AUDIT.md', 'PIGEON_RECOVERY.md', 'PIGEON_V03_RELEASE.md', 'PIGEON_V04_RELEASE.md', 'PIGEON_V04_GUIDE.md', 'PIGEON_NOTE_TIMING.md', 'SCREEN_READER.md'):
         source = ROOT / 'docs' / name
         if source.exists():
             shutil.copyfile(source, out / name)

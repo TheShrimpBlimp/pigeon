@@ -21,6 +21,7 @@ static const uint8_t ED_MENU[][2] = {
     {MI_ANIM,3},{MI_LEDS,4},{MI_HOLD,5},{MI_BPMLOCK,8},{MI_LOWCUT,9},{MI_USB,10},
     {MI_CLICK,12},{MI_CLKLVL,13},{MI_COUNTIN,14},{MI_RESTORE,15},{MI_SCROFF,17},
     {MI_MIDIIN,21},{MI_TUNE,22},
+    {MI_TCH1,25},{MI_TCH2,26},{MI_TCH3,27},{MI_MFOLLOW,29},{MI_MWAKE,30},
 };
 #else
 static const uint8_t ED_MENU[][2] = {

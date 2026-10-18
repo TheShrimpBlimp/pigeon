@@ -5,12 +5,16 @@ Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencin
 beats, and performing live. Its workflow draws inspiration from the Roland
 SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
 
-Created and directed by **The Shrimp Blimp**. Current release: **v0.3.1**, with **496 KiB** shared sample storage. The main release does not include the experimental screen reader. Basic installation and sample/chop preservation were verified on an FM1; extended hardware checks remain listed in the release notes.
+Created and directed by **The Shrimp Blimp**. This checkout prepares **v0.4**;
+the public installer remains on v0.3.1 until release approval. v0.4 includes
+screen-reader support in the standard firmware. See the [v0.4 tutorial](docs/PIGEON_V04_GUIDE.md)
+and [release checklist](docs/PIGEON_V04_RELEASE.md) before the final hardware test.
+Both songs and drums share **496 KiB** of sample storage.
 
 ## What it does
 
 - **Two independent song samples and a 16-pad drum kit**, sharing 496 KiB of
-  flash-backed sample storage in v0.3. Songs use indexed mono MP3 or IMA ADPCM;
+  flash-backed sample storage. Songs use indexed mono MP3 or IMA ADPCM;
   available duration depends on encoding quality and the other samples loaded.
 - **Up to 32 editable chops per song**, with transient detection, independent
   boundaries, pitch, attack/release, one-shot, hold, looping, and latch. All 27 keys play chops; a second
@@ -32,10 +36,27 @@ Created and directed by **The Shrimp Blimp**. Current release: **v0.3.1**, with 
 - A green display with **Little Character** typography, buffered updates,
   waveform zoom, and playback following.
 
-v0.3 gives both songs eight shared voices plus four dedicated drum
+PIGEON gives both songs eight shared voices plus four dedicated drum
 voices. Sustained 8+4 playback still needs physical testing. Synth engines are
-unavailable in the PIGEON profile. Direct recording, resampling, and compressed
-reverse playback are outside the current release scope.
+unavailable in the PIGEON profile. Direct recording and resampling are outside the release scope. Scratch mode
+provides forward/reverse playback; ordinary chop playback retains its existing behavior.
+
+## New in v0.4
+
+- FIFO chop queues, including repeated chops, with selection/removal of waiting entries.
+- Scratch decks with waveform/record views, jog sensitivity, level cuts, reverse,
+  brake/glide, cue return and cent tuning. Per-song settings are saved; cues are temporary.
+- Individual length and nudge for all four notes of a step in the piano roll.
+- Extended step conditions, held fills, Euclidean rhythms, DOUBLE/HALF and humanization.
+- Per-track MIDI channels, optional incoming-note track selection and MIDI screen wake.
+- Standard screen-reader protocol and optional emulator speech/live-region output.
+- SEL plus a key auditions the ending, then loops from the beginning while held.
+- Pattern copy/paste with destination-specific confirmation and preserved samples.
+
+v0.4 uses 115-parameter projects. Back up a complete session before updating:
+public v0.3.1 cannot load v0.4 project files. Banks and complete recovery archives
+remain separate from sequence-only patterns. The sample editor accepts both
+104–111-parameter older projects and the current v0.4 format.
 
 ## Main controls
 
@@ -51,7 +72,10 @@ reverse playback are outside the current release scope.
 | ARP | Mixer and FX sends |
 | ENV on drum HOME | Per-pad settings |
 | HOME | Return to waveform; from waveform, open Settings |
-| EDIT held + chop key | Audition the chop ending without recording |
+| SEL held + chop key | Audition the ending, then loop from the beginning while held |
+| EDIT → FX | Scratch deck; EDIT switches performance/motor controls |
+| EDIT → ARP | FIFO queue mode |
+| FX on piano roll | Individual note length and nudge |
 
 Read the [control guide](docs/KO_MODE.md) for recording, rest entry, undo,
 chop banks, arrangement tools, and the library commands.
@@ -70,7 +94,9 @@ Felucca. Before installing from another custom firmware, back up, revert to
 official M-VAVE V15 using that firmware’s documented procedure, then install
 PIGEON. See the release notes for completed installation checks and remaining physical verification.
 
-- [Start-to-finish tutorial](docs/KO_MODE.md)
+- [v0.4 start-to-finish tutorial](docs/PIGEON_V04_GUIDE.md)
+- [v0.4 release notes and hardware checklist](docs/PIGEON_V04_RELEASE.md)
+- [Sample/chop workflow](docs/KO_MODE.md)
 - [Quick control reference](docs/PIGEON_CONTROLS.md)
 - [v0.3.1 release notes and validation limits](docs/PIGEON_V031_RELEASE.md)
 - [v0.3 release history](docs/PIGEON_V03_RELEASE.md)
@@ -103,9 +129,6 @@ remain for compatibility. Legacy synth project data can be retained but its
 engines do not sound in PIGEON; projects using replaced factory samples can
 sound different. The baseline build and regression fixtures remain available
 for compatibility checks. Internal `FELUCCA_*` names are implementation details.
-
-[Archived upstream documentation](docs/FELUCCA_UPSTREAM.md) describes the
-foundation, rather than PIGEON's supported feature set.
 
 ### Browser sampler tool
 
@@ -144,4 +167,14 @@ Connect a MIDI controller (including the FM1) to play its keys; use the on-scree
 knobs and buttons to edit. The emulator credits Charles Vestal’s FM1 X0X browser
 code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.
 
-In v0.3.1, press SEQ again to alternate the step grid and piano roll. Both support four notes per step: unarmed keys toggle notes; stopped REC entry advances when all chord keys are released. REC remains lit when armed in every LED mode.
+Press SEQ again to alternate the step grid and piano roll. Both support four notes per step: unarmed keys toggle notes; stopped REC entry advances when all chord keys are released. REC remains lit when armed in every LED mode.
+
+### Screen-reader support
+
+Standard v0.4 builds include FM-1 Screen Reader support for hardware and the
+emulator, including the piano roll, chords, queue and scratch decks. It starts
+silent until connected/enabled. [Setup and dictionary](docs/SCREEN_READER.md).
+
+The [v0.4 guide](docs/PIGEON_V04_GUIDE.md) is the current control map. Earlier
+v0.4 development firmware was flashed during development; the final candidate
+still needs its own short hardware smoke test before deployment approval.

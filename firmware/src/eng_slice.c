@@ -551,11 +551,29 @@ static void slice_note_on(track_t *t, voice_t *v)
     }
 #endif
 #if FELUCCA_KO
-    if (ko_tail_preview && ko_song(t)) {
+    if ((ko_tail_preview || (ko_queue_firing & (1u<<(t-trk)))) && ko_song(t)) {
         uint32_t id=FELUCCA_KO_DUAL && t==trk+2, vi=(uint32_t)(v-t->v);
-        v->s[4] = (v->s[4] & ~KO_V_LATCH) | KO_V_NO_LOOP;
-        ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_GATE)) | KO_ONE;
-        ko_env_gain[id][vi] = 32767; ko_env_attack[id][vi] = 32767;
+        if(ko_tail_preview) {
+            /* Audition the loop boundary, then the full chop until note release. */
+            v->s[4] &= ~(KO_V_LATCH | KO_V_NO_LOOP);
+            ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_ONE | KO_NO_LOOP)) | KO_GATE;
+            ko_env_gain[id][vi] = 32767; ko_env_attack[id][vi] = 32767;
+        } else {
+            v->s[4] = (v->s[4] & ~KO_V_LATCH) | KO_V_NO_LOOP;
+            ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_GATE)) | KO_ONE;
+        }
+    }
+#endif
+#if FELUCCA_KO
+    if(ko_song(t) && ko_scratch[FELUCCA_KO_DUAL && t==trk+2].on) {
+        uint32_t id=FELUCCA_KO_DUAL && t==trk+2,vi=(uint32_t)(v-t->v);
+        uint32_t chop=((uint32_t)v->s[4]>>8)&63u;
+        if(ko_cues[id].generation!=smp_user_gen){ko_cues[id].valid=0;ko_cues[id].generation=smp_user_gen;}
+        ko_scratch[id].cue=a;
+        if(chop<KO_CHOPS && (ko_cues[id].valid&(1u<<chop)) && ko_cues[id].a[chop]==a && ko_cues[id].b[chop]==b && ko_cues[id].pos[chop]>=a && ko_cues[id].pos[chop]<b)ko_scratch[id].cue=ko_cues[id].pos[chop];
+        else if(chop<KO_CHOPS)ko_cues[id].valid&=~(1u<<chop);
+        rev=0;v->s[4]=(v->s[4]&~(KO_V_NO_LOOP|KO_V_LATCH|(1u<<7)))|KO_V_SCRATCH;
+        ko_env_flags[id][vi]=KO_ONE;ko_env_gain[id][vi]=32767;
     }
 #endif
     v->s[6] = 0;
@@ -620,7 +638,7 @@ static inline int slc_fwd(const slc_src_t *s, voice_t *v, slc_dec_t *d, int loop
     *x = slc_dec_next(s, d);
     return 1;
 }
-static inline int slc_rev(const slc_src_t *s, voice_t *v, int16_t *rb, int loop, int32_t *x)
+static __attribute__((noinline)) int slc_rev(const slc_src_t *s, voice_t *v, int16_t *rb, int loop, int32_t *x)
 {
     uint32_t q = v->ph[0], ws = (uint32_t)v->s[0], a, b, st;
     if (q <= v->ph[2]) {
@@ -644,6 +662,106 @@ static inline int slc_rev(const slc_src_t *s, voice_t *v, int16_t *rb, int loop,
     return 1;
 }
 
+#if FELUCCA_KO
+/* Two published ADPCM windows per deck. Only the cooperative main loop decodes
+ * and writes PCM; the IRQ requests windows and stalls the deck on cache misses.
+ * MP3 uses its existing per-voice double buffer. No full-song PCM allocation. */
+#define KO_SCRATCH_N 1024u
+static int16_t ko_scratch_pcm[1+FELUCCA_KO_DUAL][2][KO_SCRATCH_N] __attribute__((section(".pool")));
+static struct { volatile uint32_t frame[2],want; uint32_t age, generation; uint8_t valid; } ko_scratch_cache[1+FELUCCA_KO_DUAL];
+static void ko_scratch_poll(void) {
+    for(uint32_t id=0;id<1u+FELUCCA_KO_DUAL;id++) {
+        track_t *t=&trk[id?2:0];
+        if(!ko_scratch[id].on)continue;
+        if(ko_scratch[id].generation!=smp_user_gen){ko_scratch_stop(t);continue;}
+        voice_t *v=0;
+        for(uint32_t i=0;i<NVOICE;i++)if(t->v[i].active && ((uint32_t)t->v[i].s[4]&KO_V_SCRATCH))v=&t->v[i];
+        if(!v)continue;
+        const slc_src_t *src=slc_get((uint32_t)v->s[4]&7u);if(!src)continue;
+#if FELUCCA_KO_STORAGE
+        if(ko_compressed(src))continue;
+#endif
+        if(!ko_scratch_cache[id].valid || ko_scratch_cache[id].age!=v->age || ko_scratch_cache[id].generation!=smp_user_gen) {
+            ko_scratch_cache[id].frame[0]=ko_scratch_cache[id].frame[1]=~0u;
+            ko_scratch_cache[id].want=~0u;
+            ko_scratch_cache[id].age=v->age;ko_scratch_cache[id].generation=smp_user_gen;ko_scratch_cache[id].valid=1;
+        }
+        uint32_t current=v->ph[0]/KO_SCRATCH_N;
+        uint32_t frame=ko_scratch_cache[id].want==~0u?current:ko_scratch_cache[id].want,slot=ko_scratch_cache[id].frame[0]==current?1:0;
+        if(ko_scratch_cache[id].frame[0]==frame || ko_scratch_cache[id].frame[1]==frame) {
+            slot=ko_scratch_cache[id].frame[0]==frame?1:0;
+            if(ko_scratch_speed(id)<0) {if(!frame)continue;frame--;}
+            else frame++;
+            if(ko_scratch_cache[id].frame[0]==frame || ko_scratch_cache[id].frame[1]==frame)continue;
+        }
+        uint32_t pos=frame*KO_SCRATCH_N;if(pos>=src->len)continue;
+        ko_scratch_cache[id].frame[slot]=~0u;RING_PUBLISH();
+        uint32_t age=v->age,gen=smp_user_gen;
+        slc_fill(src,ko_scratch_pcm[id][slot],pos,(src->len-pos<KO_SCRATCH_N?src->len-pos:KO_SCRATCH_N),0,src->grid[0]);
+        RING_PUBLISH();
+        if(v->age==age && smp_user_gen==gen && ko_scratch[id].on){ko_scratch_cache[id].frame[slot]=frame;if(ko_scratch_cache[id].want==frame)ko_scratch_cache[id].want=~0u;}
+        return;
+    }
+}
+static int ko_scratch_read(const slc_src_t *s,uint32_t id,voice_t *v,uint32_t pos,int32_t *x) {
+#if FELUCCA_KO_STORAGE
+    if(ko_compressed(s)) {
+        uint32_t vi=(uint32_t)(v-trk[id?2:0].v)+id*NVOICE;
+        uint32_t frame=(pos+ko_pcm_bank(vi)->skip)/KO_PCM_N;
+        ko_pcm[vi].want=frame;
+        if(ko_pcm[vi].frame[0]!=frame && ko_pcm[vi].frame[1]!=frame)return 0;
+        *x=ko_pcm_next(pos,vi);return 1;
+    }
+#endif
+    if(!ko_scratch_cache[id].valid || ko_scratch_cache[id].age!=v->age || ko_scratch_cache[id].generation!=smp_user_gen)return 0;
+    for(uint32_t j=0;j<2;j++)if(ko_scratch_cache[id].frame[j]==pos/KO_SCRATCH_N){*x=ko_scratch_pcm[id][j][pos%KO_SCRATCH_N];return 1;}
+    ko_scratch_cache[id].want=pos/KO_SCRATCH_N;return 0;
+}
+static __attribute__((noinline)) void ko_scratch_render(track_t *t,voice_t *v,const slc_src_t *s,int32_t *out,uint32_t n,const vmod_t *m) {
+    uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
+    if(!ko_scratch[id].on || ko_scratch[id].generation!=smp_user_gen){v->active=0;return;}
+    uint32_t a,b,st;slc_bounds_v(s,v,&a,&b,&st);if(b<=a){v->active=0;return;}
+
+    uint32_t pos=v->ph[0];int32_t frac=(int32_t)v->ph[1];
+    if(pos<a || pos>=b)pos=a;
+    v->s[6]=1;
+    /* UI controls are stable during an audio block; only touch expiry changes the target. */
+    int32_t target_speed=ko_scratch_speed(id),target=(int32_t)ko_scratch[id].level*32767/16;
+    uint32_t touched=ko_scratch[id].touched;
+    for(uint32_t i=0;i<n;i++) {
+        int32_t x,y;uint32_t next=pos+1u<b?pos+1u:a;
+        int ready=ko_scratch_read(s,id,v,pos,&x);
+        if(!ready)x=0;
+        if(!ready || !ko_scratch_read(s,id,v,next,&y))y=x;
+        if(touched && !ko_scratch[id].touched){target_speed=ko_scratch_speed(id);touched=0;}
+        uint32_t ms=ko_scratch[id].touched?2u:!ko_scratch[id].motor?ko_scratch[id].brake_ms:ko_scratch[id].release_ms;
+        if(target_speed!=ko_scratch[id].ramp_target) {
+            int32_t delta=target_speed-ko_scratch[id].velocity;
+            uint32_t distance=(uint32_t)(delta<0?-delta:delta);
+            ko_scratch[id].slew=ms?(int32_t)(distance/((FS/1000u)*ms)+1u):524288;
+            ko_scratch[id].ramp_target=target_speed;
+        }
+        int32_t slew=ko_scratch[id].slew;
+        ko_scratch[id].velocity+=clamp(target_speed-ko_scratch[id].velocity,-slew,slew);
+        int32_t speed=ko_scratch[id].velocity;
+        int32_t step=(int32_t)(((int64_t)speed*s->rate)>>16);
+        int32_t sample=x+(int32_t)(((int64_t)(y-x)*frac)>>16);
+        /* A stopped platter is silent, rather than a held DC voltage. */
+        v->s[7]+=mulq15((speed?sample:0)-v->s[7],24000);
+        ko_scratch[id].gain+=clamp(target-ko_scratch[id].gain,-256,256);
+        out[i]+=voice_amp(mulq15(v->s[7],ko_scratch[id].gain),m,i)<<1;
+        int32_t f=frac+(ready?step:0),hop=f/65536;frac=f%65536;
+        if(frac<0){frac+=65536;hop--;}
+        int32_t p=(int32_t)pos+hop;
+        while(p<(int32_t)a)p+=(int32_t)(b-a);
+        while(p>=(int32_t)b)p-=(int32_t)(b-a);
+        pos=(uint32_t)p;
+        if(ko_scratch[id].touched)ko_scratch[id].touched--;
+    }
+    v->ph[0]=pos;v->ph[1]=(uint32_t)frac;
+}
+#endif
+
 /* the ADSR (ONE: no release), DECAY, the fade at the slice end */
 static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
 {
@@ -651,6 +769,7 @@ static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
     int ko_voice = 0;
 #if FELUCCA_KO
     ko_voice = ((uint32_t)v->s[4] & KO_VOICE) != 0;
+    if(ko_voice && ((uint32_t)v->s[4]&KO_V_SCRATCH) && v->stage!=4u){v->stage=2;v->env=1<<24;adsr=32767;}
     if (ko_voice && v->active && v->stage != 4u && ((uint32_t)v->s[4] & KO_V_NO_LOOP) &&
         !(ko_env_flags[FELUCCA_KO_DUAL && t==trk+2][v-t->v]&KO_GATE)) {
         v->stage = 2; v->env = 1 << 24; adsr = 32767; /* ONE: complete the chop after release */
@@ -665,7 +784,11 @@ static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
 #endif
     if (!ko_voice && p[P_E4] == SLC_ONE && v->stage == 3u)
         v->stage = 2;                                   /* ONE: the slice plays to its end */
-    if (p[P_E6] < 127) {
+    if (p[P_E6] < 127
+#if FELUCCA_KO
+        && !((uint32_t)v->s[4]&KO_V_SCRATCH)
+#endif
+    ) {
         v->s[5] -= mulq16(v->s[5], ENV_EXP[p[P_E6] & 127]);
         if (v->s[5] < 8)
             v->s[6] = 2;                                /* faded out: the voice ends */
@@ -689,6 +812,9 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         v->active = 0;
         return;
     }
+#if FELUCCA_KO
+    if(pk&KO_V_SCRATCH){ko_scratch_render(t,v,s,out,n,m);return;}
+#endif
     int32_t pitch = p[P_E3];
 #if FELUCCA_KO
     if (pk & KO_VOICE)

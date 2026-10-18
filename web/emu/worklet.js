@@ -104,6 +104,10 @@ if (typeof registerProcessor === "function") {
         try{const ptr=ex.web_bank_metadata();if(!ptr)throw Error('No sample bank is loaded.');const metadata=new Uint8Array(ex.memory.buffer,ptr,4096).slice();const objects=[];if(m.session)for(let id=0;id<10;id++){const p=ex.web_session_object(id),size=ex.web_session_size();if((id<2&&!p)||size>3840)throw Error('Session capture failed.');objects.push({id,bytes:new Uint8Array(ex.memory.buffer,p,size).slice()});}this.port.postMessage({type:'bank-metadata',id:m.id,metadata,objects},[metadata.buffer,...objects.map(o=>o.bytes.buffer)]);}
         catch(e){this.port.postMessage({type:'bank-error',id:m.id,message:e.message});}
       }
+      else if(m.type==='reader-sysex'){
+        const data=new Uint8Array(m.data);if(data.length>248)return;
+        new Uint8Array(ex.memory.buffer,ex.web_sysex_buffer(),data.length).set(data);ex.web_sysex(data.length);
+      }
       else if (m.type === "buttons" || m.type === "keys") this.queue.push(m);
       else if (m.type === "enc") ex.web_enc(m.role, m.n | 0);
       else if (m.type === "master") ex.web_master(m.value | 0);
@@ -114,6 +118,10 @@ if (typeof registerProcessor === "function") {
     publish() {
       const ex = this.ex, mem = ex.memory.buffer;
       const msg = { type: "frame", now: ex.web_now_ms() };
+      for(let n=ex.web_said_size();n;n=ex.web_said_size()){
+        const data=new Uint8Array(ex.memory.buffer,ex.web_said_buf(),n).slice();
+        this.port.postMessage({type:'reader-sysex',data},[data.buffer]);ex.web_said_done();
+      }
       const leds = [ex.web_lit_buttons(), ex.web_lit_keys(), ex.web_dim_buttons(), ex.web_dim_keys(), ex.web_dim_level(),
                     ex.web_breath_buttons(), ex.web_breath_keys(), ex.web_mid_keys ? ex.web_mid_keys() : 0];
       const an = ex.web_anim_levels ? ex.web_anim_levels() : 0;   // the power-on sweep: each LED's level

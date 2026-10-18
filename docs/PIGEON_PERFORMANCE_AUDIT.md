@@ -1,6 +1,6 @@
 # PIGEON performance and compatibility audit
 
-Source audit and host validation, updated 2026-10-15 for published v0.3. Basic device installation/reboot and sample/chop preservation were checked; extended hardware performance and interrupted-update verification remain pending.
+Source audit and host validation for the local v0.4 release candidate. Earlier development hardware checks are historical; the final candidate still needs the short physical smoke test before deployment.
 
 ## Audio and display
 
@@ -17,17 +17,17 @@ service running during LCD transfers; blits use at most 240 pixels per chunk.
 `firmware/src/ko_ui.c:ko_wave_draw`, `ko_playhead` and `ko_seq_draw` cache unchanged
 regions and publish final canvas colours. Preserve these paths when adding UI.
 
-The sampler allocator reserves eight shared song voices and four dedicated drum voices. Fading/stolen tails are distinct from the sounding-voice count; more song tracks do not add polyphony. Chop edits retain source-position/decoder checkpoints. The EDIT+key ending audition uses MP3 seeking or an existing ADPCM checkpoint, without a long decoder scan in the interrupt.
+The sampler allocator reserves eight shared song voices and four dedicated drum voices. Fading/stolen tails are distinct from the sounding-voice count; more song tracks do not add polyphony. Chop edits retain source-position/decoder checkpoints. The SEL+key ending audition uses MP3 seeking or an existing ADPCM checkpoint, without a long decoder scan in the interrupt.
 
-No decoder was moved into an interrupt and no DSP algorithm was changed in this
-pass. Display additions use cached text and existing integer sync calculations.
+Decoding remains outside the audio interrupt. Display additions use cached text
+and existing integer sync calculations.
 The pattern queue label now follows the configured bar/pattern-end boundary.
 
 ## Budgets and limits
 
-The published v0.3 application is 336,268 bytes; RAM is 55,464 / 65,536 bytes and the audio pool is 355,664 / 376,832 bytes. Two target builds produced identical binaries and packages. The bank contains a 4 KiB header plus 496 KiB shared by songs, drums, waveform data and seek indices. Earlier firmware has 408 KiB and is checked before transfer.
+The v0.4 candidate application is 375,128 bytes; RAM is 57,304 / 65,536 bytes and the audio pool is 366,292 / 376,832 bytes. Two target builds produced identical binaries and packages. The bank contains a 4 KiB header plus 496 KiB shared by songs, drums, waveform data and seek indices. Earlier firmware has 408 KiB and is checked before transfer.
 
-`tests/target_budget.py` passes for the release. It measures weighted compiled instruction loops, not real cycles or utilization; host timings cannot establish physical CPU percentage or runtime deadlines. Static memory headroom does not measure stack use.
+`tests/target_budget.py` passes for the local v0.4 candidate. It measures weighted compiled instruction loops, not real cycles or utilization; host timings cannot establish physical CPU percentage or runtime deadlines. Static memory headroom does not measure stack use.
 
 `tests/ko_storage_test.c` now exercises two songs plus drums with filter, delay, chorus,
 reverb, distortion and separate compression enabled, after servicing cold attacks. It checks the shared
@@ -95,3 +95,19 @@ See [recovery details and limits](PIGEON_RECOVERY.md).
 ## V0.1 feedback update: voice budgets
 
 PIGEON now isolates an eight-voice song pool from a four-voice drum pool. Existing per-track voice arrays and MP3 buffers are unchanged. Dedicated host tests verify 12 active voices, drum-only stealing, sharing between both songs, and SAVE to the selected phrase. Two-song MP3/ADPCM codec stress and the configured sanitizer checks pass. The target build retains the same 56,040-byte static RAM and 366,760-byte pool allocation. Compiled render-cost checks pass; these are not a physical FM1 real-time polyphony guarantee. The overload protection remains active.
+
+## v0.4 rendering paths
+
+Scratch rendering is kept out of the normal `slice_render` hot path, and scratch
+control values that are stable during an audio block are computed once per block
+(or when touch expires), rather than once per sample. Reverse access remains a
+separate compiled function. Existing normal-playback budget values are retained.
+The new scratch render/cache paths have explicit independent static budgets;
+no old budget was raised to conceal the additional path. These are instruction
+loop regression estimates, not a wall-clock or physical CPU measurement. See the
+local candidate manifest and final validation report for current memory figures.
+
+The v0.4 115-parameter project layout consumes the four previously spare track
+parameter bytes. Per-note timing and new routing are documented in
+[PIGEON_NOTE_TIMING.md](PIGEON_NOTE_TIMING.md) and the
+[v0.4 tutorial](PIGEON_V04_GUIDE.md). Public v0.3.1 cannot load new projects.
