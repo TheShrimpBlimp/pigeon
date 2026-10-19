@@ -12,7 +12,9 @@ jobs:
       id-token: write
       attestations: write
     with:
-      build: sh tools/build_signed_release.sh "${GITHUB_REF_NAME#v}"
+      build: |
+        python3 -m pip install fonttools==4.66.1
+        sh tools/build_signed_release.sh "${GITHUB_REF_NAME#v}"
       packages: build/signed/*.fwsc
       test: |
         python3 -m pip install numpy==2.2.6 lameenc==1.9.0
