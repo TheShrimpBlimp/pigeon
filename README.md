@@ -1,5 +1,9 @@
 # PIGEON
 
+Release 0.4.1 adds GitHub build provenance through the Firmware Hub’s shared
+workflow. It retains v0.4 functionality and storage compatibility. See
+[release signing](docs/RELEASE_SIGNING.md) for publishing and verification.
+
 PIGEON is an open-source, audio-only performance sampler for the **M-VAVE FM1**.
 Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencing
 beats, and performing live. Its workflow draws inspiration from the Roland
