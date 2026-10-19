@@ -57,7 +57,7 @@ static uint32_t packed(uint8_t *a,const uint8_t *p,uint32_t n)
 static int request(uint32_t cmd,const uint8_t *a,uint32_t n)
 {
     uint8_t f[640]={0x7D,0x46,0x4C,(uint8_t)cmd};
-    memcpy(f+4,a,n); so_r=so_w; ed_handle(f,n+4);
+    if(n)memcpy(f+4,a,n); so_r=so_w; ed_handle(f,n+4);
     return ed_n>=7 ? ed_out[5] : -1;
 }
 static int write_page(uint32_t off,const uint8_t *p,uint32_t n)
