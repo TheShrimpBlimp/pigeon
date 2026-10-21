@@ -750,27 +750,32 @@ static void ko_draw(void)
     }
 #if FELUCCA_KO_MAINT
     else if(ko.view==34){
-        ko_page("KEEP SELECTED CHOPS","KEYS AUDITION / REC MARK","SCL KEEP / LFO BACK");
+        ko_page("KEEP SELECTED CHOPS","","REC MARK / SEL KEEP / LFO BACK");
         ko_fx_number(0,"K1 CHOP",ko.selected+1,"",0);ko_card(1,"K2 DESTINATION",ko_keep_target?"SONG 2":"SONG 1");
         ko_card(2,"K3 + / -",(ko_keep_mask[ko_id()]&(1u<<ko.selected))?"MARKED":"NOT MARKED");ko_card(3,"K4 + / -","ALL / NONE");
         ko_line(178,ko_keep_target==ko_id()?"KEEPS KEYS / OTHERS SILENT":"APPEND TO EMPTY KEYS",T_MID);
-        ko_line(205,ko_keep_confirm?"SCL AGAIN TO CONFIRM":"BACK UP BEFORE REPLACING",T_MID);
+        ko_line(205,ko_keep_confirm?"SEL AGAIN TO CONFIRM":"BACK UP BEFORE REPLACING",T_MID);
     }
 #endif
 #if FELUCCA_USB_SAMPLE
     else if(ko.view==33){
-        ko_page("USB SAMPLER",ko_usb.state>=4?"K1/2 1ms / K3/4 100ms":"USB MONO 22050 Hz",ko_usb.state>=5?"CONFIRM ABOVE / LFO BACK":ko_usb.state==4?"ENV RETRY / SCL KEEP / LFO DROP":"ENV REC/STOP / LFO DROP");
-        if((ko_usb.state?ko_usb.target:song.sel==1?2:song.sel==2)==2)ko_value(58,"DRUM PAD ",(ko_usb.state?ko_usb.pad:ko_kit_pad)+1);
-        else ko_line(58,(ko_usb.state?ko_usb.target:song.sel==2)?"DESTINATION SONG 2":"DESTINATION SONG 1",T_MID);
+        ko_page("USB SAMPLER","",ko_usb.state>=5?"CONFIRM ABOVE / LFO BACK":ko_usb.state==4?"ENV RETRY / SEL KEEP / LFO DROP":"ENV REC/STOP / LFO DROP");
+        if((ko_usb.state?ko_usb.target:song.sel==1?2:song.sel==2)==2)ko_value(66,"DRUM PAD ",(ko_usb.state?ko_usb.pad:ko_kit_pad)+1);
+        else ko_line(66,(ko_usb.state?ko_usb.target:song.sel==2)?"DESTINATION SONG 2":"DESTINATION SONG 1",T_MID);
         if(ko_usb.state>=4){ko_value(80,"K1 START ms ",ko_usb.trim_a*20u/441u);ko_value(102,"K2 END ms ",ko_usb.trim_b*20u/441u);}
         else {ko_value(80,"INPUT / 100: ",ko_usb.level);
         ko_line(102,ko_usb.clipped?"CLIP / LOWER HOST LEVEL":usb_sample.alt?"INPUT READY":"SELECT USB AUDIO OUT",T_MID);}
-        const char *status=ko_usb.state==1?(ko_usb.triggered?"RECORDING":"WAITING FOR AUDIO"):ko_usb.state==2?"FINISHING":ko_usb.state==4?(ko_usb.preview?"PLAYING / PLAY STOP":"READY / PLAY LISTEN"):ko_usb.state==5?"REPLACE? SCL YES / LFO BACK":ko_usb.state==6?"RETRY? ENV YES / LFO BACK":ko_usb.state==3?"TAKE FAILED":ko_rec_options.reclaim?"RECLAIM? SCL YES / LFO NO":"ENV START / FX EXIT";
+        const char *status=ko_usb.state==1?(ko_usb.triggered?"RECORDING":"WAITING FOR AUDIO"):ko_usb.state==2?"FINISHING":ko_usb.state==4?(ko_usb.preview?"PLAYING / PLAY STOP":"READY / PLAY LISTEN"):ko_usb.state==5?"REPLACE? SEL YES / LFO BACK":ko_usb.state==6?"RETRY? ENV YES / LFO BACK":ko_usb.state==3?"TAKE FAILED":ko_rec_options.reclaim?"RECLAIM? SEL YES / LFO NO":"ENV START / FX EXIT";
         ko_line(130,status,T_THEME);
-        ko_value(154,ko_usb.state>=4?"KEEP ms ":"REC SEC ",ko_usb.state>=4?(ko_usb.trim_b-ko_usb.trim_a)*20u/441u:ko_usb.samples/22050u);
-        ko_value(178,"LEFT SEC ",ko_usb_remaining());
+        if(!ko_usb.state){
+            ko_value(154,"K1 THRESHOLD % ",ko_rec_options.threshold);
+            ko_value(178,ko_rec_options.bars?"K3 BARS ":"K2 SECONDS ",ko_rec_options.bars?ko_rec_options.bars:ko_rec_options.seconds);
+        } else {
+            ko_value(154,ko_usb.state>=4?"KEEP ms ":"REC SEC ",ko_usb.state>=4?(ko_usb.trim_b-ko_usb.trim_a)*20u/441u:ko_usb.samples/22050u);
+            ko_value(178,"LEFT SEC ",ko_usb_remaining());
+        }
         if(ko_usb.state==3)ko_line(205,ko_usb.error==11?"USB STREAM RESET":ko_usb.error==12?"USB PACKET ERROR":ko_usb.error==13?"USB RECORD BUFFER FULL":ko_usb.error==14?"USB RECEIVE OVERRUN":ko_usb.error==15?"USB DISCONNECTED":ko_usb.error==16?"USB SUSPENDED":ko_usb.error==1?"NO USB STREAM":ko_usb.error==2?"TAKE TOO SHORT":"FLASH ERROR",T_MID);
-        else if(!ko_usb.state){ko_value(154,"K1 THRESHOLD % ",ko_rec_options.threshold);ko_value(178,ko_rec_options.bars?"K3 BARS ":"K2 SECONDS ",ko_rec_options.bars?ko_rec_options.bars:ko_rec_options.seconds);ko_line(205,"SCL RECLAIM / BACK UP FIRST",T_MID);}
+        else if(!ko_usb.state)ko_line(205,"SEL RECLAIM / BACK UP FIRST",T_MID);
         else ko_line(205,"BACK UP BEFORE REPLACING",T_MID);
     }
 #endif
@@ -831,7 +836,7 @@ static void ko_draw(void)
         ko_fx_number(0,"K1 SOURCE",ko.selected+1,"",0);ko_fx_number(1,"K2 DESTINATION",ko_copy_chop+1,"",0);
         ko_card(2,"K3 TURN RIGHT","SWAP");ko_card(3,"K4 TURN RIGHT","MOVE");
     } else if(ko.view==20) {
-        ko_page("CHOP / COPY + SPLIT", "REC COPY WHOLE CHOP", "SCL KEEP / ENV MOVE / FX GROUPS");
+        ko_page("CHOP / COPY + SPLIT", "REC COPY WHOLE CHOP", "SEL KEEP / ENV MOVE / FX GROUPS");
         ko_fx_number(0,"K1 TARGET",ko.selected+1,"",0);ko_fx_number(1,"K2 COPY FROM",ko_copy_chop+1,"",0);
         ko_card(2,"K3 + / -","DUPE / SPLIT");ko_card(3,"K4 + / -","SET / MERGE");
     } else if(ko.view==21) {

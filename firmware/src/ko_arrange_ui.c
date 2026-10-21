@@ -54,10 +54,10 @@ static void ko_arrange_draw(int force)
         ko_line(176,"K3 CHAIN ADD+ / REMOVE-",T_MID);
         ko_line(194,"FX COPY / LFO PASTE",T_MID);
         ko_line(205,"SAVE ALL / PLAY LOOP",T_MID);
-        ko_line(224,"SCL ARRANGE / EDIT BACK",T_MID);
+        ko_line(224,"SEL ARRANGE / EDIT BACK",T_MID);
     } else {
         ko_line(29,"ARRANGEMENT / ALL TRACKS",T_THEME);
-        ko_page("ARRANGEMENT", "FX CAPTURE MUTES / SAVE ALL", "SCL WAVE / ENV TOOLS");
+        ko_page("ARRANGEMENT", "FX CAPTURE MUTES / SAVE ALL", "SEL WAVE / ENV TOOLS");
         uint32_t row=chain.running && !ko_launch_mode?chain.row:ko_section;
         ko_fx_number(0,"K1 SECTION",row+1,"",0);
         if(row<chain_config.count){

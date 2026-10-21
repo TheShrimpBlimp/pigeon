@@ -1,92 +1,68 @@
-# PIGEON
+# PIGEON — sampler firmware for the M-VAVE FM1
 
-PIGEON is an open-source, audio-only performance sampler for the **M-VAVE FM1**.
-Built on Felucca 1.5.1, it focuses on chopping samples, playing drums, sequencing
-beats, and performing live. Its workflow draws inspiration from the Roland
-SP-404, Teenage Engineering PO-33 KO, and Pocket Operator for Pixel.
+PIGEON turns the **M-VAVE FM1** into an audio performance sampler: two song
+tracks, a 16-pad drum kit, chopping, sequencing and USB sampling. Created and
+directed by **The Shrimp Blimp**, built on Felucca 1.5.1 and shared under GPL-3.0-only.
 
-Created and directed by **The Shrimp Blimp**. The current release is **v0.4**; v0.4 includes
-screen-reader support in the standard firmware. See the [v0.4 tutorial](docs/PIGEON_V04_GUIDE.md)
-and [release checklist](docs/PIGEON_V04_RELEASE.md) for controls and validation details.
-Both songs and drums share **496 KiB** of sample storage.
-
-## v0.5 development
-
-The public release remains v0.4 beta. Local v0.5 work is documented in the
-[v0.5 guide](docs/PIGEON_V05_GUIDE.md); it includes independent playback points,
-per-chop reverse/cents/gain/crossfade, loader normalization and session tools.
-Nothing from v0.5 is published or flashed automatically.
+This branch contains the **v0.5 development candidate**. Software checks pass;
+final FM1 acceptance is pending. The public site remains on the previous release
+until acceptance. Start with the [0.5 tutorial](docs/PIGEON_V05_GUIDE.md),
+[quick controls](docs/PIGEON_CONTROLS.md) and [hardware checklist](docs/PIGEON_V05_HARDWARE_TEST.md).
 
 ## What it does
 
-- **Two independent song samples and a 16-pad drum kit**, sharing 496 KiB of
-  flash-backed sample storage. Songs use indexed mono MP3 or IMA ADPCM;
-  available duration depends on encoding quality and the other samples loaded.
-- **Up to 32 editable chops per song**, with transient detection, independent
-  boundaries, pitch, attack/release, one-shot, hold, looping, and latch. All 27 keys play chops; a second
-  bank reaches chops 28–32.
-- **A paged sequence grid with 1–64 steps per track**. Assign chops directly,
-  record live or step by step, edit pitch/microtiming/conditions and
-  velocity/gate/probability/repeats, and undo
-  sequence edits. Choose tempo timing or complete-sample timing. Optional live
-  quantization, grouped song choke, held drum rolls, tap/loop tempo, metronome,
-  and count-in support recording. Each song has two alternate chop layouts.
-- **Patterns A–D and a 16-section arrangement**, with section repeats,
-  duplication, reordering, copy/paste, and queued bar-or-pattern-end launches.
-- **A three-track mixer**, per-pad drum pitch/level/decay/choke groups, filter,
-  delay, chorus, reverb, distortion, and separate compression. Temporary FX
-  tweaks restore on release.
-- **Local sample-management tools** for independent song/kit replacement,
-  waveform and chop editors, drum settings, pattern editing, encoded previews,
-  space reporting, firmware installation, and complete instrument backups.
-- A green display with **Little Character** typography, buffered updates,
-  waveform zoom, and playback following.
+- Two independent songs with up to **32 chops each**, plus **16 drum pads**,
+  sharing **500 KiB usable sample storage**. Songs use indexed mono MP3 or IMA
+  ADPCM; the drum kit and USB takes use ADPCM. Duration depends on encoding and
+  the other samples loaded. Older connected firmware retains its advertised limit.
+- Per-chop boundaries, playback point, forward/reverse direction, semitone and
+  cent tuning, gain, envelopes, trigger modes and 0–8 ms loop crossfade. The
+  loader offers nondestructive normalization. Two alternate layouts share audio.
+- **USB audio recording** into the selected song or drum pad: input meter,
+  threshold start, seconds/bar limits, audition, trim and confirmed saving.
+  The host sends mono 16-bit PCM at 22.05 kHz. Scratch is excluded from 0.5;
+  per-chop reverse remains. Live input monitoring and internal resampling are
+  not implemented.
+- **Keep selected chops** on the FM1, trim unused source regions, or collect
+  chops from multiple songs in the browser library. Space reclamation removes
+  obsolete payloads; keep downloaded backups before replacing audio.
+- A step grid and piano roll with **1–64 steps per track and four notes per
+  step**: live/step entry, note length/nudge, conditions, probability, repeats,
+  Euclidean tools, fills, quantization, metronome and count-in.
+- Patterns **A–D**, queued bar/pattern-end changes, and a **16-section arrangement**
+  with per-track pattern choices, repeats and captured mutes.
+- A three-track mixer, drum choke groups, FIFO chop queues, tempo tools, filter,
+  delay, chorus, reverb, distortion and compression.
+- Browser tools for editing, previewing, full-session backup/restore and firmware
+  installation. Record the FM1 master output into a computer over USB audio, or
+  capture the emulator output as **WAV and MP3**.
+- Screen-reader support in the firmware and emulator, with optional speech or
+  live-region output. Announcements start off until connected/enabled.
 
-PIGEON gives both songs eight shared voices plus four dedicated drum
-voices. Sustained 8+4 playback still needs physical testing. Synth engines are
-unavailable in the PIGEON profile. Direct recording and resampling are outside the release scope. Scratch mode
-provides forward/reverse playback; ordinary chop playback retains its existing behavior.
-
-## New in v0.4
-
-- FIFO chop queues, including repeated chops, with selection/removal of waiting entries.
-- Scratch decks with waveform/record views, jog sensitivity, level cuts, reverse,
-  brake/glide, cue return and cent tuning. Per-song settings are saved; cues are temporary.
-- Individual length and nudge for all four notes of a step in the piano roll.
-- Extended step conditions, held fills, Euclidean rhythms, DOUBLE/HALF and humanization.
-- Per-track MIDI channels, optional incoming-note track selection and MIDI screen wake.
-- Standard screen-reader protocol and optional emulator speech/live-region output.
-- SEL plus a key auditions the ending, then loops from the beginning while held.
-- Pattern copy/paste with destination-specific confirmation and preserved samples.
-
-v0.4 uses 115-parameter projects. Back up a complete session before updating:
-public v0.3.1 cannot load v0.4 project files. Banks and complete recovery archives
-remain separate from sequence-only patterns. The sample editor accepts both
-104–111-parameter older projects and the current v0.4 format.
+The songs share eight playback voices; drums have four additional voices.
+Host tests do not establish worst-case FM1 playback or flash-write timing.
+Synth engines are unavailable in the PIGEON product profile.
 
 ## Main controls
 
 | Control | Action |
 | --- | --- |
 | K1 / K2 on a song | Chop start / end |
-| K3 / K4 on a song | Waveform scroll / horizontal zoom |
-| OCT keys on a song | Chop pitch |
-| SEQ | Sequence grid; K4 sets length while stopped |
-| ENV on the grid | Step details |
-| LFO on the grid | Swing and timing |
-| SCL | Patterns / Arrangement |
+| LFO on a song | Cycle K1: start, playback point, direction, cents, gain, crossfade |
+| K3 / K4 on a song | Waveform scroll / zoom |
+| OCT on a song | Semitone pitch |
+| SEQ | Step grid; press again for piano roll |
+| ENV / LFO on the grid | Step details / timing and recording preferences |
+| SEL | Patterns, then Arrangement |
 | ARP | Mixer and FX sends |
-| ENV on drum HOME | Per-pad settings |
-| HOME | Return to waveform; from waveform, open Settings |
-| SEL held + chop key | Audition the ending, then loop from the beginning while held |
-| EDIT → FX | Scratch deck; EDIT switches performance/motor controls |
-| EDIT → ARP | FIFO queue mode |
-| FX on piano roll | Individual note length and nudge |
+| EDIT → FX on a song | USB sampler |
+| ENV → FX on drums | USB sampler for the selected pad |
+| EDIT → LFO → SEL on a song | Keep selected chops |
+| EDIT → ARP | FIFO chop queue |
+| SEL held + chop key | Audition the ending, then loop while held |
+| HOME | Waveform; Settings when already on the waveform |
 
-Read the [control guide](docs/KO_MODE.md) for recording, rest entry, undo,
-chop banks, arrangement tools, and the library commands.
-
-## Build and load
+## Build, back up and install
 
 Follow [BUILDING.md](BUILDING.md), then:
 
@@ -94,23 +70,33 @@ Follow [BUILDING.md](BUILDING.md), then:
 PYTHON=.venv/bin/python ./build-sampler.sh
 ```
 
-Outputs: `build/pigeon.fwsc` and `build/pigeon.bin`. Install this project's
-package with `tools/fm1_install.py`; upstream installers distribute upstream
-Felucca. Before installing from another custom firmware, back up, revert to
-official M-VAVE V15 using that firmware’s documented procedure, then install
-PIGEON. See the release notes for completed installation checks and remaining physical verification.
+Outputs are `build/pigeon.fwsc` and `build/pigeon.bin`. Building does not flash
+the FM1. Save a complete `.pigeon` recovery archive before updating. A `.kob`
+contains samples and chop settings; it does not contain all patterns/settings.
 
-- [v0.4 start-to-finish tutorial](docs/PIGEON_V04_GUIDE.md)
-- [v0.4 release notes and hardware checklist](docs/PIGEON_V04_RELEASE.md)
-- [Sample/chop workflow](docs/KO_MODE.md)
-- [Quick control reference](docs/PIGEON_CONTROLS.md)
-- [v0.3.1 release notes and validation limits](docs/PIGEON_V031_RELEASE.md)
-- [v0.3 release history](docs/PIGEON_V03_RELEASE.md)
-- [Sample storage and transfers](docs/KO_STORAGE.md)
-- [Sample library and complete archives](tools/pigeon_library.py)
-- [Contributing](CONTRIBUTING.md)
-- [Update safeguards and recovery](docs/PIGEON_RECOVERY.md)
-- [Licensing and attribution](LICENSING.md)
+Use the sample loader’s firmware panel for a backed-up PIGEON update, or the
+[CLI installer](tools/fm1_install.py) for supported installation/recovery paths.
+Updates use **M-UPGRADE over USB MIDI SysEx**. When moving from another custom
+firmware, follow [TransitFM1](https://quixotic7.github.io/TransitFM1/) and the
+[recovery guide](docs/PIGEON_RECOVERY.md); do not bypass compatibility checks.
+Keep USB power connected until installation and restart finish.
+
+0.5 retains the 115-parameter project layout. Public 0.3.1 cannot read these
+projects. Modern chop metadata requires 0.5; uploaders check capabilities before
+writing. A bank using the expanded flash tail must be reduced before an older
+layout can be installed. See [flash layout](docs/PIGEON_FLASH_LAYOUT.md).
+
+## Guides
+
+- [0.5 start-to-finish tutorial](docs/PIGEON_V05_GUIDE.md)
+- [Quick controls](docs/PIGEON_CONTROLS.md) and [sample workflow](docs/KO_MODE.md)
+- [Sample loader guide](web/pigeon/README.md)
+- [Storage and transfers](docs/KO_STORAGE.md)
+- [Screen-reader setup](docs/SCREEN_READER.md)
+- [Acceptance record](docs/PIGEON_V05_ACCEPTANCE.md) and [hardware tests](docs/PIGEON_V05_HARDWARE_TEST.md)
+- [Update safeguards](docs/PIGEON_RECOVERY.md) and [release signing](docs/RELEASE_SIGNING.md)
+- Historical [0.4 tutorial](docs/PIGEON_V04_GUIDE.md) and [release notes](docs/PIGEON_V04_RELEASE.md)
+- [Contributing](CONTRIBUTING.md) and [licensing](LICENSING.md)
 
 ## Human authorship and AI assistance
 
@@ -166,21 +152,20 @@ These independent checkouts are excluded from the firmware repository.
 
 ### Try PIGEON in the browser
 
-The [browser emulator](https://theshrimpblimp.com/pigeon/webapp/emu/) starts
-empty. Load your own Song 1, Song 2 and drum samples; audio stays on your
-computer. Choose the real 496 KiB FM1 sample pool or unlimited browser storage.
-Connect a MIDI controller (including the FM1) to play its keys; use the on-screen
-knobs and buttons to edit. The emulator credits Charles Vestal’s FM1 X0X browser
-code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.
+The [browser emulator](https://theshrimpblimp.com/pigeon/webapp/emu/) starts empty.
+Load your own songs and drums, or open a `.kob` bank or `.pigeon` session.
+The 0.5 candidate supports the 500 KiB FM1 pool or unlimited browser storage;
+unlimited banks must be reduced before transfer to hardware. The public
+emulator remains on its deployed version until release.
 
-Press SEQ again to alternate the step grid and piano roll. Both support four notes per step: unarmed keys toggle notes; stopped REC entry advances when all chord keys are released. REC remains lit when armed in every LED mode.
+Connect a MIDI controller to play the selected track. **Record output** captures
+browser audio; stop and download WAV or MP3. This records emulator playback,
+whereas the FM1 USB sampler records audio sent from the computer to the device.
+Audio processing stays on your computer. The emulator credits Charles Vestal’s
+FM1 X0X code and the Felucca adaptation by Leo Kuroshita and Hügelton Instruments.
 
 ### Screen-reader support
 
-Standard v0.4 builds include FM-1 Screen Reader support for hardware and the
-emulator, including the piano roll, chords, queue and scratch decks. It starts
-silent until connected/enabled. [Setup and dictionary](docs/SCREEN_READER.md).
-
-The [v0.4 guide](docs/PIGEON_V04_GUIDE.md) is the current control map. The exact v0.4 release passed the owner’s hardware smoke test, including recording,
-queues, scratch, note timing and save/reboot. Samples and all ten stored
-project/settings objects were unchanged after flashing.
+Standard firmware includes the FM-1 Screen Reader protocol. The emulator offers
+browser speech and live-region announcements; both start disabled. See
+[setup and controls](docs/SCREEN_READER.md).

@@ -96,8 +96,21 @@ int KO_USB_TEST_MAIN(void){
  bad+=check("USB sampler is reachable and survives the UI guard",ko.view==33);
  page_tap(B_ENV);bad+=check("sampler envelope button starts a take",ko_usb.state==1);page_tap(B_ENV);while(ko_usb.state==2)ko_usb_poll();page_tap(B_LFO);page_tap(B_FX);
  bad+=check("sampler discard and exit return to chop playback",!ko_usb.state && ko.view==5);
- ko.view=33;usb_lint=1;
- for(uint32_t state=0;state<=6;state++){ko_usb.state=state;ko_usb.samples=1000000;ko_usb.error=1;ui.force=1;ko_ui_invalidate();ko_draw();}
+ song.playing=song.rec=0;for(uint32_t k=0;k<SAMPLER_PARTS;k++)trk_all_off(&trk[k]);
+ ko_setup();int32_t screen_audio[2*CTL];for(uint32_t i=0;i<32;i++)mix_block(screen_audio,CTL);ui.msg_t=0;ko.view=33;usb_lint=1;
+ bad+=check("USB screen regression renders the active sampler",ko_ready());
+ uint32_t repeated=0,flashing=0,heading_ok=1;
+ uint16_t title_pixels[240*AF_S.h];
+ for(uint32_t state=0;state<=6;state++){
+  ko_usb.state=state;ko_usb.samples=1000000;ko_usb.error=1;ui.force=1;ko_ui_invalidate();ko_draw();
+  host_blit_rows=0;host_fl_begin();ui.force=1;ko_draw();
+  flashing+=host_fl_end(26,240);repeated+=host_blit_rows>H_HEAD;
+  memcpy(title_pixels,host_screen+49*240,sizeof title_pixels);
+  draw_text_line(8,49,224,&AF_S,"USB SAMPLER",T_MID,T_BG,0);
+  heading_ok&=!memcmp(title_pixels,host_screen+49*240,sizeof title_pixels);
+ }
+ bad+=check("idle recorder refresh never overwrites its own status text",!flashing && !repeated);
+ bad+=check("recorder destination never erases the heading",heading_ok);
  usb_lint=0;ko_usb_discard();bad+=check("all USB sampler states fit the device screen",!usb_text_clipped);
  bad+=check("all recording writes remain in sample pool",!bad_flash);
  uint8_t *kit_fixture=0;uint32_t kit_bytes=0;

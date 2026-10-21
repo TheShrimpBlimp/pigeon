@@ -1,4 +1,4 @@
-# Per-note timing — PIGEON v0.4
+# Per-note timing — PIGEON 0.5
 
 Open SEQ, press SEQ again for the piano roll, then tap **FX** for **Note / Length + Nudge**. Stop playback before editing. These controls are independent of the track’s DIV setting.
 
@@ -20,6 +20,6 @@ Length is a gate duration, not time stretching. A nonlooping sample can finish b
 
 Edits participate in sequence undo/redo. Deleting one note shifts the remaining notes’ timing with them. Patterns, arrangements and complete `.pigeon` sessions retain the settings. A `.kob` bank stores samples/chops, so use a session to move sequence timing.
 
-Custom note timing shares a limit of 128 entries with automation and parameter locks. If storage is full, the editor reports it without overwriting another entry. Older projects load with default note timing; projects saved with v0.4 require v0.4 or newer.
+Custom note timing shares a limit of 128 entries with automation and parameter locks. If storage is full, the editor reports it without overwriting another entry. Older projects load with default note timing; projects using this format require 0.4 or newer; 0.5 retains it.
 
 A repeated pitch, choke group or full voice pool can replace a sustaining note, just as in ordinary playback.

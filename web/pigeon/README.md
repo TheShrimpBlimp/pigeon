@@ -1,4 +1,4 @@
-# PIGEON Sample Loader 2.0
+# PIGEON sample loader — 0.5 candidate
 
 A standalone browser tool for PIGEON on the FM1. The same files run on macOS,
 Windows, and Linux, locally or on an HTTPS website. There is no backend, account,
@@ -36,8 +36,8 @@ or service workers correctly. No Python or download is needed on the hosted webs
    kit locally; a single pad file replaces only that pad. Clear kit removes all pads.
 5. **Save bank** downloads `.kob`. **Try this bank in emulator** opens the applied
    bank or loaded session in the hosted emulator; switch it on to load the content.
-   The published FM1 storage limit is **496 KiB shared** between both songs and kit.
-   v0.3 uses the expanded pool. Older connected firmware is limited to its reported capacity before any transfer. Unlimited browser banks may not fit hardware.
+   The 0.5 candidate has **500 KiB usable shared storage** between both songs and kit.
+   Previous expanded layouts have 496 KiB; older connected firmware is limited to its reported capacity before any transfer. Unlimited browser banks may not fit hardware.
 6. **Connect / back up** opens FM1 ports and backup tools. Connect matching ports,
    back up the device separately, then **Send bank to FM1** and review the change.
    Sending samples does not automatically make a full-session backup. It verifies
@@ -75,8 +75,8 @@ edits persist across reloads.
 **Firmware update** accepts a local PIGEON `.fwsc`, validates package checksums
 and identity, reads the connected version, saves a full recovery session before
 installing, and verifies the returning identity. Keep USB connected during the
-update. This path uses the existing firmware update protocol; physical-device
-verification of the new GUI remains pending. Updating needs a responsive PIGEON
+update. This path uses M-UPGRADE over USB MIDI SysEx. The 0.5 candidate
+still requires the final hardware checks in the acceptance record. Updating needs a responsive PIGEON
 device so the mandatory backup can complete. For a device already in loader
 mode, use the CLI installer recovery procedure.
 
@@ -175,7 +175,7 @@ In Drum pad settings, select the source pad and a Copy to pad destination, then 
 The **Saved session library** stores named banks and full sessions in this browser. Save, load, rename, delete or download entries. Loading is a local edit and can be undone. Download copies to preserve them outside browser storage. A bank contains samples and settings; a full session also carries patterns and supported device settings.
 
 
-## Sample loader 2.0 waveform controls
+## Waveform controls
 
 Click the waveform to place its cursor; the white cursor head can be dragged. Drag the green S/E flags to trim, drag the song waveform to select a region (Shift-drag also selects); in the chop editor, drag inside its selection to move the complete region. Scroll over the waveform to zoom around the pointer, or use the optional Zoom slider. Drag the overview below the waveform to pan; Alt-drag or Shift-wheel also pans. Double-click resets the view. Arrow keys move the cursor; Home/End jump to the file edges. The cursor follows section and chop previews. Precise numeric start/end fields remain available.
 
@@ -188,7 +188,7 @@ Use **Try this bank in emulator** to open the current bank or full session direc
 
 Existing merged banks retain their saved chop count. To generate the additional automatic chops, reapply the original clips in this loader and send the new bank to the FM1. Export custom chop layouts before reapplying; this regenerates the song’s chop assignments. Reflashing firmware alone does not change them.
 
-## PIGEON v0.4 sessions
+## Project compatibility
 
 The pattern editor reads the current 115-parameter v0.4 format and older
 104–111-parameter projects without changing their storage strides. All 15 v0.4
@@ -197,15 +197,27 @@ project. Unedited note timing, automation, routing headers and opaque project
 tail bytes are preserved. The editor validates a project before writing it back.
 
 Keep the original full recovery archive before updating: public v0.3.1 cannot
-load v0.4 projects. The [v0.4 tutorial](../../docs/PIGEON_V04_GUIDE.md) covers
-queues, scratching, per-note timing, fills and MIDI routing.
+load v0.4 projects. The [0.5 tutorial](../../docs/PIGEON_V05_GUIDE.md) covers
+USB sampling, retained chops, per-note timing and complete-session workflows.
+Scratch is excluded from the 0.5 product build.
 
-## Local v0.5 playback and session tools
+## 0.5 playback and session tools
 
 The development loader supports independent playback points, per-chop reverse,
 cents, gain, nondestructive normalization and 0–8 ms loop crossfades. Apply chop
-settings before previewing. A draggable P marker edits the playback point. New
+settings to save them in the local bank. Preview chop can audition the current
+fields before applying. A draggable P marker edits the playback point. New
 metadata requires v0.5; capability checks block writes to older firmware. Named
 library entries show their bank/session contents and preview replacements.
 Complete-session download requires an opened session or a full device backup.
-The public v0.4 site is unchanged by this development work.
+The public site stays on its deployed release until 0.5 acceptance.
+
+## Chop collections and selected-chop trimming
+
+Collect selected chops into the browser's Chop library, open another song and
+collect more, then assemble selected library chops into a song or kit. Export
+`.pigeon-chops` files to keep collections outside browser storage. **Keep selected
+chops and trim song** previews discarded audio and the encoded space change
+before confirmation; local Undo restores the old bank. It renumbers retained
+chops consecutively. The FM1's Keep selected chops screen instead preserves key
+numbers when keeping in the same song. See the [0.5 tutorial](../../docs/PIGEON_V05_GUIDE.md).

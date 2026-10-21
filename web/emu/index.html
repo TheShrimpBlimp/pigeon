@@ -6,7 +6,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Try PIGEON · FM1 browser emulator</title>
+<title>PIGEON 0.5 · FM1 browser emulator</title>
 <meta name="description" content="Try PIGEON sampler firmware on a virtual FM1. Load your own samples, then chop, play, and sequence them in your browser.">
 <link rel="stylesheet" href="../../nixie.css">
 <style>
@@ -136,7 +136,7 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 <p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="512000" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 500 KiB</p><button id="save-bank" disabled>Save bank (.kob)</button> <label class="button">Load bank / session<input id="import-session" type="file" accept=".kob,.pigeon"></label> <button id="save-session" disabled>Save session (.pigeon)</button> <button id="open-loader" disabled>Open session in sample loader ↗</button> <button id="clear-samples" type="button" disabled>Clear samples</button><p class="fine">Bank (.kob): samples and chop settings. Session (.pigeon): bank, current sequence, saved A–D patterns and settings. Opening a session replaces this emulator workspace.</p>
 <p class="fine">Choosing a file stages it for editing. Press Apply to load your selected section; applied files and trim boundaries save in this browser. Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
 <section aria-labelledby="reader-heading"><h2 id="reader-heading">Screen reader</h2>
-<p>PIGEON announces PIGEON's pages, knobs, patterns and actions using <a href="https://github.com/charlesvestal/fm1-reader">Charles Vestal's FM-1 Screen Reader protocol</a>.</p>
+<p>PIGEON announces its pages, knobs, patterns and actions using <a href="https://github.com/charlesvestal/fm1-reader">Charles Vestal's FM-1 Screen Reader protocol</a>.</p>
 <label><input id="reader-enable" type="checkbox"> Enable screen announcements</label>
 <label>Output <select id="reader-output"><option value="screen-reader">My screen reader</option><option value="voice">Browser voice</option></select></label>
 <button id="reader-where" type="button" disabled>Read current screen</button>
@@ -145,7 +145,7 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 <div id="reader-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 <div id="reader-alert" class="sr-only" role="alert" aria-atomic="true"></div></section>
 <section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Sound comes from your computer.</p><details><summary>FM1 knobs and buttons</summary><p>Requires PIGEON firmware with browser panel support. This temporarily stops local playback and routes the FM1 panel to the browser. Disconnect or close this page to return to local control. Select matching FM1 ports; this mode requests MIDI SysEx access.</p><label>FM1 input<select id="panel-input"></select></label><label>FM1 output<select id="panel-output"></select></label><button id="panel-connect" type="button">Connect FM1 panel</button><button id="panel-disconnect" type="button" disabled>Disconnect panel</button><p id="panel-status" role="status"></p><p id="panel-activity" class="fine" role="status">No knob movement received yet.</p></details></section>
-<section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
+<section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SEL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
 <section class="credits" aria-labelledby="credits-heading"><p class="eyebrow">EMULATOR CREDITS</p><h2 id="credits-heading">Built on open-source work.</h2><p>The browser emulator is adapted from <a href="https://github.com/charlesvestal/fm1-x0x">Charles Vestal’s FM1 X0X emulator</a>: its <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/x0x_web.c">simulated FM1 and WebAssembly wrapper</a>, <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/worklet.js">AudioWorklet audio runtime</a>, and <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/index.html">interactive browser panel</a> underpin this version.</p><p>Felucca’s browser adaptation and firmware are by Leo Kuroshita and Hügelton Instruments. PIGEON is created and directed by theshrimpblimp. The emulator runs PIGEON’s firmware against a simulated FM1.</p><p><a href="https://github.com/TheShrimpBlimp/pigeon/tree/main/web/emu">PIGEON emulator source</a> · <a href="../../firmware/LICENSE">GPL-3.0 licence</a> · lit.chr / Little Character Regular by S M Astrid Bin, <a href="fonts/LittleCharacter-OFL.txt">SIL OFL 1.1</a></p></section>
 <footer class="pigeon-footer"><div class="footer-actions"><a class="footer-action" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a><button class="footer-action footer-font" id="font-nerds" type="button">for font nerds</button></div><div class="footer-info"><div><p class="footer-title">PIGEON — sampler firmware for M-VAVE FM1.</p><p>Created and directed by theshrimpblimp. Free and open source.</p><p>Built on <a href="https://github.com/hugelton/Felucca">Felucca</a> by <a href="https://github.com/kurogedelic">Leo Kuroshita (@kurogedelic)</a>, Hügelton Instruments, and contributors.</p></div><div><p>AI was used for menial coding. All assets, direction, conceptualization, and thought are human.</p><p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter">Little Character</a>.</p><p><a href="../../">PIGEON home</a> · <a href="../../webapp/pigeon/">Sample loader</a> · <a href="../../webapp/emu/">Emulator</a> · <a href="../../firmware/LICENSING.md">Licences</a></p></div></div><small class="footer-version version">@VERSION@@PREVIEW@</small><details class="project-credits"><summary>Credits and open-source licences</summary>
 <p>PIGEON is created and directed by theshrimpblimp, and is free and open source under GPL-3.0-only.</p>
@@ -240,10 +240,11 @@ function build(name) {
   const button = ([x, y, w, h], n, sub) => {
     const g = el("g", {});
     el("rect", { x, y, width: w, height: h, rx: 8, fill: "var(--part)", stroke: "var(--edge)", "stroke-width": 1.5, class: "face btn" }, g);
+    const printed = n === "SCL" ? "SEL" : n;
     const ink = n === "REC" ? "#ff453a" : undefined;
-    if (sub) { label(g, x + w / 2, y + h / 2 - 2, n, 10.8, SANS, ink); label(g, x + w / 2, y + h / 2 + 11, sub, 9.9); }
-    else label(g, x + w / 2, y + h / 2 + 4.5, n, 12.6, SANS, ink);
-    buttons.push({ g, bit: B[n], name: sub ? `${n} / ${sub}` : n });
+    if (sub) { label(g, x + w / 2, y + h / 2 - 2, printed, 10.8, SANS, ink); label(g, x + w / 2, y + h / 2 + 11, sub, 9.9); }
+    else label(g, x + w / 2, y + h / 2 + 4.5, printed, 12.6, SANS, ink);
+    buttons.push({ g, bit: B[n], name: sub ? `${printed} / ${sub}` : printed });
   };
   button(L.oct[0], "OCT-");
   button(L.oct[1], "OCT+");
@@ -808,7 +809,7 @@ async function switchOn() {
           if (m.leds) drawLights(lastLeds = m.leds, m.anim);
           if (m.sectors && !saveFlash(m.sectors) && !warned) {
             warned = true;
-            console.warn("Felucca: this browser does not keep the saves; they last until the page closes.");
+            console.warn("PIGEON: this browser does not keep the saves; they last until the page closes.");
           }
         }
       };
@@ -818,7 +819,7 @@ async function switchOn() {
     enableRecording();
     document.getElementById("start").hidden = true;
     go.textContent = "On";
-    if (ac.sampleRate !== 44100) console.warn(`Felucca: the browser plays at ${ac.sampleRate} Hz, the pitch is off by ${(1200 * Math.log2(ac.sampleRate / 44100)).toFixed(0)} cents.`);
+    if (ac.sampleRate !== 44100) console.warn(`PIGEON: the browser plays at ${ac.sampleRate} Hz, the pitch is off by ${(1200 * Math.log2(ac.sampleRate / 44100)).toFixed(0)} cents.`);
     syncButtons();
     syncKeys();
     send({ type: "visible", on: !document.hidden });

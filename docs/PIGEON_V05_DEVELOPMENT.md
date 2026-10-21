@@ -1,6 +1,7 @@
 # PIGEON v0.5 development
 
-Unpublished development work. Published firmware remains on the v0.4.x release line.
+Development candidate on the 0.5 branch; no final 0.5 release has been published.
+The maintainer reports hardware acceptance complete; THE FINAL BETA is being published.
 
 ## Separate chop playback point
 
@@ -144,8 +145,8 @@ actual USB controller. The header save is not power-loss atomic.
 Ready takes can be auditioned with PLAY without committing a header. The IMA
 preview reads the appended take through the normal mixer and master control,
 duplicating 22.05 kHz samples at the 44.1 kHz mixer rate. Save, retry and discard
-stop preview before writing or reclaiming data. SCL opens replacement confirmation;
-a second SCL commits, while LFO backs out. ENV similarly confirms a retry.
+stop preview before writing or reclaiming data. SEL opens replacement confirmation;
+a second SEL commits, while LFO backs out. ENV similarly confirms a retry.
 Successful saves reopen the selected song waveform. Input peak is sampled at
 10 Hz with a brief IRQ-masked exchange, and full-scale clipping is latched until
 the next take. Idle/capture displays report remaining seconds from available
@@ -297,3 +298,41 @@ Hardware acceptance of the exact package recorded in PIGEON_V05_ACCEPTANCE.md
 remains required. After acceptance, set the embedded release version, build and
 test that release package, then verify its GitHub attestation before publishing
 the matching site.
+
+### Settings display correction — 2026-10-21
+
+Settings now tracks each visible row's actual value, including per-track MIDI
+channels and learn count, and sends only changed row strips to the LCD. Tabs
+snap immediately in PIGEON. MIDI channel/follow/wake rows use their valued-row
+classification instead of the old numeric action-row boundary; OCT indicators
+use the same classification. Separator rules follow visible row order.
+
+A regression compares 62 value, row and tab transitions against full repaints,
+checks idle frames produce no transfers, and detects intermediate blank pixels.
+It passes natively and under ASan/UBSan; screen/UI, target budgets and WASM
+regressions pass. The image is 365,140 bytes; main RAM remains 53,544 bytes,
+pool usage is 353,652 bytes (48 extra), and body growth room is 7308 bytes.
+Sample capacity remains 500 KiB usable. The matching WASM is 557,247 bytes.
+
+Fresh pre-update session backup: `build/pigeon-before-settings-fix-20261021.pigeon`.
+The preceding installable package is retained as
+`build/pigeon-before-settings-fix-20261021.fwsc`. The new package hash is recorded
+in the acceptance record; physical confirmation of reduced flicker is required.
+
+### USB sampler text collision — 2026-10-21
+
+EDIT → FX repeatedly painted idle recorder rows 154/178 twice and row 205
+twice in each refresh. Each row now has one text source per state. The keep-chops
+page also avoids replacing its own bottom hint. The recorder destination moves
+from y=58 to y=66 so it cannot erase the bottom of the heading at y=49.
+
+The USB screen regression now configures active sampler tracks before rendering;
+the previous setup could test only the fallback page. All seven states must
+refresh without bottom-text writes or intermediate flashed pixels when unchanged,
+and the heading must match an isolated render. Native and sanitizer recording/
+persistence tests, screen layout and the target build pass. Firmware image is
+365,076 bytes, RAM/pool usage unchanged, body growth room 7372 bytes.
+
+Pre-update backup: `build/pigeon-before-recorder-render-fix-20261021.pigeon`.
+Package SHA-256 is recorded in acceptance. Physical confirmation of the EDIT → FX
+footer is still required.

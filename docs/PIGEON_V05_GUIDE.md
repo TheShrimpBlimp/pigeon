@@ -1,8 +1,44 @@
-# PIGEON v0.5 development guide
+# PIGEON 0.5 tutorial and control guide
 
-These features are local development work, not the published v0.4.x firmware. Do not
-install a v0.5 bank on older firmware. Keep a complete recovery archive before
-updating; old firmware ignores the newer playback metadata.
+This guide matches the **v0.5 development candidate** and its browser tools.
+Final hardware acceptance is pending. The public site remains on its deployed
+release until acceptance. Keep a complete recovery archive before updating;
+older firmware cannot interpret all 0.5 playback metadata or its expanded bank.
+
+## Your first song
+
+1. **Back up and install.** Save a full `.pigeon` archive in the sample loader.
+   For the candidate use `build/pigeon.fwsc` and follow the
+   [hardware checklist](PIGEON_V05_HARDWARE_TEST.md). Keep USB power connected
+   until restart. See [recovery](PIGEON_RECOVERY.md) when changing firmware families.
+2. **Add audio locally.** In the sample loader, choose **Add audio files** for
+   Song 1. Drag a range to select, Keep selection to crop, or S to split at the
+   cursor. Add more files to append sections. Drag their chips into order.
+3. **Apply the song.** Preview, choose MP3 quality under **Export range & quality**,
+   then **Apply to local Song 1**. Repeat for Song 2 and add up to 16 drum hits.
+   Both songs and the kit share **500 KiB usable** in this candidate. The meter
+   includes encoded audio, waveforms and seek indices; duration is not per track.
+4. **Try or send.** Save bank (`.kob`) or open it in the emulator. To use hardware,
+   connect matching FM1 MIDI ports, back up, then Send bank. This replaces samples
+   and chop settings, preserving device patterns/settings. Wait for readback.
+5. **Shape the chops.** Select Song 1 or Song 2 with ALGORITHM. Play a key, adjust
+   K1 start/K2 end, K3 scroll/K4 zoom and OCT pitch. LFO cycles K1 through the
+   playback controls below. PRESETS reaches later chops, including keys 28–32.
+6. **Record a sequence.** SEQ opens the grid; SEQ again opens the piano roll.
+   While stopped and unarmed, keys toggle notes on the selected step. Arm REC,
+   hold a chord and release all keys to advance once. During playback, armed REC
+   records live. K3 selects steps and K4 sets 1–64-step length while stopped.
+7. **Save a pattern.** SEL opens Patterns. Choose A–D, stop/release notes and SAVE.
+   Each pattern contains all three tracks; all patterns share the loaded samples.
+   SEL opens Arrangement. K1 selects a section, K2 its selected-track pattern,
+   K3 repeats and K4 inserts/deletes. FX captures track mutes into the section.
+8. **Keep a complete session.** Back up the FM1 or save a full emulator session
+   as `.pigeon`. A `.kob` alone has no sequence or saved A–D patterns. Keep a
+   downloaded copy: browser storage can be cleared and undo does not survive reload.
+
+For the full shared feature map, see [quick controls](PIGEON_CONTROLS.md),
+[sequence tools retained from 0.4](PIGEON_V04_GUIDE.md#sequence-tools) and
+[per-note timing](PIGEON_NOTE_TIMING.md). Scratch is excluded from 0.5.
 
 ## Chop controls on the FM1
 
@@ -34,8 +70,7 @@ to stop; ordinary editing stays silent.
 
 A separate playback point affects the first pass only. A forward held loop
 returns to its original start; reverse returns to its original end. Reset the
-point to use the normal start/end for the chosen direction. SEL ending audition
-and Scratch retain their dedicated trigger behavior. Each chop's direction,
+point to use the normal start/end for the chosen direction. SEL ending audition retains its dedicated trigger behavior. Each chop's direction,
 tuning, level and crossfade follow copies, moves, duplicates and undo/redo.
 
 Crossfade blends the last part of a loop into its first part, then skips the
@@ -157,30 +192,57 @@ of retained regions is encoded; overlaps share audio and chop boundaries move
 with their regions. Playback settings remain attached to the retained chops.
 The other song and kit stay intact, and local Undo restores the original bank.
 Chop numbers become consecutive, so sequences referring to old chop numbers
-may need reassignment. This is a loader operation, not an on-device trim command.
+may need reassignment. The FM1 operation below instead preserves key numbers.
+
+## Keep selected chops on the FM1
+
+1. Select a song, stop playback and release notes. Open **EDIT → LFO → SEL**.
+2. K1 selects a chop; keys audition. REC toggles its mark, or K3 right/left marks
+   or unmarks it. K4 right marks all; left clears marks.
+3. K2 selects Song 1 or Song 2 as destination. Keeping in the same song preserves
+   key numbers and leaves discarded keys silent. Choosing the other song appends
+   to its empty keys while retaining its existing assignments.
+4. SEL asks to keep the selection; SEL confirms and LFO backs out. The retained
+   regions are merged, decoded and encoded as 22.05 kHz ADPCM, preserving playback
+   settings. This rewrites audio, unlike ordinary boundary/gain edits. Back up first.
+
+## Reclaim unused sample space
+
+Open the USB sampler while idle, then press **SEL twice** to confirm reclamation.
+This compacts live payloads and removes obsolete stored audio; it does not choose
+which chops you want. Use Keep selected chops first when discarding unused source
+regions. LFO cancels before confirmation. Let the operation finish before power-off.
+Keep a full recovery archive; use the recovery guide if an interrupted operation
+leaves storage locked. The loader can also rebuild a compact bank locally.
 
 ## Record audio from USB (hardware candidate)
 
 Scratch mode is excluded from the 0.5 product build to reserve memory and code
 space for USB sampling. Ordinary per-chop reverse remains available.
 
-1. Stop playback and release keys. Open **EDIT → Chop playback → FX USB sample**.
+1. Select the destination song or drum pad, stop playback and release keys.
+   On a song, open **EDIT → FX**. On drums, open **ENV → FX**. Check the displayed
+   destination; a recording replaces that selected song or pad, not always Song 2.
 2. On the computer, select the FM1 as an audio output. The recording interface
    accepts mono, 16-bit PCM at **22,050 Hz**; the host must convert other formats.
    This is digital USB audio, not the MIDI jack or an analog microphone input.
 3. Check **INPUT / 100** and remaining seconds. A latched **CLIP** warning means
    lower the computer's output level. Each new take clears the warning.
-4. Press **ENV** to start. Nonblank free sectors are erased before capture begins.
-   Wait for RECORDING, then play the source. Press **ENV** again to stop; capture
-   also stops when available space is full. There is no live input monitoring.
+4. Before starting, K1 sets the input threshold (0 starts immediately), K2 sets
+   a seconds limit (0 means manual), or K3 sets a bars limit at the current BPM.
+   Seconds and bars are mutually exclusive. Press **ENV** to start. Nonblank free sectors are erased before capture begins.
+   With a threshold, WAITING FOR AUDIO changes to RECORDING when the input crosses it.
+   Otherwise wait for RECORDING, then play the source. Press **ENV** again to stop; capture
+   also stops at the selected duration or available-space limit. There is no live input monitoring.
 5. On a ready take, **PLAY** auditions it through the normal master output;
    press PLAY again to stop, or let it finish. Audition does not commit the bank.
    Before saving, **K1** adjusts trim start and **K2** trim end in approximately
    1 ms steps; **K3/K4** adjust the same boundaries in 100 ms steps. PLAY auditions
    only that range. KEEP ms shows its duration. At least 64 samples are retained.
-6. **SCL/Select** asks to replace the song selected when recording started.
-   Press SCL again to confirm, or LFO to return to the ready take. Saving preserves
-   the other song and drum kit, then opens the recorded song's waveform for chopping.
+6. **SEL** asks to replace the song or pad selected when recording started.
+   Press SEL again to confirm, or LFO to return to the ready take. Saving a song preserves
+   the other song and kit, then opens its waveform. Saving a pad preserves both
+   songs and the other pads, then returns to pad settings.
    An empty pool can create Song 1. Takes are IMA ADPCM at 22.05 kHz. A confirmed
    trim rewrites just the kept audio and its waveform, freeing the excluded space.
    Trimming uses one additional ADPCM encode pass; the sample rate stays unchanged.
@@ -199,5 +261,30 @@ take; partial or gapped audio is not silently offered as a successful recording.
 Keep a complete recovery archive before saving. The final header-sector rewrite
 has the same power-loss limitation as a bank upload: power loss during that save
 can require restoring the bank. Do not disconnect or switch off while saving.
-USB host enumeration and capture during real flash writes still require hardware
-acceptance; host tests alone do not establish reliable recording on the device.
+The maintainer reports USB enumeration and capture during real flash writes tested
+on hardware. Keep a backup and report any host-specific recording problems.
+
+## Record the emulator output
+
+Switch on the emulator and load samples or a session. Under **Record output**,
+start recording, perform, then stop. Preview or download **WAV** or **MP3**.
+The recording captures stereo emulator output on this computer; it does not
+write to the FM1. Each new take replaces the previous download links, so save
+a take before starting another. Hardware USB sampling captures in the opposite
+direction: audio sent from your computer into the FM1.
+
+## Record the FM1 output on your computer
+
+1. Connect the FM1 with a USB data cable. In your DAW or audio recorder, choose
+   the FM1 as the **audio input** and create a stereo recording track.
+2. Use 16-bit stereo at 44.1 kHz, or 48 kHz if offered by the host. Play PIGEON
+   and check the recorder's input meter before starting a take.
+3. Record in the computer application, then stop and export there. This captures
+   the FM1 master output; the result is not saved into the FM1 sample bank.
+4. Under Settings → Audio, **USB LEVEL FIXED** keeps the USB recording level
+   independent of the speaker/master-volume adjustment. Check levels in the
+   recorder after changing it.
+
+For sampling in the other direction, choose the FM1 as the computer's **audio
+output** and use the USB sampler described above. Firmware updates and bank
+transfers use USB MIDI SysEx, separately from these USB audio streams.

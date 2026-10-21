@@ -242,7 +242,7 @@ static struct { int16_t pos; uint32_t frame; } mt;
 static void mt_follow(void)
 {
     int32_t want = (int32_t)menu_tab() * MT_ONE, d = want - mt.pos;
-    if (ui.frame != mt.frame + 1u || (ui_prefs & PREF_ANIM_OFF) || (d < 3 && d > -3))
+    if (FELUCCA_SAMPLER_ONLY || ui.frame != mt.frame + 1u || (ui_prefs & PREF_ANIM_OFF) || (d < 3 && d > -3))
         mt.pos = (int16_t)want;
     else
         mt.pos = (int16_t)(mt.pos + d / 2);
@@ -322,7 +322,7 @@ static void menu_row(uint32_t k, uint32_t row)
     const char *v = menu_valued(row) ? menu_vname(row, menu_get(row)) : "";
     if (sel)
         cv_rrect(MR_X, y, MR_W, h, FELUCCA_SAMPLER_ONLY?0:6, T_THEME, T_SURF);
-    else if (k && row - 1u != ui.menu_sel)             /* a rule from the row above (none beside the selected one) */
+    else if (k && mtab_at(menu_tab(),k-1u) != ui.menu_sel)             /* a rule from the row above (none beside the selected one) */
         cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
     GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row name centred up/down");
     cv_text_on(MR_LX, vy, &AF_M, MI_NAME[row], fg, bg);
@@ -336,7 +336,7 @@ static void menu_row(uint32_t k, uint32_t row)
         cv_text_r(MR_VR, vy, &AF_M, b, val, bg);
         return;
     }
-    if (row >= MI_VALUES) {                            /* CALIBRATION, ABOUT: OCT+ opens them */
+    if (!menu_valued(row)) {                           /* CALIBRATION, INFO, ABOUT: OCT+ opens */
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row chevron centred up/down");
         cv_icon_in(MR_VR - 12, y, 0, h, 12, ICON_X_RIGHT, sel ? T_INK : T_MID, bg);
         return;
@@ -425,12 +425,36 @@ static uint32_t menu_split(uint32_t n)
         s = mr_y(--k) - 1;
     return (uint32_t)(s < 240 - CV_ROWS ? 240 - CV_ROWS : s);
 }
+#if FELUCCA_SAMPLER_ONLY
+/* Cache rendered rows, including MIDI values absent from the inherited page
+ * signature. Only changed strips go to the LCD; the canvas stays buffered. */
+static struct { uint32_t skin, row[8]; uint8_t tab, role, valid; }
+    menu_cache __attribute__((section(".pool")));
+static uint32_t menu_dirty_rows(uint32_t *full)
+{
+    uint32_t tab=menu_tab(),n=mtab_rows(tab),dirty=0;
+    uint32_t skin=(uint32_t)T_BG+((uint32_t)T_THEME<<16)+(uint32_t)T_SURF*131u+ui_style;
+    uint32_t role=ui.menu_sel==MI_LCLEAR?2u:!menu_valued(ui.menu_sel);
+    *full=ui.force || !menu_cache.valid || menu_cache.tab!=tab || menu_cache.skin!=skin || n>8u;
+    for(uint32_t k=0;k<n && k<8u;k++) {
+        uint32_t row=mtab_at(tab,k);
+        uint32_t value=(row==MI_LCLEAR?ml_count():menu_get(row))*4u+
+            (row==ui.menu_sel)+2u*(k && mtab_at(tab,k-1u)==ui.menu_sel);
+        if(*full || menu_cache.row[k]!=value)dirty|=1u<<k;
+        menu_cache.row[k]=value;
+    }
+    if(*full || menu_cache.role!=role)dirty|=1u<<8;
+    menu_cache.skin=skin;menu_cache.tab=(uint8_t)tab;menu_cache.role=(uint8_t)role;menu_cache.valid=1;
+    return dirty;
+}
+#endif
 static void draw_menu(void)
 {
     static const khint_t KEYS[3][3] = {{{KC_ALGO, "TAB"}, {KC_PRESETS, "ROW"}, {KC_OCTPM, "VALUE"}},
                                        {{KC_ALGO, "TAB"}, {KC_PRESETS, "ROW"}, {KC_OCTUP, "OPEN"}},
                                        {{KC_ALGO, "TAB"}, {KC_PRESETS, "ROW"}, {KC_OCTUP, "CLEAR"}}};
     uint32_t pass, k, first, n, split, sig;
+    uint32_t menu_full=0,menu_dirty=0;
     int32_t pos0 = mt.pos;
     if (ui.menu == 1)
         mt_follow();
@@ -441,7 +465,13 @@ static void draw_menu(void)
           ui_home_view * 7340033u +    /* (1.3: HOME) */
           (uint32_t)(song.g[G_TUNE] + 64) * 8191u + (uint32_t)song.g[G_ROUTE] * 27449u +   /* (1.2: the project's rows) */
           (ui.menu == 2 ? ui.menu_scroll * 48611u : 0u) + (ui.menu == 3 ? info_sig() * 2654435761u : 0u);
-    if (!ui.force && sig == ui.menu_sig) {
+#if FELUCCA_SAMPLER_ONLY
+    if(ui.menu==1) {
+        menu_dirty=menu_dirty_rows(&menu_full);
+        if(!menu_full && !menu_dirty){ui.menu_sig=sig;return;}
+    } else menu_cache.valid=0;
+#endif
+    if (!ui.force && sig == ui.menu_sig && !menu_full && !menu_dirty) {
         if (ui.menu == 1 && mt.pos != pos0) {          /* only the tabs slid: their strip */
             cv_begin(240, MP_Y - H_HEAD, T_BG);
             cv_oy = -H_HEAD;
@@ -452,7 +482,7 @@ static void draw_menu(void)
         return;
     }
     ui.menu_sig = sig;
-    menu_head();
+    if(!FELUCCA_SAMPLER_ONLY || ui.menu!=1 || menu_full)menu_head();
     if (ui.menu == 3) {                                /* INFO: its rows in the first band, the second clear */
         for (pass = 0; pass < 2u; pass++) {
             uint32_t top_y = pass ? 132u : (uint32_t)H_HEAD;
@@ -502,6 +532,19 @@ static void draw_menu(void)
         if (pass)
             cv_key_row(8, 232, MK_Y, KEYS[ui.menu_sel == MI_LCLEAR ? 2 : !menu_valued(ui.menu_sel)], 3, 7u, T_BG);
         cv_oy = 0;
+#if FELUCCA_SAMPLER_ONLY
+        if(!menu_full) {
+            int32_t lo=top_y+(int32_t)cv_h,hi=top_y;
+            for(k=0;k<n;k++)if(menu_dirty&(1u<<k)){
+                int32_t a=mr_y(k)-1,b=mr_y(k)+mr_h();
+                if(a<top_y)a=top_y;
+                if(b>top_y+(int32_t)cv_h)b=top_y+(int32_t)cv_h;
+                if(a<b){if(a<lo)lo=a;if(b>hi)hi=b;}
+            }
+            if(pass && (menu_dirty&(1u<<8))){if(MK_Y<lo)lo=MK_Y;hi=240;}
+            if(lo<hi){cv_h=(uint32_t)(hi-top_y);cv_blit_from(0,(uint32_t)top_y,(uint32_t)(lo-top_y));}
+        } else
+#endif
         cv_blit(0, (uint32_t)top_y);
     }
 }

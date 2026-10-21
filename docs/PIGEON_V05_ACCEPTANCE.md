@@ -1,20 +1,24 @@
 # PIGEON 0.5-dev candidate validation
 
-Local candidate prepared 2026-10-20. Not published, not attested, and not yet
-accepted on physical hardware. Source remains on the development branch.
+THE FINAL BETA, prepared for publication 2026-10-21. The maintainer reports all
+remaining hardware checks passed: recording, persistence, expanded flash tail,
+transfers, audio output, screen reader, display and interrupted-update recovery.
+These are maintainer-reported hardware results; automated evidence is listed below.
+The subsequent SEL label-only rebuild is covered by software checks. Source remains
+on the development branch; this is a beta, not the final 0.5 release.
 
 ## Current flash-expansion candidate
 
 Use `build/pigeon.fwsc` (611106 bytes), not the historical USB candidates
-below. SHA-256: `bb5be04cee08ac779529e93b76ee5c3fc98d4bf7b1b27e04a0c416652bfbed70`.
+below. SHA-256: `3e25f9644fddaffcabcd2b6ae32a4d9e35248d95395756a4582254c4b007179d`.
 
 - Embedded version: `v0.5-dev`.
-- Application: 364,548 bytes; body growth room: 7900 bytes (4096 required).
-- Main RAM: 53,544 / 65,536; pool RAM: 353,604 / 376,832.
+- Application: 365,076 bytes; body growth room: 7372 bytes (4096 required).
+- Main RAM: 53,544 / 65,536; pool RAM: 353,652 / 376,832.
 - Sample bank: 504 KiB total, **500 KiB usable**.
 - Host storage/codec, expanded-bank, update/recovery and loader-capacity checks
-  pass. Hardware acceptance of this exact package remains pending.
-- Matching emulator WASM rebuilt successfully: 555,558 bytes, PIGEON-0.5-dev.
+  pass. Hardware checklist completion was reported by the maintainer before the SEL label-only rebuild.
+- Matching emulator WASM rebuilt successfully: 557,247 bytes, PIGEON-0.5-dev.
 - Full product and recovery suites pass, including sanitizers and target budgets.
 - Chrome browser checks pass for emulator playback/persistence, loader editing
   and offline reload, chop collections, screen-reader live announcements,
@@ -25,6 +29,41 @@ below. SHA-256: `bb5be04cee08ac779529e93b76ee5c3fc98d4bf7b1b27e04a0c416652bfbed7
 A rebuild may change the package hash. Record the hash of the actual tested
 package with the hardware results. Earlier entries below are historical
 evidence, not acceptance of this candidate.
+
+## Hardware preparation — 2026-10-21
+
+The current `build/pigeon.fwsc` was installed and restarted successfully. Full
+post-flash readback matched both songs, the complete bank and all ten stored
+project/settings objects byte-for-byte. A repacked bank adding 11 drum pads was
+uploaded and matched exact bank/metadata readback, preserving both songs and all
+ten objects. It leaves about 114.4 KiB free. The loaded-state recovery archive is
+`build/pigeon-ready-for-hardware-tests-20261021.pigeon`.
+
+Transfer timeouts occurred during initial standard backup/upload attempts;
+paced transfers with bounded read and idempotent payload retries completed.
+Ordinary transfer stability remains a release check. Listening, recording,
+reboot and expanded-tail acceptance are still manual. Use the
+[loaded-candidate test run](PIGEON_V05_TEST_RUN_20261021.md).
+
+## Settings-fix hardware follow-up
+
+The Settings-fix package was flashed successfully on 2026-10-21. Readback
+matched the complete bank and nine other objects immediately; current-project
+byte 62 (selected track) changed from Song 2 to Song 1 on reboot, with only its
+CRC also differing. Restoring the prior track selection made all ten objects
+match the pre-update backup exactly. Songs, drums, notes and settings were
+preserved. Backups: `build/pigeon-before-settings-fix-20261021.pigeon` and
+`build/pigeon-after-settings-fix-20261021.pigeon`. Visual hardware confirmation
+of Settings remains pending.
+
+## Recorder-render hardware follow-up
+
+The recorder-render package was flashed and restarted successfully. Readback
+confirmed the full bank, metadata and all ten project/settings objects match
+`build/pigeon-before-recorder-render-fix-20261021.pigeon`, after restoring the
+pre-update selected track. The verified post-update archive is
+`build/pigeon-after-recorder-render-fix-20261021.pigeon`. Hardware visual
+confirmation of the steady recorder footer remains pending.
 
 ## Historical USB candidate
 
@@ -69,8 +108,10 @@ intentional; any recording dropout still blocks release.
 
 The header save is not power-loss atomic; keep a full recovery archive. A new
 recording uses unused pool sectors alongside the existing bank, so saving a
-replacement does not reclaim its old payload until the loader repacks it.
-Selected-chop compaction is implemented in the loader, not as an FM1 menu action.
+replacement does not reclaim its old payload automatically. The FM1 has an
+explicit confirmed reclaim action; the loader can also repack the bank.
+Selected-chop retention is available on the FM1 and in the loader, with different
+key-number behavior described in the [tutorial](PIGEON_V05_GUIDE.md).
 
 The public site/emulator stay on the existing release. The matching 0.5
 WebAssembly build and browser acceptance now pass locally. The final release
@@ -152,7 +193,7 @@ and per-chop reverse.
 
 Implemented live input peak and latched full-scale clipping feedback, elapsed
 and available seconds, unsaved PLAY audition, protected ENV retry, two-press
-SCL replacement confirmation with LFO back, and returning to the recorded song's
+SEL replacement confirmation with LFO back, and returning to the recorded song's
 waveform after Save. Discard clears the elapsed counter. Reader help exposes
 input, clipping and remaining time and describes the new controls.
 
@@ -203,3 +244,10 @@ Target image: 375800 bytes; main RAM 61384/65536, pool 363676/376832. RAM audit
 has 1066 instructions with no calls. This candidate has not been flashed.
 Hardware acceptance must check knob response, trimmed audition, Save timing,
 reclaimed space and persistence with the other song/kit preserved.
+
+## THE FINAL BETA publication
+
+Maintainer reported all remaining hardware checks passed on 2026-10-21.
+Final SEL label-only package: SHA-256 `3e25f9644fddaffcabcd2b6ae32a4d9e35248d95395756a4582254c4b007179d`; 611106 bytes.
+Embedded version remains `v0.5-dev`; the website labels this candidate **THE FINAL BETA**.
+No audio, storage, USB protocol or clock changes were made after that report.

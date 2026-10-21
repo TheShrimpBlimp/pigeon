@@ -1,13 +1,13 @@
-# PIGEON controls — v0.4
+# PIGEON controls — v0.5 candidate
 
-Start with the [v0.4 tutorial](PIGEON_V04_GUIDE.md); [per-note timing](PIGEON_NOTE_TIMING.md) documents the longer-note and individual-nudge controls.
+Start with the [0.5 tutorial](PIGEON_V05_GUIDE.md); [per-note timing](PIGEON_NOTE_TIMING.md) documents the longer-note and individual-nudge controls.
 
 PIGEON is sampler firmware for the M-VAVE FM1: Song 1, drum kit, and Song 2.
 Choose the track first; edits belong to that track. Song 2 can hold drum loops.
 
 | Page | Controls |
 | --- | --- |
-| Song waveform | K1 start, K2 end, K3 scroll, K4 horizontal zoom; OCT changes pitch |
+| Song waveform | K1 start, K2 end, K3 scroll, K4 zoom; LFO cycles K1 playback point/direction/cents/gain/crossfade; OCT pitch |
 | Chop settings (EDIT) | Held loop, latch, split/join, undo/redo; ENV opens envelopes, LFO chop operations |
 | Envelopes | K1 attack, K2 release, K3 one-shot/hold/latch, K4 loop |
 | Sequencer (SEQ) | K1 BPM, K2 tempo/sample-end timing, K3 step, K4 length (1–64); OCT step duration; REC arm |
@@ -33,7 +33,7 @@ reference; it follows project BPM within 50–200% speed. Changing chop boundari
 does not recapture the reference until a sync control is adjusted. SPEED % shows
 the sync factor, before OCT and step pitch. It is not pitch-preserving stretching.
 
-v0.4 firmware and web tools share 496 KiB between both songs and the kit. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
+The 0.5 candidate and matching web tools share 500 KiB between both songs and the kit. The songs share eight sounding voices; the drum kit has four additional voices. White song keys
 cover chops 1–16; black keys add 17–27; PRESETS selects later chops and changes the key bank to reach 28–32.
 Drums have 16 one-shot pads. Held loops default on, latch defaults off.
 
@@ -42,17 +42,17 @@ The full workflow and format details are in [KO_MODE.md](KO_MODE.md).
 
 ## Saving a phrase
 
-SCL opens Patterns. Choose A–D, stop playback and release the pads, then press SAVE. This saves all three tracks’ sequences, timing, automation and arrangement together. The screen confirms the destination. REC on Patterns/Arrangement remains a save shortcut; on the sequencer it arms recording. Samples and chop layouts belong to the shared sample bank, so switching A–D does not replace them. In the browser, Save session (.pigeon) includes the current phrase, saved A–D patterns and the sample bank; Save bank (.kob) contains samples and chop settings only.
+SEL opens Patterns. Choose A–D, stop playback and release the pads, then press SAVE. This saves all three tracks’ sequences, timing, automation and arrangement together. The screen confirms the destination. REC on Patterns/Arrangement remains a save shortcut; on the sequencer it arms recording. Samples and chop layouts belong to the shared sample bank, so switching A–D does not replace them. In the browser, Save session (.pigeon) includes the current phrase, saved A–D patterns and the sample bank; Save bank (.kob) contains samples and chop settings only.
 
 ## Installing from another firmware
 
-Before installing PIGEON from another custom firmware, use [TransitFM1](https://quixotic7.github.io/TransitFM1/) as the intermediate firmware, following its supported-source instructions, then install PIGEON. TransitFM1 is currently host-tested only; if it refuses your source firmware, follow its documented alternative path rather than overriding its checks. Back up first; the v0.4 hardware smoke test passed, with samples and all project/settings objects preserved.
+Before installing PIGEON from another custom firmware, use [TransitFM1](https://quixotic7.github.io/TransitFM1/) as the intermediate firmware, following its supported-source instructions, then install PIGEON. TransitFM1 is currently host-tested only; if it refuses your source firmware, follow its documented alternative path rather than overriding its checks. Back up first. The 0.5 candidate still requires the [hardware acceptance checks](PIGEON_V05_HARDWARE_TEST.md).
 
 ## Unsaved patterns
 
 Patterns shows UNSAVED when the current phrase differs from its saved state or the destination is empty. Selecting an occupied slot with unsaved work warns first; select the same slot again to discard those edits and load it. SAVE stores the phrase, timing, automation and arrangement to the selected A–D destination. Sample/chop settings remain in the shared bank.
 
-See [the first-song walkthrough and v0.4 release gate](PIGEON_V04_RELEASE.md) for the complete workflow and validation limits.
+See [the first-song walkthrough](PIGEON_V05_GUIDE.md) and [candidate acceptance](PIGEON_V05_ACCEPTANCE.md) for the complete workflow and validation limits.
 
 ## Copy a whole chop to another key
 
@@ -71,7 +71,7 @@ Loader Undo/Redo supports Ctrl+Z / Cmd+Z, Ctrl+Shift+Z / Cmd+Shift+Z and Ctrl+Y 
 
 ## Held-button shortcuts
 
-Page buttons open their pages immediately on press; releasing them does not navigate again. HOME returns to the waveform from another page. Press HOME on the waveform to open Settings, then HOME again to return. Hold GLO for mixer shortcuts and SEQ for sequence tools. FX opens the PIGEON effects pages, SCL opens Patterns, EDIT opens chops, and REC arms recording. Their inherited macro, scale/chord, engine-picker and recording overlays have been removed. Recording preferences remain available through LFO from Timing.
+Page buttons open their pages immediately on press; releasing them does not navigate again. HOME returns to the waveform from another page. Press HOME on the waveform to open Settings, then HOME again to return. Hold GLO for mixer shortcuts and SEQ for sequence tools. FX opens the PIGEON effects pages, SEL opens Patterns, EDIT opens chops, and REC arms recording. Their inherited macro, scale/chord, engine-picker and recording overlays have been removed. Recording preferences remain available through LFO from Timing.
 
 ## Reading the screen
 
@@ -82,8 +82,7 @@ Parameter pages use a consistent four-card grid: K1/K2 on the top row and K3/K4 
 On either song's waveform, hold **SEL** and trigger a chop to hear its final two
 seconds, then loop from the beginning while the key stays held. Short chops start
 at the beginning. Releasing the note stops the audition. This bypasses recording,
-quantization and MIDI output without changing chop boundaries. A plain SEL tap
-opens Patterns; it resets cent tuning inside Scratch instead.
+quantization and MIDI output without changing chop boundaries. A plain SEL tap opens Patterns.
 
 ## Sequencer grid and piano roll
 
@@ -91,17 +90,19 @@ Press SEQ to open the grid; press SEQ again to switch to the piano roll. SEQ alt
 
 Both views support **four notes per step**. While unarmed and stopped, tap keys to add/remove individual notes on the selected step. With REC armed and transport stopped, hold a chord and release all keys to advance once. During playback, REC records live. A fifth note does not replace a stored note. The grid displays `2N`, `3N` or `4N` for chords; the roll draws each note. REC stays lit when armed in every LED mode.
 
-See [v0.4 release preparation and validation](PIGEON_V04_RELEASE.md).
+See [0.5 validation and hardware gates](PIGEON_V05_ACCEPTANCE.md).
 
 For sequence tools, conditional fills and per-track MIDI routing, see
-the [v0.4 guide](PIGEON_V04_GUIDE.md#sequence-tools).
+the [sequence tools guide](PIGEON_V04_GUIDE.md#sequence-tools) (retained in 0.5).
 
-## Queue, scratch and MIDI
+## Queue, USB sampling and MIDI
 
-EDIT → ARP opens the queue; K1 enables it. EDIT → FX opens Scratch; EDIT switches
-its performance/motor controls. HOME returns to the waveform. From the piano
-roll, FX opens individual note length/nudge. The [v0.4 guide](PIGEON_V04_GUIDE.md)
-has full controls for these pages, fills, sequence tools and per-track MIDI.
+EDIT → ARP opens the queue; K1 enables it. EDIT → FX opens the USB sampler
+for a song; ENV → FX from the drum page records to the selected pad. ENV starts
+and stops capture, PLAY auditions a ready take, K1/K2 trim finely and K3/K4
+trim coarsely. SEL asks to save; SEL confirms and LFO cancels. Scratch is
+excluded from 0.5. From the piano roll, FX edits note length/nudge. See the
+[0.5 tutorial](PIGEON_V05_GUIDE.md) for recording, collection and reclamation.
 
-v0.4 projects use 115 parameters and are not readable by public v0.3.1. Export
+0.4 and 0.5 projects use 115 parameters and are not readable by public v0.3.1. Export
 a complete recovery archive before updating or downgrading.

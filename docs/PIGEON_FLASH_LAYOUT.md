@@ -14,8 +14,8 @@ every address used by existing banks. End addresses below are exclusive.
 | 6 (new) | `0x5F000` | `0x60000` | 4 KiB |
 
 The first logical sector contains the bank header. The firmware body begins
-at `0x5000` and must end before `0x5F000`. The current 364,548-byte image leaves
-7900 bytes of body growth room; the build requires at least 4096 bytes.
+at `0x5000` and must end before `0x5F000`. The current 365,076-byte image leaves
+7372 bytes of body growth room; the build requires at least 4096 bytes.
 The boot stub is unchanged.
 
 No other regions are reclaimed: boot/header, boot marker at `0x76000`,
@@ -43,6 +43,6 @@ while a bank upload, USB take or collection recovery operation is active.
 Host tests cover full-capacity upload and CRC/readback, stable old addresses,
 reboot scanning, protected sectors, downgrade rejection before erase, and
 update/recovery paths. Real-device acceptance is listed in
-[PIGEON_V05_HARDWARE_TEST.md](PIGEON_V05_HARDWARE_TEST.md). The candidate has
-not been flashed. The matching emulator WASM has been rebuilt and its native
+[PIGEON_V05_HARDWARE_TEST.md](PIGEON_V05_HARDWARE_TEST.md). The candidate was flashed on 2026-10-21; installation and preservation readback
+passed. Physical tail-playback and full acceptance remain pending. The matching emulator WASM has been rebuilt and its native
 and Chrome browser acceptance checks pass locally.

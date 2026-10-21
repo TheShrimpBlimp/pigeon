@@ -1,5 +1,7 @@
 # PIGEON v0.4 release checklist
 
+Historical 0.4 documentation. For the 0.5 candidate use the [current tutorial](PIGEON_V05_GUIDE.md) and [acceptance record](PIGEON_V05_ACCEPTANCE.md).
+
 PIGEON v0.4 passed automated release validation and the owner’s hardware smoke
 test. The exact package was flashed successfully; the complete sample bank and
 all ten project/settings objects matched the pre-flash archive byte for byte.

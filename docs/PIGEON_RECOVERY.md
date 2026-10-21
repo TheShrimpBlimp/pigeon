@@ -21,6 +21,15 @@ and unknown firmware are refused before the update command. Follow the source
 firmware’s supported transition path first; TransitFM1 also checks compatibility. CLI --force overrides this refusal
 and is explicitly unsafe. A checksum-verified official V15 return remains possible.
 
+## 0.5 sample-layout checks
+
+The 0.5 candidate appends `0x5F000–0x60000` as sample space, giving 500 KiB
+usable. Existing sample addresses and the version-5 stub stay unchanged. The
+body must now end below `0x5F000`, with a build-enforced 4 KiB growth reserve.
+OTA rejects an older pool descriptor before staging if the bank uses the added
+tail (result -17). Export and replace it with a bank that fits the older layout
+before downgrading. See [flash layout](PIGEON_FLASH_LAYOUT.md).
+
 ## v0.3 recovery stub version 5
 
 v0.3 uses ChoralRoot’s boot-stub design, adapted to PIGEON’s

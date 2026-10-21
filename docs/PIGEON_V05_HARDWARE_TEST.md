@@ -1,8 +1,12 @@
 # PIGEON 0.5-dev USB recording acceptance
 
-This is a local development candidate, not a published release. Scratch is
+THE FINAL BETA: the maintainer reports this checklist completed on 2026-10-21.
+This remains a beta, not the final 0.5 release. Scratch is
 excluded; ordinary chop reverse remains available. CPU clock settings and the
 single-core execution model are unchanged.
+
+For the already flashed candidate, loaded drum map and ordered tests, use the
+[2026-10-21 test run](PIGEON_V05_TEST_RUN_20261021.md).
 
 ## Install and prepare
 
@@ -32,9 +36,9 @@ single-core execution model are unchanged.
    PLAY auditions the unsaved take; PLAY again stops. Confirm the sound is clean.
    Adjust K1 start/K2 end (about 1 ms), or K3 start/K4 end (100 ms).
    PLAY must audition only the selected range. Check KEEP ms and remaining time.
-   Cancel the SCL confirmation with LFO and confirm the range/full take remain.
+   Cancel the SEL confirmation with LFO and confirm the range/full take remain.
    ENV opens a retry prompt; LFO backs out without losing the take.
-4. Press **SCL/Select**, then SCL again to confirm. LFO cancels confirmation
+4. Press **SEL**, then SEL again to confirm. LFO cancels confirmation
    and retains the take. This **replaces the song selected when recording began**.
    Check the destination shown on screen before starting. An empty pool
    can create Song 1. Do not disconnect during saving.
@@ -82,5 +86,21 @@ Back up the current bank and projects before installing the candidate.
    rejection before staging/erasing (OTA result -17), with the bank unchanged.
    Export and replace it with a smaller bank before attempting a downgrade.
 
-These checks remain pending on the FM1; host tests do not verify physical
+The maintainer reports these checks completed on the FM1; host tests alone do not verify physical
 flash timing or USB behavior during flash writes.
+
+## Additional 0.5 workflow checks
+
+- Select a drum pad, open ENV → FX and save a short USB take. Confirm only that
+  pad changes; both songs and all other pads survive reboot.
+- Test a threshold start, a seconds limit and a bars limit separately. Confirm
+  the take starts/stops at the chosen boundary without clipped or missing audio.
+- On a song, EDIT → LFO → SEL opens Keep selected chops. Mark nonadjacent keys
+  and keep them in the same song. Confirm retained key numbers stay unchanged,
+  discarded keys are silent and unused audio is removed. Test appending retained
+  chops into empty keys in the other song without replacing occupied keys.
+- From the idle USB sampler, confirm SEL reclamation, then reboot and compare
+  live samples, metadata and patterns with the pre-reclaim backup. Confirm
+  cancelled reclamation leaves the bank unchanged.
+- In Arrangement, select different patterns per track and capture mutes with
+  FX. Save/reboot and check section repeats, selected patterns and mutes.

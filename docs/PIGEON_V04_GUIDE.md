@@ -1,5 +1,7 @@
 # PIGEON v0.4 tutorial
 
+Historical 0.4 documentation. For the 0.5 candidate use the [current tutorial](PIGEON_V05_GUIDE.md) and [acceptance record](PIGEON_V05_ACCEPTANCE.md).
+
 These controls describe the released PIGEON v0.4 firmware, verified on physical FM1 hardware.
 For build status and verification notes, see [development notes](PIGEON_V04_DEVELOPMENT.md).
 
