@@ -50,9 +50,9 @@ L_CHARS = " #+-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXY"
 def preset(name):
     if name == "little-character":
         v = str(FONTS.parent / "assets" / "fonts" / "LittleCharacterRegular.ttf")
-        return [("S", v, 11, (32, 126), EXTRAS, 0.0, PHASES),
-                ("M", v, 15, (32, 126), EXTRAS, 0.0, PHASES),
-                ("L", v, 28, (32, 32), [ord(c) for c in L_CHARS[1:]], 0.0, PHASES_L)]
+        return [("S", v, 11, (32, 126), EXTRAS, 0.0, 1),
+                ("M", v, 15, (32, 126), EXTRAS, 0.0, 1),
+                ("L", v, 28, (32, 32), [ord(c) for c in L_CHARS[1:]], 0.0, 1)]
     raise SystemExit(f"unknown preset {name}")
 
 

@@ -64,6 +64,9 @@ static slc_src_t slc_usr[SMP_USER_SLOTS];
 #endif
 typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
 ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
+#if FELUCCA_SAMPLER_ONLY
+_Static_assert(sizeof(slc_rbuf_t)<=ENG_KIT_MEM,"kit reverse windows fit");
+#endif
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
 static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"};
 #define SLC_SRC_PIANO 4u
@@ -84,7 +87,13 @@ typedef struct {
     uint32_t end;                    /* where the last slice ends (0 = the material's end) */
     uint32_t pos[SLC_AUTO], st[SLC_AUTO];     /* slice starts and their decoder states (as ast) */
 } slc_man_t;
-static slc_man_t slc_man[SMP_USER_SLOTS][2];
+/* Preserve legacy slice migration and lock-free table publication. Main-loop
+ * edits and audio reads can also use pool RAM; no need for scarce main RAM. */
+static slc_man_t slc_man[SMP_USER_SLOTS][2]
+#if FELUCCA_SAMPLER_ONLY
+    __attribute__((section(".pool")))
+#endif
+    ;
 static volatile uint8_t slc_man_cur[SMP_USER_SLOTS];
 static void (*slc_man_load)(uint32_t k);        /* slice_store.c: a slot was read (smp_user_scan): its stored slices */
 static uint8_t slc_man_save;                     /* bit k: slot k's slices changed, to flash (slice_store.c) */
@@ -486,7 +495,7 @@ static int slc_man_restore(uint32_t k, uint32_t n, uint32_t end, const uint32_t 
 static int16_t *slc_rb(track_t *t, voice_t *v)
 {
     uint32_t p = (uint32_t)(t - trk), i = (uint32_t)(v - t->v);
-    return p < NPART && i < NVOICE ? (*(slc_rbuf_t *)ENG_MEM(p))[i] : 0;
+    return p < ENG_MEM_PARTS && i < NVOICE ? (*(slc_rbuf_t *)ENG_MEM(p))[i] : 0;
 }
 
 static void slice_note_on(track_t *t, voice_t *v)
@@ -498,7 +507,7 @@ static void slice_note_on(track_t *t, voice_t *v)
 #if FELUCCA_KO_STORAGE
     if (s && ko_compressed(s)) {
         if (!ko_song(t)) { v->active = 0; return; }
-        rev = 0; /* compressed reverse deliberately unsupported */
+        rev = 0; /* PIGEON sets per-chop direction below. */
         uint32_t vi = (uint32_t)(v-t->v)+(FELUCCA_KO_DUAL && t==trk+2 ? NVOICE : 0);
         ko_pcm[vi].epoch++;
         ko_pcm[vi].want = ~0u;
@@ -513,10 +522,23 @@ static void slice_note_on(track_t *t, voice_t *v)
     if (!s) { v->active = 0; return; }
     j = slc_note_slice(p, v->note, slc_count(s, div));
     slc_bounds(s, div, j, &a, &b, &st);
-    if (b <= a || (rev && !slc_rb(t, v)))
+#if FELUCCA_KO
+    if(ko_song(t) && ko_tail_preview!=1)rev=ko_track_state(t)->table[ko_track_state(t)->current].chop[j].reverse;
+    /* Only the first pass starts here; render-loop bounds remain [a,b). */
+    if(ko_song(t) && ko_tail_preview!=1 && !ko_scratch[FELUCCA_KO_DUAL && t==trk+2].on) {
+        const ko_state_t *ks=ko_track_state(t);
+        const ko_chop_t *c=&ks->table[ks->current].chop[j];
+        if(c->play){if(rev)b=ko_play_pos(c)+1u;else {a=ko_play_pos(c);st=c->play_st;}}
+    }
+#endif
+    if (b <= a || (rev && !slc_rb(t, v)
+#if FELUCCA_KO_STORAGE
+        && !ko_compressed(s)
+#endif
+    ))
         return;
 #if FELUCCA_KO
-    if (ko_tail_preview && ko_song(t)) {
+    if (ko_tail_preview==1 && ko_song(t)) {
         uint32_t tail = ((s->rate * 44100u + 32768u) >> 16) * 2u;
         if (b - a > tail) {
             uint32_t target = b - tail;
@@ -542,6 +564,10 @@ static void slice_note_on(track_t *t, voice_t *v)
         const ko_chop_t *c = &ks->table[ks->current].chop[j];
         uint32_t id=FELUCCA_KO_DUAL && t==trk+2,vi=(uint32_t)(v-t->v);
         uint32_t attack=((c->rsv>>KO_ATTACK_SHIFT)&31u)*5u,release=((c->rsv>>KO_RELEASE_SHIFT)&31u)*10u;
+        int32_t fine=c->cents*16,q=fine/100,rem=fine-q*100;if(rem<0){q--;rem+=100;}
+        ko_voice_fine[id][vi]=(uint16_t)(((uint64_t)(pow2_q16(q)+(pow2_q16(q+1)-pow2_q16(q))*(uint32_t)rem/100u)*32768u)/pow2_q16(0));
+        ko_voice_gain[id][vi]=c->gain?c->gain:256;
+        if(c->xfade && ko_tail_preview!=1)v->s[4]|=KO_V_FADE;
         ko_voice_transpose[id][vi]=(int8_t)clamp(t->p[P_TRANS],-24,24);ko_env_flags[id][vi]=c->rsv;ko_env_gain[id][vi]=attack?0:32767;
         ko_env_attack[id][vi]=(uint16_t)(attack?32767u*CTL/(FS*attack/1000u):32767u);
         ko_env_release[id][vi]=(uint16_t)(release?32767u*CTL/(FS*release/1000u):0u);
@@ -555,8 +581,8 @@ static void slice_note_on(track_t *t, voice_t *v)
         uint32_t id=FELUCCA_KO_DUAL && t==trk+2, vi=(uint32_t)(v-t->v);
         if(ko_tail_preview) {
             /* Audition the loop boundary, then the full chop until note release. */
-            v->s[4] &= ~(KO_V_LATCH | KO_V_NO_LOOP);
-            ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_ONE | KO_NO_LOOP)) | KO_GATE;
+            v->s[4] &= ~(KO_V_LATCH | (ko_tail_preview==1?KO_V_NO_LOOP:0u));
+            ko_env_flags[id][vi] = (ko_env_flags[id][vi] & ~(KO_LATCH | KO_ONE | (ko_tail_preview==1?KO_NO_LOOP:0u))) | KO_GATE;
             ko_env_gain[id][vi] = 32767; ko_env_attack[id][vi] = 32767;
         } else {
             v->s[4] = (v->s[4] & ~KO_V_LATCH) | KO_V_NO_LOOP;
@@ -572,7 +598,7 @@ static void slice_note_on(track_t *t, voice_t *v)
         ko_scratch[id].cue=a;
         if(chop<KO_CHOPS && (ko_cues[id].valid&(1u<<chop)) && ko_cues[id].a[chop]==a && ko_cues[id].b[chop]==b && ko_cues[id].pos[chop]>=a && ko_cues[id].pos[chop]<b)ko_scratch[id].cue=ko_cues[id].pos[chop];
         else if(chop<KO_CHOPS)ko_cues[id].valid&=~(1u<<chop);
-        rev=0;v->s[4]=(v->s[4]&~(KO_V_NO_LOOP|KO_V_LATCH|(1u<<7)))|KO_V_SCRATCH;
+        rev=0;v->s[4]=(v->s[4]&~(KO_V_NO_LOOP|KO_V_LATCH|KO_V_FADE|(1u<<7)))|KO_V_SCRATCH;
         ko_env_flags[id][vi]=KO_ONE;ko_env_gain[id][vi]=32767;
     }
 #endif
@@ -591,7 +617,7 @@ static void slice_note_on(track_t *t, voice_t *v)
     if (ko_compressed(s)) {
         uint32_t vi = (uint32_t)(v-t->v)+(FELUCCA_KO_DUAL && t==trk+2 ? NVOICE : 0);
         v->s[4] = (v->s[4] & ~(15u<<3)) | (vi<<3);
-        ko_pcm[vi].want = (a+ko_pcm_bank(vi)->skip)/KO_PCM_N;
+        ko_pcm[vi].want = ((rev?b-1u:a)+ko_pcm_bank(vi)->skip)/KO_PCM_N;
         ko_diag_attack_tick[vi]=KO_DIAG_NOW();
     }
 #endif
@@ -617,10 +643,17 @@ static void slc_fill(const slc_src_t *s, int16_t *rb, uint32_t ws, uint32_t n, u
 
 /* LOOP: back to the slice's start; its end again too (MAN: a JOIN / move meanwhile changed it). Out of line: once
  * per loop, it keeps slc_fwd inlined in slice_render */
+#if FELUCCA_KO
+#include "ko_blend.c"
+#endif
 static __attribute__((noinline)) void slc_loop_fwd(const slc_src_t *s, voice_t *v, slc_dec_t *d)
 {
     uint32_t a, b, st;
     slc_bounds_v(s, v, &a, &b, &st);
+#if FELUCCA_KO
+    uint32_t fade=ko_blend_length(v,s);
+    if(fade){uint32_t id=ko_blend_id(v);a+=fade;st=ko_blend_data(id)[ko_blend_vi(v,id)].after;}
+#endif
     slc_dec_at(d, a, st);
 #if FELUCCA_KO_STORAGE
     if (ko_compressed(s)) d->seg = ((uint32_t)v->s[4]>>3)&15u;
@@ -635,7 +668,10 @@ static inline int slc_fwd(const slc_src_t *s, voice_t *v, slc_dec_t *d, int loop
             return 0;
         slc_loop_fwd(s, v, d);
     }
-    *x = slc_dec_next(s, d);
+    uint32_t pos=d->pos;*x = slc_dec_next(s, d);
+#if FELUCCA_KO
+    if((uint32_t)v->s[4]&KO_V_FADE)*x=ko_blend_sample(s,v,pos,*x,loop);
+#endif
     return 1;
 }
 static __attribute__((noinline)) int slc_rev(const slc_src_t *s, voice_t *v, int16_t *rb, int loop, int32_t *x)
@@ -646,9 +682,15 @@ static __attribute__((noinline)) int slc_rev(const slc_src_t *s, voice_t *v, int
             return 0;
         slc_bounds_v(s, v, &a, &b, &st);
         q = b;
+#if FELUCCA_KO
+        q-=ko_blend_length(v,s);
+#endif
         v->ph[2] = a;                                   /* (MAN: a JOIN / move meanwhile changed the start too) */
     }
     q--;
+#if FELUCCA_KO_STORAGE
+    if(ko_compressed(s)) {*x=ko_pcm_next(q,((uint32_t)v->s[4]>>3)&15u);if((uint32_t)v->s[4]&KO_V_FADE)*x=ko_blend_sample(s,v,q,*x,loop);v->ph[0]=q;return 1;}
+#endif
     if (q < ws || q >= ws + SLC_RB) {
         slc_bounds_v(s, v, &a, &b, &st);
         if (q < a)                                      /* MAN: the start moved past this voice: it ends */
@@ -658,11 +700,14 @@ static __attribute__((noinline)) int slc_rev(const slc_src_t *s, voice_t *v, int
         v->s[0] = (int32_t)ws;
     }
     *x = rb[q - ws];
+#if FELUCCA_KO
+    if((uint32_t)v->s[4]&KO_V_FADE)*x=ko_blend_sample(s,v,q,*x,loop);
+#endif
     v->ph[0] = q;
     return 1;
 }
 
-#if FELUCCA_KO
+#if FELUCCA_KO && FELUCCA_KO_SCRATCH
 /* Two published ADPCM windows per deck. Only the cooperative main loop decodes
  * and writes PCM; the IRQ requests windows and stalls the deck on cache misses.
  * MP3 uses its existing per-voice double buffer. No full-song PCM allocation. */
@@ -749,7 +794,7 @@ static __attribute__((noinline)) void ko_scratch_render(track_t *t,voice_t *v,co
         /* A stopped platter is silent, rather than a held DC voltage. */
         v->s[7]+=mulq15((speed?sample:0)-v->s[7],24000);
         ko_scratch[id].gain+=clamp(target-ko_scratch[id].gain,-256,256);
-        out[i]+=voice_amp(mulq15(v->s[7],ko_scratch[id].gain),m,i)<<1;
+        out[i]+=voice_amp(mulq15(clamp((v->s[7]*(int32_t)ko_voice_gain[id][v-t->v])>>8,-32768,32767),ko_scratch[id].gain),m,i)<<1;
         int32_t f=frac+(ready?step:0),hop=f/65536;frac=f%65536;
         if(frac<0){frac+=65536;hop--;}
         int32_t p=(int32_t)pos+hop;
@@ -760,6 +805,9 @@ static __attribute__((noinline)) void ko_scratch_render(track_t *t,voice_t *v,co
     }
     v->ph[0]=pos;v->ph[1]=(uint32_t)frac;
 }
+#elif FELUCCA_KO
+static void ko_scratch_poll(void) {}
+
 #endif
 
 /* the ADSR (ONE: no release), DECAY, the fade at the slice end */
@@ -780,6 +828,7 @@ static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
         if(v->stage==3u && ko_env_release[id][vi]) {gain-=ko_env_release[id][vi];if(gain<=0){gain=0;v->active=0;}}
         else if(v->stage!=4u) gain=clamp(gain+ko_env_attack[id][vi],0,32767);
         ko_env_gain[id][vi]=(uint16_t)gain;adsr=mulq15(adsr,gain);
+
     }
 #endif
     if (!ko_voice && p[P_E4] == SLC_ONE && v->stage == 3u)
@@ -813,7 +862,9 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         return;
     }
 #if FELUCCA_KO
+    #if FELUCCA_KO_SCRATCH
     if(pk&KO_V_SCRATCH){ko_scratch_render(t,v,s,out,n,m);return;}
+#endif
 #endif
     int32_t pitch = p[P_E3];
 #if FELUCCA_KO
@@ -822,6 +873,7 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
 #endif
     stepq = (pow2_q16(clamp(m->pitch16 - v->pitch_cur + pitch * 16, -1536, 576)) >> 8) * (s->rate >> 8);
 #if FELUCCA_KO
+    if(pk & KO_VOICE)stepq=(uint32_t)(((uint64_t)stepq*ko_voice_fine[FELUCCA_KO_DUAL && t==trk+2][v-t->v])>>15);
     if(pk & KO_VOICE) {
         uint32_t id=FELUCCA_KO_DUAL && t==trk+2;
         if(ko_sync[id].on)stepq=ko_sync_step(stepq,(s->rate*44100u+32768u)>>16,ko_sync[id].samples,ko_sync[id].beats,(uint32_t)song.g[G_BPM]);
@@ -834,15 +886,16 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
 #if FELUCCA_KO_STORAGE
     if (ko_compressed(s) && !v->s[6]) {
         const ko_bank_hdr_t *bank=ko_pcm_bank(d.seg);
-        uint32_t frame=(d.pos+bank->skip)/KO_PCM_N;
+        uint32_t frame=((rev?d.pos-1u:d.pos)+bank->skip)/KO_PCM_N;
         uint32_t next=frame+1u;
-        if (loop && next*KO_PCM_N >= v->ph[2]+bank->skip)
+        if(rev){uint32_t a,b,st;slc_bounds_v(s,v,&a,&b,&st);next=!frame || frame*KO_PCM_N<=a+bank->skip?(loop?(b-1u+bank->skip)/KO_PCM_N:frame):frame-1u;}
+        if (!rev && loop && next*KO_PCM_N >= v->ph[2]+bank->skip)
             next=((*ko_pcm_table(d.seg)).chop[(pk>>8)&63u].a+bank->skip)/KO_PCM_N;
         int ready=(ko_pcm[d.seg].frame[0]==frame || ko_pcm[d.seg].frame[1]==frame);
         /* A pitched attack near a frame boundary can consume the next cache
          * in its first audio block. Keep its clock at the chop start until
          * both current and prefetched PCM are available. */
-        if (next<bank->frames && (loop || next*KO_PCM_N<v->ph[2]+bank->skip))
+        if (next<bank->frames && (rev || loop || next*KO_PCM_N<v->ph[2]+bank->skip))
             ready &= ko_pcm[d.seg].frame[0]==next || ko_pcm[d.seg].frame[1]==next;
         if (!ready) {
             ko_pcm[d.seg].want=frame; v->env_out=0; return;
@@ -881,7 +934,11 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         }
         y = v->s[2] + (((v->s[3] - v->s[2]) * (int32_t)(frac >> 1)) >> 15);
         v->s[7] += mulq15(y - v->s[7], lp);             /* TONE */
-        out[i] += voice_amp(v->s[7], m, i) << 1;
+        int32_t sample=v->s[7];
+#if FELUCCA_KO
+        if(pk&KO_VOICE)sample=clamp((sample*(int32_t)ko_voice_gain[FELUCCA_KO_DUAL && t==trk+2][v-t->v])>>8,-32768,32767);
+#endif
+        out[i] += voice_amp(sample, m, i) << 1;
         if (v->s[6] == 2)
             break;
     }
@@ -936,5 +993,5 @@ static const engine_t ENG_SLICE = {
     .sampled = 1,
     .keys = slice_keys,
     .amp = slice_amp,
-    .mem = FELUCCA_KO_STORAGE ? ENG_MEM_PART : sizeof(slc_rbuf_t),
+    .mem = FELUCCA_KO ? ENG_MEM_PART : sizeof(slc_rbuf_t),
 };

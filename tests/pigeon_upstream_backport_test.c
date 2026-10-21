@@ -37,7 +37,7 @@ int main(void){
  ko.view=32;ko_tool_action=3;ko_human_vel=10;ko_human_time=12;page_tap(B_ENV);ok=t->p[P_M3AMT]==10&&t->p[P_M4AMT]==12;undo_swap();bad+=check("humanize apply and undo restore modulation parameters",ok&&!t->p[P_M3AMT]&&!t->p[P_M4AMT]);
  song.g[G_ROUTE]=ROUTE_TRACK;menu_put(MI_TCH1,9);menu_put(MI_TCH2,1);menu_put(MI_TCH3,MCH_OMNI);events_block(CTL);
  bad+=check("custom MIDI channels, OMNI fallback and removed track ignored",midi_slot(9)==0&&midi_slot(1)==1&&midi_slot(15)==2);
- incoming(9,60,100);incoming(1,61,100);bad+=check("MIDI notes route independently to songs and drums",held(0,60)&&midi_notes[1][61]==2&&midi_notes[9][60]==1);menu_put(MI_TCH1,10);events_block(CTL);bad+=check("channel reassignment releases old ownership without stuck notes",!held(0,60)&&!midi_notes[9][60]&&!midi_owners[0]);
+ incoming(9,60,100);incoming(1,61,100);bad+=check("MIDI notes route independently to songs and drums",held(0,60)&&midi_note_get(1,61)==2&&midi_note_get(9,60)==1);menu_put(MI_TCH1,10);events_block(CTL);bad+=check("channel reassignment releases old ownership without stuck notes",!held(0,60)&&!midi_note_get(9,60)&&!midi_owners[0]);
  menu_put(MI_TCH3,MCH_OFF);events_block(CTL);bad+=check("MIDI OFF ignores unmatched channels",midi_slot(15)==-1);menu_put(MI_TCH2,10);events_block(CTL);bad+=check("duplicate MIDI channels choose first visible track",midi_slot(10)==0);
  project_t p,q;project_store_t packed;project_capture(&p);p.t[0].step[0].probability=KO_PROB_MAX;ok=proj_pack(&packed,&p)&&proj_unpack(&q,packed.raw,sizeof packed);
  bad+=check("MIDI metadata and conditions fit 3840 bytes alongside per-note timing",ok&&q.g[G_ROUTE]==ROUTE_TRACK&&q.mch[0]==p.mch[0]&&q.mch[2]==MCH_OFF&&q.t[0].step[0].probability==KO_PROB_MAX);

@@ -39,7 +39,7 @@ ko.view=18;chain_defaults(&chain_config);chain_config.count=2;chain_config.row[0
  chain_config.rsv[0]=1;ko_launch_ready=1;ko_launch_mode=0;ko_launch_pending=1;song.playing=1;chain.running=0;chain.clk=0;
  trk[0].p[P_SLEN]=32;trk[0].p[P_SDIV]=2;trk[0].seq_idx=15;trk[0].seq_pos=0;chain_tick(div_samples(2));
  bad+=check("pattern-end launch does not switch halfway through 32 steps",ko_launch_pending==1);
- for(uint32_t k=0;k<NTRK;k++) {chain.source[1].timing[k][0]=16;chain.source[1].timing[k][1]=2;chain.source[1].timing[k][2]=0;chain.source[1].timing[k][3]=64;}
+ for(uint32_t k=0;k<CHAIN_PARTS;k++) {chain.source[1].timing[k][0]=16;chain.source[1].timing[k][1]=2;chain.source[1].timing[k][2]=0;chain.source[1].timing[k][3]=64;}
  trk[0].seq_idx=31;trk[0].seq_pos=0;chain_tick(div_samples(2));
  bad+=check("pattern-end launch switches at completed loop",ko_launch_pending==255 && ko_pattern_active==1 && chain.running);
  seq_stop();ko_launch_ready=0;song.playing=0;ko_launch_pending=255;

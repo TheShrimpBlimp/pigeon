@@ -257,7 +257,7 @@ def build_app(stub=b""):
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
-                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST", "FELUCCA_KO", "FELUCCA_KO_STORAGE", "FELUCCA_SAMPLER_ONLY", "FELUCCA_KO_DUAL"):
+                 "FELUCCA_CDC_DEFAULT", "FELUCCA_UAC_AS_FIRST", "FELUCCA_KO", "FELUCCA_KO_STORAGE", "FELUCCA_SAMPLER_ONLY", "FELUCCA_KO_DUAL", "FELUCCA_KO_SCRATCH", "FELUCCA_USB_SAMPLE", "FELUCCA_KO_MAINT"):
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
@@ -358,6 +358,9 @@ def check(img, syms, dis, rt):
     limit = fm1pkg_make.KO_APP_SLOT if os.environ.get("FELUCCA_KO_STORAGE") == "1" else APP_SLOT
     if len(img) > limit:
         errors.append(f"image {len(img)} B exceeds the app slot")
+
+    if fm1pkg_make.has_stub(img) and fm1pkg_make.BODY_MAX-(len(img)-fm1pkg_make.STUB_LEN)<4096:
+        errors.append("firmware body needs at least 4096 B growth reserve below the sample pool")
 
     def sym(name):
         mm = re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M)

@@ -9,16 +9,13 @@
     <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="../../footer.css"><script type="module" src="../../footer.js"></script><link rel="icon" type="image/png" sizes="192x192" href="https://theshrimpblimp.com/home/face-icon.png">
 <link rel="shortcut icon" href="https://theshrimpblimp.com/favicon.ico">
+<link rel="stylesheet" href="../../header.css">
 </head>
   <body>
-    <header>
-      <a class="brand shrimp-brand" href="https://theshrimpblimp.com/" target="_top">theshrimpblimp<span>PIGEON / Sample loader 2.0</span></a>
-      <a class="home-link" href="../../">← PIGEON home</a>
-      <div class="badges">
+    <header class="pigeon-header"><a class="pigeon-brand" href="https://theshrimpblimp.com/" target="_top">theshrimpblimp<span>PIGEON / FM1 SAMPLER FIRMWARE</span></a><nav aria-label="Main"><a href="../../">PIGEON home</a><a href="../../webapp/emu/">Emulator</a><a href="../../webapp/pigeon/" aria-current="page">Sample loader</a><a href="../../#install">Install</a><a href="https://theshrimpblimp.com/blog/">Captain’s Log</a><a href="https://github.com/TheShrimpBlimp/pigeon">Source ↗</a></nav></header><div class="pigeon-header-status"><div class="badges">
         <span id="offline">Preparing offline cache…</span
         ><span id="connection">Device disconnected</span>
-      </div>
-    </header>
+      </div></div>
     <main>
 
       <section class="intro">
@@ -60,7 +57,7 @@
         ><button id="recovery" disabled>Save recovery backup</button>
       </section>
       <p>Undo local bank, pad and pattern edits with Ctrl+Z / Cmd+Z; redo with Ctrl+Shift+Z / Cmd+Shift+Z or Ctrl+Y. Text fields keep their normal text undo. Undo does not reverse transfers to the FM1.</p>
-      <section class="kit"><h2>Session library</h2><p>Keep named banks and complete sessions in this browser. Download copies to keep them outside this browser.</p><div class="edit-fields"><label>Name<input id="library-name" maxlength="128"></label><label>Saved entries<select id="library-list"></select></label></div><div class="song-actions"><button id="library-save" data-bank>Save current to library</button><button id="library-load">Load selected</button><button id="library-rename">Rename selected</button><button id="library-download">Download selected</button><button id="library-delete">Delete selected</button></div></section>
+      <section class="kit"><h2>Session library</h2><p>Keep named banks and complete sessions in this browser. Download copies to keep them outside this browser.</p><div class="edit-fields"><label>Save as<select id="library-kind"><option value="auto">Complete session when available</option><option value="bank">Sample bank only</option></select></label><label>Name<input id="library-name" maxlength="128"></label><label>Saved entries<select id="library-list"></select></label></div><div class="song-actions"><button id="library-save" data-bank>Save current to library</button><button id="library-load">Load selected</button><button id="library-rename">Rename selected</button><button id="library-download">Download selected</button><button id="library-delete">Delete selected</button><button id="session-download" data-bank data-session>Download current session</button></div><pre id="library-preview" class="session-preview" aria-live="polite">Select a saved bank or session to inspect its contents.</pre><p>Loading replaces only this browser’s workspace. Sending a bank replaces samples and chops on the FM1. Restoring a complete session also replaces patterns and device settings.</p></section>
       <section class="transfer-panel" aria-live="polite">
         <p id="send-help">Open or import a bank, then connect the FM1 to send it.</p>
         <p id="transfer-status"></p>
@@ -79,12 +76,12 @@
         </div>
         <progress
           id="capacity"
-          max="507904"
+          max="512000"
           value="0"
           aria-label="Sample storage usage"
         ></progress>
         <p>
-          Up to 496 KiB shared between both songs and the kit. Connected capacity is checked before transfer. Replacing one component
+          Up to 500 KiB shared between both songs and the kit. Connected capacity is checked before transfer. Replacing one component
           preserves the others.
         </p>
       </section>
@@ -154,12 +151,12 @@
         </p>
       </details>
     </main>
-    <footer class="pigeon-footer"><div class="footer-actions"><a class="footer-action" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a><button class="footer-action footer-font" id="font-nerds" type="button">for font nerds</button></div><div class="footer-info"><div><p class="footer-title">PIGEON — sampler firmware for M-VAVE FM1.</p><p>Created and directed by The Shrimp Blimp. Free and open source.</p><p>Built on <a href="https://github.com/hugelton/Felucca">Felucca</a> by <a href="https://github.com/kurogedelic">Leo Kuroshita (@kurogedelic)</a>, Hügelton Instruments, and contributors.</p></div><div><p>AI was used for menial coding. All assets, direction, conceptualization, and thought are human.</p><p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter">Little Character</a>.</p><p><a href="../../">PIGEON home</a> · <a href="../../webapp/pigeon/">Sample loader</a> · <a href="../../webapp/emu/">Emulator</a> · <a href="../../firmware/LICENSING.md">Licences</a></p></div></div><details class="project-credits"><summary>Credits and open-source licences</summary>
-<p>PIGEON is created and directed by The Shrimp Blimp, and is free and open source under GPL-3.0-only.</p>
+    <footer class="pigeon-footer"><div class="footer-actions"><a class="footer-action" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a><button class="footer-action footer-font" id="font-nerds" type="button">for font nerds</button></div><div class="footer-info"><div><p class="footer-title">PIGEON — sampler firmware for M-VAVE FM1.</p><p>Created and directed by theshrimpblimp. Free and open source.</p><p>Built on <a href="https://github.com/hugelton/Felucca">Felucca</a> by <a href="https://github.com/kurogedelic">Leo Kuroshita (@kurogedelic)</a>, Hügelton Instruments, and contributors.</p></div><div><p>AI was used for menial coding. All assets, direction, conceptualization, and thought are human.</p><p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter">Little Character</a>.</p><p><a href="../../">PIGEON home</a> · <a href="../../webapp/pigeon/">Sample loader</a> · <a href="../../webapp/emu/">Emulator</a> · <a href="../../firmware/LICENSING.md">Licences</a></p></div></div><details class="project-credits"><summary>Credits and open-source licences</summary>
+<p>PIGEON is created and directed by theshrimpblimp, and is free and open source under GPL-3.0-only.</p>
 <p>Built on <a href="https://github.com/hugelton/Felucca" target="_blank" rel="noopener noreferrer">Felucca</a> by <a href="https://github.com/kurogedelic" target="_blank" rel="noopener noreferrer">Leo Kuroshita (@kurogedelic)</a> and <a href="https://hugelton.com" target="_blank" rel="noopener noreferrer">Hügelton Instruments</a>. Its platform, sampler foundation, USB transport, package format, and update loader make PIGEON possible.</p>
 <p>Installer compatibility safeguards, recovery boot stub, and commit-last update design adapted from <a href="https://github.com/Quixotic7/ChoralRootFM1" target="_blank" rel="noopener noreferrer">ChoralRoot FM-1</a> by Quixotic7 and the ChoralRoot FM-1 contributors (GPL-3.0-only). PIGEON adapts the recovery layout to preserve its sample storage.</p>
 <p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter" target="_blank" rel="noopener noreferrer">Little Character</a> (SIL OFL 1.1). MP3 decoding: libmad (GPL-2.0-or-later); browser MP3 encoding: lamejs/LAME (LGPL-3.0). Firmware packages include three JieLi AC79 SDK files (Apache-2.0).</p>
 <p>M-VAVE and FM-1 are trademarks of their respective owners. PIGEON is an independent project.</p></details><dialog id="font-story" aria-label="For font nerds"><p>Dig the font? I do, and it has a very cool story behind it. Interested? Listen to it <a href="https://www.hyperfixedpod.com/listen/hyperfixed/little-by-little" target="_blank" rel="noopener noreferrer">here</a>. I'm not affiliated with that podcast I just really like it.</p><form method="dialog"><button type="submit">Close</button></form></dialog></footer>
-    <script type="module" src="app.js?v=32"></script>
+    <script type="module" src="app.js?v=34"></script>
   </body>
 </html>

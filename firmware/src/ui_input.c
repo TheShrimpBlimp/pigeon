@@ -1343,6 +1343,39 @@ static void ko_euclid_pattern(track_t *t,uint32_t hits,uint32_t cycle,uint32_t r
 static int page_tap(uint32_t b)
 {
     uint32_t f;
+#if FELUCCA_SAMPLER_ONLY
+    if(ko_home() && ko.view==9 && b==B_FX){ko_scene_capture();return 1;}
+#endif
+#if FELUCCA_USB_SAMPLE
+#if FELUCCA_KO_MAINT
+    if(ko_home() && song.sel!=1 && ko.view==20 && b==B_SCL){if(ko_keep_crc[ko_id()]!=ko.song_crc){ko_keep_mask[ko_id()]=0;ko_keep_crc[ko_id()]=ko.song_crc;}ko_keep_target=(uint8_t)ko_id();ko_keep_confirm=0;ko.view=34;ui.force=1;return 1;}
+    if(ko_home() && ko.view==34){
+        if(b==B_REC){ko_keep_mask[ko_id()]^=1u<<ko.selected;ko_keep_confirm=0;}
+        else if(b==B_SCL){if(ko_keep_confirm)ko_keep_apply();else ko_keep_confirm=1;}
+        else if(b==B_LFO){if(ko_keep_confirm)ko_keep_confirm=0;else ko.view=20;}
+        else if(b==B_ENV || b==B_HOME){ko_keep_confirm=0;ko.view=0;}
+        ui.force=1;return 1;
+    }
+#endif
+    if(ko_home() && ko.view==33){
+        if(b==B_ENV){if(ko_usb.state==1)ko_usb_stop();else if(ko_usb.state==4){ko_usb.preview=0;ko_usb.state=6;}else if(ko_usb.state==6){ko_usb_discard();ko_usb_start();}else if(!ko_usb.state)ko_usb_start();}
+        else if(b==B_PLAY)ko_usb_audition();
+        else if(b==B_SCL){
+#if FELUCCA_KO_MAINT
+            if(!ko_usb.state){if(ko_rec_options.reclaim){ko_rec_options.reclaim=0;ko_reclaim();}else ko_rec_options.reclaim=1;}
+            else
+#endif
+            ko_usb_save();
+        }
+        else if(b==B_LFO){ko_rec_options.reclaim=0;if(ko_usb.state>=5)ko_usb.state=4;else ko_usb_discard();}
+        else if((b==B_FX || b==B_HOME) && !ko_usb.state)ko.view=5;
+        ui.force=1;return 1;
+    }
+    if(ko_home() && ((ko.view==5 && song.sel!=1) || (ko.view==16 && song.sel==1)) && b==B_FX){
+        if(transport_busy() || voices_busy() || song.rec){ui_message("STOP / RELEASE KEYS");return 1;}
+        ko.view=33;ui.force=1;return 1;
+    }
+#endif
 #if FELUCCA_KO
     if(ko_home() && (ko.view==7 || ko.view==14 || ko.view==24 || ko.view==31) && b==B_ARP) return 1; /* momentary FILL */
     if(ko_home() && ko.view==22 && b==B_FX){ko.view=32;ko_human_vel=(uint8_t)clamp(TSEL->p[P_M3AMT],0,63);ko_human_time=(uint8_t)clamp(TSEL->p[P_M4AMT],0,63);ui.force=1;return 1;}
@@ -1354,20 +1387,23 @@ static int page_tap(uint32_t b)
         else {edit_undo_take(TSEL,0,UNDO_SOUND|UNDO_MOT);fm1_irq_off();motion_restore(TSEL);TSEL->p[P_M3SRC]=TSEL->p[P_M4SRC]=MS_RAND;TSEL->p[P_M3DST]=MD_VEL;TSEL->p[P_M4DST]=MD_TIME;TSEL->p[P_M3AMT]=ko_human_vel;TSEL->p[P_M4AMT]=ko_human_time;fm1_irq_on();motion_undo_done(TSEL);ui_message("HUMANIZE APPLIED");}
         ui.force=1;return 1;
     }
+    if(ko_home() && song.sel!=1 && ko.view==0 && b==B_LFO) {
+        ko_play_edit=(ko_play_edit+1u)%6u;ko_select(ko.selected);ui.force=1;return 1;
+    }
     if(ko_home() && ko.view==8 && (b==B_FX || b==B_LFO)) {if(b==B_FX)ko_pattern_copy();else ko_pattern_paste();ui.force=1;return 1;}
-    if(ko_home() && song.sel!=1 && ko.view==30 && b==B_SCL) {
+    if(FELUCCA_KO_SCRATCH && ko_home() && song.sel!=1 && ko.view==30 && b==B_SCL) {
         ko_scratch_tune(ko_id(),0);ko.dirty=1;ko.revision++;ui_message("TUNING RESET");ui.force=1;return 1;
     }
     if(ko_home() && song.sel!=1 && ko.view==29 && b==B_ENV) {
         fm1_irq_off();int removed=ko_queue_remove(TSEL,ko_queue[ko_id()].selected);fm1_irq_on();
         ui_message(removed?"QUEUED CHOP REMOVED":"QUEUE EMPTY");ui.force=1;return 1;
     }
-    if(ko_home() && song.sel!=1 && ko.view==30 && (b==B_EDIT || b==B_ARP)) {
+    if(FELUCCA_KO_SCRATCH && ko_home() && song.sel!=1 && ko.view==30 && (b==B_EDIT || b==B_ARP)) {
         if(b==B_EDIT)ko_scratch[ko_id()].controls^=1u;
         else {ko_scratch[ko_id()].rate=-ko_scratch[ko_id()].rate;ko.dirty=1;ko.revision++;ui_message(ko_scratch[ko_id()].rate<0?"REVERSE":"FORWARD");}
         ui.force=1;return 1;
     }
-    if(ko_home() && song.sel!=1 && ko.view==30 && (b==B_ENV || b==B_LFO)) {
+    if(FELUCCA_KO_SCRATCH && ko_home() && song.sel!=1 && ko.view==30 && (b==B_ENV || b==B_LFO)) {
         fm1_irq_off();
         for(uint32_t i=0;i<NVOICE;i++)if(TSEL->v[i].active && ((uint32_t)TSEL->v[i].s[4]&KO_V_SCRATCH)) {
             if(b==B_ENV){uint32_t id=ko_id(),chop=((uint32_t)TSEL->v[i].s[4]>>8)&63u;ko_scratch[id].cue=TSEL->v[i].ph[0];
@@ -1377,7 +1413,7 @@ static int page_tap(uint32_t b)
         }
         fm1_irq_on();ui_message(b==B_ENV?"CUE SET":"CUE RETURN");ui.force=1;return 1;
     }
-    if(ko_home() && song.sel!=1 && (ko.view==5 || ko.view==30) && b==B_FX) {
+    if(FELUCCA_KO_SCRATCH && ko_home() && song.sel!=1 && (ko.view==5 || ko.view==30) && b==B_FX) {
         fm1_irq_off();
         if(ko.view==30){ko_scratch_stop(TSEL);ko.view=5;}
         else if(transport_busy() || song.rec){fm1_irq_on();ui_message("STOP + DISARM FIRST");return 1;}
@@ -1603,6 +1639,13 @@ static void ui_input(void)
             if(tail_here && !ko_tail_used)pressed|=tail_button;
             tail_down=0;ko_tail_used=0;
         } else if(!tail_here){tail_down=0;ko_tail_used=0;}
+    }
+#endif
+#if FELUCCA_USB_SAMPLE
+    if(ko_home() && ko.view==33){
+        for(uint32_t button=0;button<14u;button++)if((pressed>>button)&1u)page_tap(panel_btn_of(button));
+        for(uint32_t k=0;k<4;k++){int32_t delta=panel_enc(EN_K1+k);if(ko_usb.state)ko_usb_trim_turn(k,delta);else ko_usb_option(k,delta);}
+        enc_drop();return;
     }
 #endif
     if (panel_controller_poll && panel_controller_poll()) return;

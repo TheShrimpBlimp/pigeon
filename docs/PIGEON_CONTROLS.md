@@ -46,7 +46,7 @@ SCL opens Patterns. Choose A–D, stop playback and release the pads, then press
 
 ## Installing from another firmware
 
-Before installing PIGEON from another custom firmware, revert to official M-VAVE V15 using your current firmware’s documented stock-return procedure, then install PIGEON. Back up first; the v0.4 hardware smoke test passed, with samples and all project/settings objects preserved.
+Before installing PIGEON from another custom firmware, use [TransitFM1](https://quixotic7.github.io/TransitFM1/) as the intermediate firmware, following its supported-source instructions, then install PIGEON. TransitFM1 is currently host-tested only; if it refuses your source firmware, follow its documented alternative path rather than overriding its checks. Back up first; the v0.4 hardware smoke test passed, with samples and all project/settings objects preserved.
 
 ## Unsaved patterns
 

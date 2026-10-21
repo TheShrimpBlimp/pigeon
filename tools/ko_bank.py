@@ -27,8 +27,8 @@ from pathlib import Path
 import sampleio as sio
 from fm1_sample_upload import Link, pack7
 
-MAGIC, SIZE, HEAD, HEADER = 0x32424F4B, 0x7D000, 4096, 668
-EXTENTS = ((0xA0000,0x13000),(0xB4000,0x28000),(0x78000,0x1A000),(0xEA000,0x12000),(0x60000,0x16000))
+MAGIC, SIZE, HEAD, HEADER = 0x32424F4B, 0x7E000, 4096, 668
+EXTENTS = ((0xA0000,0x13000),(0xB4000,0x28000),(0x78000,0x1A000),(0xEA000,0x12000),(0x60000,0x16000),(0x5F000,0x1000))
 
 
 def physical(offset):
@@ -219,7 +219,7 @@ def validate(image):
         raise ValueError("invalid bank header, length or CRC")
     if codec not in (1,2) or not 4000<=rate<=44100 or not 0<samples<=8000000 or not 0<=kn<=16 or \
        not 1<=an<=32 or (reserved!=([HEADER,0,0] if version==3 else [0,0,0])) or not 1<=wb<=4096 or \
-       not (HEAD<=ko<=ko+kl<=so<so+sl<=wo<wo+wb*2<=used):
+       not (HEAD<=ko<=ko+kl<=used and HEAD<=so<so+sl<=wo<wo+wb*2<=used) or (kl and so<ko+kl and ko<wo+wb*2):
         raise ValueError("invalid bank ranges")
     starts=struct.unpack_from('<32I',image,80)[:an]
     if starts[0] or any(a>=b for a,b in zip(starts,starts[1:])) or starts[-1]>=samples:
@@ -250,7 +250,8 @@ def validate(image):
         if len(image)<2*HEADER: raise ValueError("truncated second song header")
         h=image[HEADER:2*HEADER]
         second=validate(h+image[HEADER:])
-        if second[1]!=2 or second[2]!=used or second[3]!=crc or second[11] or second[10] or second[7]<wo+wb*2:
+        if second[1]!=2 or second[2]!=used or second[3]!=crc or second[11] or second[10] or (kl and second[7]<ko+kl and ko<second[14]+second[15]*2) or \
+           not (second[7]>=wo+wb*2 or so>=second[14]+second[15]*2):
             raise ValueError("invalid second song layout")
     return f
 
@@ -282,7 +283,7 @@ def preview(image):
 def negotiate(link):
     r=link.req(90,[])
     expected=[0x4B,2]+u21(SIZE)+u21(HEAD)
-    if len(r)!=10 or r[0]!=expected[0] or r[1] not in (2,3) or (r[2] | r[3]<<7 | r[4]<<14) not in (0x67000,SIZE) or r[5:8]!=expected[5:8] or r[9]!=3:
+    if len(r)!=10 or r[0]!=expected[0] or r[1] not in (2,3) or (r[2] | r[3]<<7 | r[4]<<14) not in (0x67000,0x7D000,SIZE) or r[5:8]!=expected[5:8] or r[9]!=3:
         raise ValueError("device does not support this exact KO storage layout; nothing written")
     return r
 

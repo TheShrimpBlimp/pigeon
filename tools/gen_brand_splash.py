@@ -20,43 +20,57 @@ else:
     palette = indexed.getpalette()
     colors = [((palette[i] >> 3) << 11) | ((palette[i+1] >> 2) << 5) | (palette[i+2] >> 3)
               for i in range(0, 768, 3)]
-    pixels = indexed.tobytes()
-    # Pack each row independently: high bit = repeated byte, otherwise literals.
-    # Palette indices and RGB565 colours remain byte-for-byte identical.
+    # RGB565 can merge RGB888 palette entries; canonicalise only identical LCD
+    # colours, preserving every displayed pixel while improving run compression.
+    unique = list(dict.fromkeys(colors))
+    remap = bytes(unique.index(c) for c in colors)
+    pixels = indexed.tobytes().translate(remap)
+    colors = unique
+    # Lossless row codec: literals, repeated indices, or unchanged pixels above.
+    # Dynamic programming chooses the smallest encoding; the LCD canvas retains
+    # the previous row, so vertical copies need no additional RAM.
     packed = bytearray()
     offsets = [0]
+    previous = None
     for y in range(indexed.height):
         row = pixels[y*indexed.width:(y+1)*indexed.width]
-        at = 0
-        while at < len(row):
-            run = 1
-            while at+run < len(row) and row[at+run] == row[at] and run < 128:
-                run += 1
-            if run >= 3:
-                packed.extend((0x80 | (run-1), row[at]))
-                at += run
-            else:
-                start = at
-                at += run
-                while at < len(row) and at-start < 128:
-                    if at+2 < len(row) and row[at] == row[at+1] == row[at+2]:
-                        break
-                    at += 1
-                packed.append(at-start-1)
-                packed.extend(row[start:at])
+        cost = [0]*(len(row)+1)
+        choice = [None]*len(row)
+        for at in range(len(row)-1,-1,-1):
+            options = [(n+1+cost[at+n], 0, n) for n in range(1,min(128,len(row)-at)+1)]
+            for mode in (128,192):
+                for n in range(1,min(64,len(row)-at)+1):
+                    if mode==128 and row[at+n-1]!=row[at]: break
+                    if mode==192 and (previous is None or row[at+n-1]!=previous[at+n-1]): break
+                    options.append((1+(mode==128)+cost[at+n],mode,n))
+            cost[at],mode,n = min(options)
+            choice[at] = mode,n
+        at=0
+        while at<len(row):
+            mode,n=choice[at]
+            packed.append(mode+n-1)
+            if mode==0: packed.extend(row[at:at+n])
+            elif mode==128: packed.append(row[at])
+            at+=n
+        previous=row
         offsets.append(len(packed))
     assert len(packed) < 65536
-    # Independently decode every row before emitting the asset.
+    # Independently decode all rows and compare every palette index.
     decoded = bytearray()
-    for a,b in zip(offsets, offsets[1:]):
-        while a < b:
-            control = packed[a]; a += 1
-            count = (control & 127)+1
-            if control & 128:
-                decoded.extend([packed[a]]*count); a += 1
+    previous = bytearray(indexed.width)
+    for a,b in zip(offsets,offsets[1:]):
+        row=bytearray(previous);x=0
+        while a<b:
+            control=packed[a];a+=1
+            if control>=192:
+                x+=(control&63)+1
+            elif control>=128:
+                n=(control&63)+1;row[x:x+n]=bytes([packed[a]])*n;a+=1;x+=n
             else:
-                decoded.extend(packed[a:a+count]); a += count
-    assert bytes(decoded) == pixels
+                n=control+1;row[x:x+n]=packed[a:a+n];a+=n;x+=n
+        assert x==indexed.width
+        decoded.extend(row);previous=row
+    assert bytes(decoded)==pixels
     def array(name, kind, values):
         rows = [','.join(str(x) for x in values[i:i+24]) for i in range(0, len(values), 24)]
         return f'static const {kind} {name}[] = {{\n'+',\n'.join(rows)+'\n};\n'
@@ -68,21 +82,25 @@ else:
                        + array('brand_splash_row_offsets','uint16_t',offsets)
                       + array('brand_splash_rle','uint8_t',packed)
                       + '''
-/* Decode one row into the existing canvas, with the LCD byte order applied. */
+/* Decode rows in order, retaining the prior row; apply LCD byte order. */
 static void brand_splash_row(uint32_t y, uint16_t *out)
 {
     uint32_t at=brand_splash_row_offsets[y], end=brand_splash_row_offsets[y+1], x=0;
     while(at<end) {
-        uint32_t control=brand_splash_rle[at++], n=(control&127u)+1u;
+        uint32_t control=brand_splash_rle[at++], n=(control&63u)+1u;
+        if(control>=192u) { x+=n; continue; }
         if(control&128u) {
             uint16_t c=brand_splash_palette[brand_splash_rle[at++]];
             c=(uint16_t)((c<<8)|(c>>8));
             while(n--) out[x++]=c;
-        } else while(n--) {
-            uint16_t c=brand_splash_palette[brand_splash_rle[at++]];
-            out[x++]=(uint16_t)((c<<8)|(c>>8));
+        } else {
+            n=control+1u;
+            while(n--) {
+                uint16_t c=brand_splash_palette[brand_splash_rle[at++]];
+                out[x++]=(uint16_t)((c<<8)|(c>>8));
+            }
         }
     }
 }
 ''')
-    print(f'splash: {indexed.width}x{indexed.height}, {len(packed)+len(offsets)*2+512} bytes (lossless RLE, was {len(pixels)+512})')
+    print(f'splash: {indexed.width}x{indexed.height}, {len(packed)+len(offsets)*2+len(colors)*2} bytes (lossless row delta, was {len(pixels)+512})')

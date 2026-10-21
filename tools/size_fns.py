@@ -17,7 +17,7 @@ SRC = _ROOT / "firmware" / "src" if (_ROOT / "firmware" / "src").is_dir() else _
 # the UI, the stores, the editor and the console: main loop only, never called by sound code; and (1.1) every
 # other file without DSP: USB, MIDI, the sequencer, the drawing, the LCD, OTA, ... Of those, what an interrupt
 # reaches (ISR_ROOTS and everything they call or name, from the IR) keeps -Os (isr_reach)
-SIZE_FILES = ["ui.c", "ko_ui.c", "ko_store.c", "favorites.c", "menu_items.c", "icons.c", "ui_graph.c", "ui_draw.c", "ui_menu.c", "ui_input.c",
+SIZE_FILES = ["ko_usb_sample.c", "ko_reclaim.c", "ko_collect.c", "ko_move.h", "ko_arrange.c", "ko_arrange_ui.c", "ui.c", "ko.c", "ko_pcm.c", "ko_blend.c", "pigeon_reader.c", "ko_ui.c", "ko_store.c", "favorites.c", "menu_items.c", "icons.c", "ui_graph.c", "ui_draw.c", "ui_menu.c", "ui_input.c",
               "storage.c", "upreset.c", "project.c", "settings_persist.c",
               "editor.c", "editor_preferences.c", "editor_backup.c", "editor_menu.c", "console.c",
               "usb.c", "midi_uart.c", "midi_control.c", "midi_clock.c", "seq.c", "song_chain.c", "chord.c", "motion.c",

@@ -98,7 +98,9 @@ typedef struct {
     uint8_t src;                 /* SRC + 1 the index holds, 0 = none */
     uint8_t nz;
 } gr_part_t;
+#if !FELUCCA_SAMPLER_ONLY
 ENG_MEM_FITS("GRAIN", sizeof(gr_part_t));
+#endif
 static int32_t gr_rng[NPART];
 
 static uint32_t gr_part(const track_t *t) { return (uint32_t)(t - trk) % NPART; }

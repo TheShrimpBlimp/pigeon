@@ -12,7 +12,7 @@ set -e
 cd "$(dirname "$0")/../.."
 [ -f build/gen/felucca_tables.h ] || { echo "emu: run ./build.sh once first (build/gen)"; exit 1; }
 command -v emcc >/dev/null 2>&1 || { echo "emu: no emcc (Emscripten)"; exit 1; }
-VERSION=PIGEON-0.4
+VERSION=PIGEON-0.5-dev
 "${PYTHON:-python3}" tools/gen_words.py firmware/words.tsv web/words build/gen/ann_words.h
 mkdir -p build/emu/fonts
 rm -f build/emu/fonts/DotGothic16-subset.woff build/emu/fonts/OFL.txt
@@ -22,7 +22,7 @@ for unit in bit fixed frame huffman layer12 layer3 stream synth timer; do
     MAD_SOURCES="$MAD_SOURCES firmware/vendor/libmad/$unit.c"
 done
 emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -w ${EMU_CFLAGS:-} \
-    -DFPM_64BIT -DNDEBUG -DHAVE_LIMITS_H -DSIZEOF_INT=4 -DSIZEOF_LONG=4 -DSIZEOF_LONG_LONG=8 -fwrapv \
+    -DFELUCCA_KO_SCRATCH=0 -DFPM_64BIT -DNDEBUG -DHAVE_LIMITS_H -DSIZEOF_INT=4 -DSIZEOF_LONG=4 -DSIZEOF_LONG_LONG=8 -fwrapv \
     -Dmalloc=ko_mad_malloc -Dcalloc=ko_mad_calloc -Dfree=ko_mad_free \
     "-DFELUCCA_VERSION=\"$VERSION\"" -Ibuild/gen -Ifirmware/src \
     --no-entry -sSTANDALONE_WASM -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=33554432 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=2147483648 -sFILESYSTEM=0 \
@@ -32,6 +32,6 @@ sed -e "s/@VERSION@/$VERSION/g" -e "s/@PREVIEW@/$PREVIEW/g" web/emu/index.html >
 rm -rf build/emu/words
 cp -R web/words build/emu/words
 cp web/emu/reader-words.js web/emu/reader.js build/emu/
-cp web/emu/worklet.js web/emu/controller.js web/emu/loader.js web/emu/file-editor.js web/emu/trial-count.js build/emu/
+cp web/emu/record-worklet.js web/emu/record-encode-worker.js web/emu/worklet.js web/emu/controller.js web/emu/loader.js web/emu/file-editor.js web/emu/trial-count.js build/emu/
 cp web/pigeon/fonts/LittleCharacterRegular.ttf web/pigeon/fonts/LittleCharacter-OFL.txt build/emu/fonts/
 echo "emu: build/emu ($(wc -c < build/emu/felucca.wasm | tr -d ' ') B wasm, $VERSION)"

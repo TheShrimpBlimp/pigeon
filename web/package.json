@@ -5,6 +5,11 @@
     "test:pigeon": "node pigeon/test.mjs",
     "test:pigeon:browser": "node pigeon/test-browser.mjs",
     "test:emu": "node emu/pigeon_test.mjs",
-    "test:emu:browser": "node emu/test-browser.mjs"
+    "test:emu:browser": "node emu/test-browser.mjs",
+    "test:pigeon:v05": "node pigeon/test-editing.mjs && node pigeon/test-v05.mjs",
+    "test:pigeon:v05:browser": "node pigeon/test-v05-browser.mjs",
+    "test:pigeon:chop-library": "node pigeon/test-chop-library.mjs",
+    "test:pigeon:chop-library:browser": "node pigeon/test-chop-library-browser.mjs",
+    "test:emu:recording": "node emu/test-record-formats.mjs"
   }
 }

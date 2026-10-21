@@ -5,6 +5,7 @@ import struct
 import subprocess
 import sys
 import wave
+import zlib
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -41,12 +42,29 @@ for name,image in [('minute-mp3.kob',mp3),('minute-ima.kob',ima)]:
 assert sum(size for _,size in bank.EXTENTS)==bank.SIZE
 for base,size in bank.EXTENTS:
     assert not (base<0xA0000 and base+size>0x97000)
-    assert (base>=0x78000 and base+size<=0xFC000) or (base==0x60000 and base+size==0x76000)
+    assert (base>=0x78000 and base+size<=0xFC000) or (base==0x60000 and base+size==0x76000) or (base==0x5F000 and base+size==0x60000)
     assert not (base<0x78000 and base+size>0x76000), "boot marker sectors overlap the bank"
 second_song=out/'second-song.wav';wav(second_song,8*22050,freq=880)
 dual=bank.combine(mp3,bank.build(second_song,(),bitrate=32))
 (out/'dual.kob').write_bytes(dual)
 assert bank.validate(dual)[1]==3
+# Song 1 may be appended after Song 2 by on-device recording.
+reordered=bytearray(dual)
+for lo,hi in ((16,36),(48,68),(80,208),(656,664)):
+    reordered[lo:hi],reordered[bank.HEADER+lo:bank.HEADER+hi]=dual[bank.HEADER+lo:bank.HEADER+hi],dual[lo:hi]
+struct.pack_into('<I',reordered,bank.HEADER+36,bank.HEAD) # empty kit anchor precedes either song
+for at in (0,bank.HEADER):
+    struct.pack_into('<I',reordered,at+bank.HEADER-4,zlib.crc32(reordered[at:at+bank.HEADER-4]))
+assert bank.validate(reordered)[7]>struct.unpack_from('<I',reordered,bank.HEADER+28)[0]
+(out/'reordered.kob').write_bytes(reordered)
+overlap=bytearray(reordered)
+for lo,hi in ((16,36),(48,68),(80,208)):
+    overlap[lo:hi]=reordered[bank.HEADER+lo:bank.HEADER+hi]
+struct.pack_into('<I',overlap,bank.HEADER-4,zlib.crc32(overlap[:bank.HEADER-4]))
+try: bank.validate(overlap)
+except ValueError: pass
+else: raise AssertionError('overlapping songs accepted')
+(out/'overlap.kob').write_bytes(overlap)
 metadata=bytes((i*17)%256 for i in range(4096))
 assert bank.combine(mp3+metadata,bank.build(short[0]))[-4096:]==metadata
 try: bank.combine(mp3,mp3)
@@ -80,7 +98,7 @@ for sanitize in (False,True):
                             '-fno-sanitize-recover=undefined']
     for test,args in [('ko_mp3_test',[str(out/'minute-mp3.kob')]),
                       ('ko_storage_test',[str(out/'minute-mp3.kob'),str(out/'minute-ima.kob')]+([str(out/'dual.kob')] if os.environ.get('FELUCCA_KO_DUAL')=='1' else [])),
-                      *([('pigeon_expanded_bank_test',[]),('pigeon_scratch_mp3_test',[str(out/'minute-mp3.kob')])] if os.environ.get('FELUCCA_SAMPLER_ONLY')=='1' and os.environ.get('FELUCCA_KO_DUAL')=='1' else [])]:
+                      *([('pigeon_expanded_bank_test',[]),('pigeon_scratch_mp3_test',[str(out/'minute-mp3.kob')]),('pigeon_reverse_mp3_test',[str(out/'minute-mp3.kob')])] if os.environ.get('FELUCCA_SAMPLER_ONLY')=='1' and os.environ.get('FELUCCA_KO_DUAL')=='1' else [])]:
         exe=host/test
         subprocess.run([os.environ.get('CC','cc'),*linkflags,f'tests/{test}.c',*objs,'-lm','-o',str(exe)],check=True,cwd=ROOT)
         subprocess.run([str(exe),*args],check=True,cwd=ROOT,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})

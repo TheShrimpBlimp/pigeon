@@ -7,6 +7,12 @@ static const char *const pr_pages[KO_VIEW_COUNT]={
     "Mixer chorus sends","Mixer reverb sends","Step dynamics","Sequence timing","Drum pad",0,
     "Arrangement tools","Chop envelope","Chop copy and split","Recording preferences","Pattern variations",
     "Tempo and loop","Step pitch and timing","Choke and layout","Drum rolls","Speed synchronization","Chop move and swap","Chop queue","Scratch deck","Note timing","Sequence tools"
+#if FELUCCA_USB_SAMPLE
+    ,"USB sampler"
+#endif
+#if FELUCCA_KO_MAINT
+    ,"Keep selected chops"
+#endif
 };
 static struct {
     char context[112],value[4][80],detail[ANN_MAX+1],buf[ANN_MAX+1];
@@ -95,8 +101,8 @@ static void pr_snapshot(void)
     switch(v){
     case 0:
         if(song.sel==1){pr_num(0,"level",TSEL->p[P_LEVEL],"");pr_num(1,"kit pitch",TSEL->p[P_E1],"");pr_num(2,"crush",TSEL->p[P_E2],"");pr_num(3,"tone",TSEL->p[P_E4],"");str_cpy(pr.detail,"Envelope opens pad settings. Effects opens effects.",sizeof pr.detail);}
-        else if(chop){const slc_src_t *src=slc_get(ko_src());pr_num(0,"start",pr_millis(chop->a,src),"milliseconds");pr_num(1,"end",pr_millis(chop->b,src),"milliseconds");pr_num(2,"scroll",pr_millis(ko.cursor,src),"milliseconds");pr_num(3,"zoom",1u<<ko.zoom,"times");
-            str_cpy(pr.detail,"Octave buttons change pitch. Edit opens chop settings. Presets selects a chop. Hold Select and play a chop to audition its ending, then loop from its beginning.",sizeof pr.detail);}
+        else if(chop){const slc_src_t *src=slc_get(ko_src());if(ko_play_edit==5)pr_num(0,"loop crossfade",chop->xfade,"milliseconds");else if(ko_play_edit==4)pr_num(0,"gain",(chop->gain?chop->gain:256)*100u/256u,"percent");else if(ko_play_edit==3)pr_num(0,"fine tuning",chop->cents,"cents");else if(ko_play_edit==2)pr_value(0,"direction",chop->reverse?"reverse":"forward");else if(ko_play_edit==3)pr_num(0,"fine tuning",chop->cents,"cents");else if(ko_play_edit==4)pr_num(0,"gain",(chop->gain?chop->gain:256u)*100u/256u,"percent");else if(ko_play_edit==5)pr_num(0,"loop crossfade",chop->xfade,"milliseconds");else pr_num(0,ko_play_edit?"playback point":"loop start",pr_millis(ko_play_edit?ko_play_pos(chop):chop->a,src),"milliseconds");pr_num(1,"end",pr_millis(chop->b,src),"milliseconds");pr_num(2,"scroll",pr_millis(ko.cursor,src),"milliseconds");pr_num(3,"zoom",1u<<ko.zoom,"times");
+            str_cpy(pr.detail,"L F O changes knob 1. Octave: pitch. Presets: chop. Edit: settings. Hold Select and a key: audition; knobs 1 and 2 restart it.",sizeof pr.detail);}
         else str_cpy(pr.detail,"No song loaded. Add your audio in the sample loader or load a bank.",sizeof pr.detail);
         break;
     case 1:pr_num(0,"filter",TSEL->p[song.sel==1?P_E4:P_E7],"");pr_num(1,"delay",TSEL->p[P_DLY],"");pr_num(2,"chorus",TSEL->p[P_CHOR],"");pr_num(3,"reverb",TSEL->p[P_REV],"");goto effects_help;
@@ -106,8 +112,8 @@ static void pr_snapshot(void)
         pr_num(0,"threshold",-(int32_t)c.threshold,"decibels");char ratio[16]="";pr_number(ratio,sizeof ratio,c.ratio);pr_add(ratio,sizeof ratio,":1");pr_value(1,"ratio",ratio);
         pr_num(2,"attack",c.attack,"milliseconds");pr_num(3,"release",c.release*10,"milliseconds");}
         str_cpy(pr.detail,"Envelope opens dynamics. L F O opens makeup gain. Edit returns to the sample.",sizeof pr.detail);break;}
-    case 5:if(chop){pr_choice(0,"held loop",!(chop->rsv&KO_NO_LOOP));pr_choice(1,"latch",chop->rsv&KO_LATCH);pr_value(2,"right splits",", left joins");pr_value(3,"turn to undo or redo","");}
-        str_cpy(pr.detail,"Effects opens scratch. Arp opens the chop queue. Envelope opens envelopes. L F O opens chop operations. Edit returns to the waveform.",sizeof pr.detail);break;
+    case 5:if(chop){pr_choice(0,"held loop",!(chop->rsv&KO_NO_LOOP));pr_choice(1,"latch",chop->rsv&KO_LATCH);pr_value(2,"right splits",", left joins");pr_value(3,"left undo or redo",", right reset all chops");}
+        str_cpy(pr.detail,FELUCCA_USB_SAMPLE?"Effects opens USB sampling. Arp opens the chop queue. Envelope opens envelopes. L F O opens chop operations. Edit returns to the waveform.":FELUCCA_KO_SCRATCH?"Effects opens scratch. Arp opens the chop queue. Envelope opens envelopes. L F O opens chop operations. Edit returns to the waveform.":"Arp opens the chop queue. Envelope opens envelopes. L F O opens chop operations. Edit returns to the waveform.",sizeof pr.detail);break;
     case 6:for(uint32_t k=0;k<SAMPLER_PARTS;k++)pr_choice(k,k==0?"song 1 mute":k==1?"drum mute":"song 2 mute",trk[k].p[P_MUTE]);pr_value(3,"solo",ko_solo<0?"off":ko_solo==0?"song 1":ko_solo==1?"drums":"song 2");break;
     case 7:pr_num(0,"tempo",song.g[G_BPM],"BPM");pr_value(1,"timing",ko_seq[song.sel].end_mode?"sample end":"tempo");pr_num(2,"step",ko_seq[song.sel].cursor+1,"");pr_num(3,"length",TSEL->p[P_SLEN],"steps");
         str_cpy(pr.detail,"Step ",sizeof pr.detail);pr_number(pr.detail,sizeof pr.detail,ko_seq[song.sel].cursor+1);pr_add(pr.detail,sizeof pr.detail,", ");
@@ -121,7 +127,7 @@ static void pr_snapshot(void)
         pr.detail[0]=0;for(uint32_t i=0;i<4;i++){pr_pattern(pr.detail,sizeof pr.detail,i);pr_add(pr.detail,sizeof pr.detail,ko_pattern_mask&(1u<<i)?" saved. ":" empty. ");}
         pr_add(pr.detail,sizeof pr.detail,"First four white keys select. Save stores all tracks. Play loops. Patterns opens arrangement.");
         if(ko_launch_pending<4){pr_add(pr.detail,sizeof pr.detail," Queued pattern ");pr_pattern(pr.detail,sizeof pr.detail,ko_launch_pending);pr_add(pr.detail,sizeof pr.detail,chain_config.rsv[0]==1?" at pattern end.":" at next bar.");}break;
-    case 9:{uint32_t row=ko_section;pr_num(0,"section",row+1,"");if(row<chain_config.count){const chain_row_t *r=&chain_config.row[row];pr_value(1,"pattern",r->slot[0]<4?(char[2]){(char)('A'+r->slot[0]),0}:"empty");pr_num(2,"repeats",r->repeat,"");}pr_value(3,"right inserts",", left deletes");str_cpy(pr.detail,"First four white keys append patterns A through D. Save stores all tracks. Play starts the arrangement. Envelope opens tools.",sizeof pr.detail);break;}
+    case 9:{uint32_t row=ko_section;pr_num(0,"section",row+1,"");if(row<chain_config.count){const chain_row_t *r=&chain_config.row[row];pr_value(1,"pattern",r->slot[song.sel]<4?(char[2]){(char)('A'+r->slot[song.sel]),0}:"empty");pr_num(2,"repeats",r->repeat,"");}pr_value(3,"right inserts",", left deletes");str_cpy(pr.detail,"Stopped keys append patterns. Playing keys queue scenes. Knob 2 changes this track. Effects captures mutes. Save stores.",sizeof pr.detail);break;}
     case 10:case 11:case 12:case 13:{uint32_t id=v==10?P_LEVEL:v==11?P_DLY:v==12?P_CHOR:P_REV;for(uint32_t k=0;k<SAMPLER_PARTS;k++)pr_num(k,k==0?"song 1":k==1?"drums":"song 2",trk[k].p[id],"");pr_num(3,"selected track pan",TSEL->p[P_PAN],"");break;}
     case 14:{uint32_t step=ko_seq[song.sel].cursor;step_t *n=&TSEL->step[step];int16_t gate=TSEL->p[P_SGATE];(void)motion_lock_get(TSEL,step,P_SGATE,&gate);
         pr_num(0,"velocity",n->vel,"");pr_num(1,"gate",gate,"");pr_num(2,"chance",step_chance(n),"percent");pr_num(3,"repeats",step_ratchet(n),"");
@@ -159,6 +165,25 @@ static void pr_snapshot(void)
         } else {pr_value(0,"scratch","turn backward or forward");pr_num(1,"level",ko_scratch[id].level*100/16,"percent");pr_add(pr.value[1],80,ko_scratch[id].motor?", motor on":", motor off");
         pr_value(2,"view",ko_scratch[id].record?"record":"waveform");pr_num(3,"sensitivity",ko_scratch[id].sensitivity+1, "of 8");}
         str_cpy(pr.detail,"Tap a chop key to loop it. Another key replaces it. Jog returns to motor speed when released. Play toggles the motor. Envelope sets the cue. LFO returns to the cue. Effects returns. Home exits and stops the deck.",sizeof pr.detail);break;}
+#if FELUCCA_USB_SAMPLE
+    case 33:
+        pr_add(pr.context,sizeof pr.context,ko_usb.state==1?", recording":ko_usb.state==2?", finishing":ko_usb.state==4?", take ready":ko_usb.state==5?", confirm replace":ko_usb.state==6?", confirm retry":ko_usb.state==3?", take failed":", ready");
+        if(ko_usb.state>=4){
+            for(uint32_t k=0;k<4;k++)pr_num(k,k&1u?"trim end":"trim start",(k&1u?ko_usb.trim_b:ko_usb.trim_a)*20u/441u,"milliseconds");
+        } else {
+            if(!ko_usb.state){pr_num(0,"start threshold",ko_rec_options.threshold,"percent");pr_num(1,"duration",ko_rec_options.seconds,"seconds");pr_num(2,"duration",ko_rec_options.bars,"bars");pr_value(3,"reclaim",ko_rec_options.reclaim?"Select confirms":"Select twice");break;}
+            pr_num(0,"captured",ko_usb.samples/22050u,"seconds");pr_num(1,"remaining",ko_usb_remaining(),"seconds");
+            pr_num(2,"input",ko_usb.level,"percent");pr_value(3,"clipping",ko_usb.clipped?"yes":"no");
+        }
+        str_cpy(pr.detail,"Mono 22050 hertz. Envelope records, stops or retries. Play auditions. Knobs 1 and 2 trim start and end by 1 millisecond; 3 and 4 by 100. Select keeps, then confirms. L F O backs out of prompts, otherwise discards. Effects exits.",sizeof pr.detail);break;
+#endif
+#if FELUCCA_KO_MAINT
+    case 34:
+        pr_num(0,"chop",ko.selected+1,"");pr_num(1,"destination song",ko_keep_target+1,"");
+        pr_value(2,"selected chop",ko_keep_mask[ko_id()]&(1u<<ko.selected)?"keep":"discard");
+        pr_value(3,"all chops","right marks, left clears");
+        str_cpy(pr.detail,"Record toggles selection. Select twice keeps marked audio. Unmarked keys become silent when replacing this song. Other song fills empty keys. LFO cancels.",sizeof pr.detail);break;
+#endif
     case 28:pr_num(0,"source",ko.selected+1,"");pr_num(1,"destination",ko_copy_chop+1,"");pr_value(2,"turn right to swap","");pr_value(3,"turn right to move","");str_cpy(pr.detail,"Moving shifts the keys in between. Envelope returns. Edit opens the waveform.",sizeof pr.detail);break;
     default:break;
     }

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* KO metadata belongs to its sample slots, not to projects. No engine/parameter IDs added.
  * Main-loop edits publish an entire table with one byte; audio never reads a partial edit. */
-#define KO_VIEW_COUNT 33u
+#define KO_VIEW_COUNT (33u+FELUCCA_USB_SAMPLE+FELUCCA_KO_MAINT)
 #define KO_PADS 27u
 #define KO_CHOPS 32u
 /* Reserved metadata bits: zero means LOOP on / LATCH off, including old FKO1 records. */
@@ -13,11 +13,15 @@
 #define KO_GATE 4096u /* nonlooping hold: release follows the key */
 #define KO_CHOKE_SHIFT 14u
 #define KO_FLAGS_MASK (KO_NO_LOOP|KO_LATCH|(31u<<KO_ATTACK_SHIFT)|(31u<<KO_RELEASE_SHIFT)|KO_GATE|KO_ONE|(3u<<KO_CHOKE_SHIFT))
+#define KO_V_FADE (1u << 19)
 #define KO_V_SCRATCH (1u << 20)
 #define KO_VOICE (1u << 23)
 #define KO_V_NO_LOOP (1u << 22)
 #define KO_V_LATCH (1u << 21)
-typedef struct { uint32_t a, b, st; int16_t pitch; uint16_t rsv; } ko_chop_t;
+typedef struct { uint32_t a, b, st; int16_t pitch; uint16_t rsv; uint32_t play_st; uint16_t play, reverse; int16_t cents; uint16_t gain, xfade, pad; } ko_chop_t;
+/* Fraction of the loop span: zero retains the original trigger position. */
+static __attribute__((noinline)) uint32_t ko_play_pos(const ko_chop_t *c) { uint32_t span=c->b-c->a;return c->a+(span>>16)*c->play+(((span&65535u)*c->play)>>16); }
+static uint8_t ko_play_edit;
 typedef struct { uint32_t n; ko_chop_t chop[KO_CHOPS]; } ko_table_t;
 typedef struct { uint8_t threshold, ratio, attack, release, makeup; } ko_comp_t;
 typedef struct {
@@ -60,7 +64,7 @@ static __attribute__((noinline)) int ko_step_note(step_t *s,uint32_t note,uint32
 }
 static uint8_t ko_piano_roll[SAMPLER_PARTS];
 static uint8_t ko_piano_low[SAMPLER_PARTS] = {60,60,60};
-static uint8_t ko_tail_preview;
+static uint8_t ko_tail_preview; /* 1: ending; 2: edited beginning, both local gated auditions */
 static volatile uint32_t ko_tail_button_mask;
 static volatile uint8_t ko_tail_used;
 static int ko_song(const track_t *t)
@@ -149,6 +153,8 @@ static uint16_t ko_env_attack[1+FELUCCA_KO_DUAL][NVOICE],ko_env_release[1+FELUCC
 static ko_table_t ko_alternate[1+FELUCCA_KO_DUAL];
 static uint8_t ko_layout[1+FELUCCA_KO_DUAL],ko_roll_enabled,ko_roll_div=2;
 static int8_t ko_kit_transpose[NVOICE];
+static uint16_t ko_voice_fine[1+FELUCCA_KO_DUAL][NVOICE] __attribute__((section(".pool")));
+static uint16_t ko_voice_gain[1+FELUCCA_KO_DUAL][NVOICE] __attribute__((section(".pool")));
 static int8_t ko_voice_transpose[1+FELUCCA_KO_DUAL][NVOICE];
 
 /* Tempo sync uses a captured loop length; chopping never changes the reference. */
@@ -162,3 +168,39 @@ static uint32_t ko_sync_step(uint32_t base,uint32_t native,uint32_t samples,uint
     uint32_t ratio=((hz/native)<<16)+((hz%native)<<16)/native;
     return (uint32_t)(((uint64_t)base*ratio)>>16);
 }
+
+#if FELUCCA_USB_SAMPLE
+/* State in the pool: leave interrupt-side RAM headroom intact. */
+static struct {
+ uint32_t state,error,start,capacity,written,fill,samples,ui_second,trim_a,trim_b,limit;
+ int32_t predictor,index;
+ volatile uint32_t preview;int32_t preview_pred,preview_index;
+ uint16_t level;uint8_t clipped;
+ uint8_t half,target,triggered,pad,page[256];int8_t wave[1024];
+} ko_usb __attribute__((section(".pool")));
+static struct {uint8_t threshold,seconds,bars,reclaim;} ko_rec_options __attribute__((section(".pool")));
+static void ko_usb_option(uint32_t k,int32_t delta);
+static uint32_t ko_usb_remaining(void);
+static void ko_usb_audio(uint32_t n);
+static void ko_usb_meter(void);
+static void ko_usb_audition(void);
+static void ko_usb_trim_turn(uint32_t k,int32_t delta);
+static void ko_usb_start(void),ko_usb_stop(void),ko_usb_save(void),ko_usb_discard(void),ko_usb_poll(void);
+#endif
+
+#if FELUCCA_KO_MAINT
+typedef struct {uint32_t magic,song_crc,slot;ko_table_t table;uint32_t crc;} ko_keep_record_t;
+#define KO_KEEP_OFFSET 2048u
+#define KO_KEEP_MAGIC 0x3150434bu
+_Static_assert(KO_KEEP_OFFSET+sizeof(ko_keep_record_t)<=3840,"collection fallback fits header");
+static ko_table_t ko_keep_table __attribute__((section(".pool")));
+static uint32_t ko_keep_crc[2] __attribute__((section(".pool")));
+static uint32_t ko_keep_mask[2] __attribute__((section(".pool")));
+static uint8_t ko_keep_target __attribute__((section(".pool")));
+static uint8_t ko_keep_pending __attribute__((section(".pool")));
+static uint8_t ko_keep_confirm __attribute__((section(".pool")));
+static int ko_keep_apply(void);
+static int ko_reclaim_commit(const uint8_t *header,uint32_t used);
+static int ko_reclaim_boot(void),ko_reclaim_locked(void),ko_reclaim(void);
+static uint8_t ko_reclaim_byte(uint32_t off);
+#endif

@@ -416,14 +416,14 @@ static void info_rows(void)                            /* (in screen rows: cv_oy
     }
 }
 
-/* the rows' two bands meet at `split`: in the gap above a row (or below the last), each band at most 124 rows */
+/* the rows' two bands meet at `split`: in the gap above a row (or below the last), each band at most CV_ROWS rows */
 static uint32_t menu_split(uint32_t n)
 {
     int32_t s = mr_y(n) - 1;
     uint32_t k = n;
-    while (s > H_HEAD + 124 && k > 1u)
+    while (s > H_HEAD + CV_ROWS && k > 1u)
         s = mr_y(--k) - 1;
-    return (uint32_t)(s < 240 - 124 ? 240 - 124 : s);
+    return (uint32_t)(s < 240 - CV_ROWS ? 240 - CV_ROWS : s);
 }
 static void draw_menu(void)
 {
@@ -470,15 +470,15 @@ static void draw_menu(void)
         int32_t thumb = MENU_DOC_H * MENU_DOC_H / (max + MENU_DOC_H);
         if (thumb < 12) thumb = 12;
         for (pass = 0; pass < 2u; pass++) {
-            cv_begin(240, pass ? MENU_DOC_H - 124u : 124u, T_BG);
-            cv_oy = pass ? -124 : 0;
+            cv_begin(240, pass ? MENU_DOC_H - CV_ROWS : CV_ROWS, T_BG);
+            cv_oy = pass ? -(int32_t)CV_ROWS : 0;
             cv_scroll = 1;
             menu_document(-scroll, 1);
             cv_scroll = 0;
             cv_rrect(235, 2, 3, MENU_DOC_H - 4, 1, T_LINE, T_BG);           /* the scroll bar */
             cv_rrect(235, 2 + (max ? scroll * (MENU_DOC_H - 4 - thumb) / max : 0), 3, thumb, 1, T_MID, T_LINE);
             cv_oy = 0;
-            cv_blit(0, H_HEAD + pass * 124u);
+            cv_blit(0, H_HEAD + pass * CV_ROWS);
         }
         cv_begin(240, 240 - (H_HEAD + MENU_DOC_H), T_BG);
         cv_key_hint(8, 4, KC_PRESETS, "SCROLL", 1, T_BG);

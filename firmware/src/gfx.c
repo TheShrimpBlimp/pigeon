@@ -67,7 +67,9 @@ typedef struct { uint16_t off; uint8_t w; const char *label; } kc_t;
 #define AL_CELLS 32u                               /* the next cells (cv_rrect), not ink: a row of keys, a fill */
 #define AL_N(n) ((uint32_t)(n) << 8)
 
-#define CV_MAX (240u * 124u)      /* the graph strip is 240 x 124 */
+/* Product graphs need 122 rows; menus tile to the same capacity. */
+#define CV_ROWS (FELUCCA_SAMPLER_ONLY ? 122u : 124u)
+#define CV_MAX (240u * CV_ROWS)
 static uint16_t cv_px[CV_MAX] __attribute__((section(".pool")));
 static uint32_t cv_w, cv_h;
 static uint16_t cv_bg;           /* what cv_begin cleared the canvas to */
@@ -183,10 +185,14 @@ static int palette_stored_ok(uint32_t v) { return v < 20u || (v >= UI_PAL_TAG &&
 static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
 
 /* ------------------------------------------------------------ canvas --- */
+#ifndef GFX_HOOK_CANVAS
+#define GFX_HOOK_CANVAS(w,h,max) ((void)0)
+#endif
 static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
 {
     uint32_t i, n;
     uint16_t s = swap16(bg);
+    GFX_HOOK_CANVAS(w,h,CV_MAX);
     if (w * h > CV_MAX)
         h = CV_MAX / w;
     lcd_sync();                     /* the last blit may still read cv_px */

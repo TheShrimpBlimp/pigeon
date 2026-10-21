@@ -222,6 +222,7 @@ def main():
     ap.add_argument("--prefix", default="ICON_", help="enum prefix (the preview uses XI_ next to the firmware's ICON_)")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--no-dedup", action="store_true", help="reference atlas for pixel-equivalence checks")
     a = ap.parse_args()
     cps = glyph_table(a.font)
     if a.list:
@@ -253,13 +254,20 @@ def main():
     out += [f"    {a.prefix}{n.upper()}," for n in names]
     out += [f"    {a.prefix}COUNT", "};", ""]
     cells = {}
+    aliases = {}
     for s in sizes:
         subset = ([n for n in names if (n in legacy and n not in NOT_DRAWN) or n in SMALL_EXTRA] if s == min(sizes) else
                   [n for n in names if n in HUGE_DEFAULT] if s == 24 else [n for n in names if n in big])
         cells[s] = []
+        seen = {}
         for n in subset:
             b, ink = ar.raster_icon(font if glyph_of[n] in mended else a.font, s, cps[glyph_of[n]], a.gamma)
             assert ink, f"{n} is empty at {s}px"
+            key = bytes(b)
+            if not a.no_dedup and key in seen:
+                aliases[s, n] = seen[key]
+                continue
+            seen[key] = n
             cells[s].append((n, [v for i in range(s * s) for v in (b[i >> 1] >> (0 if i & 1 else 4) & 15,)], b))
     # one Huffman code for every cell of every size (one decoding table in RAM: gfx.c hc_lut)
     hc, packed = huff_pack([v for s in sizes for _, v, _ in cells[s]])
@@ -276,6 +284,9 @@ def main():
             offs.append(len(data))
             data += p
             inks.append(ink_box(b, s))
+        for (size, alias), canonical in aliases.items():
+            if size == s:
+                idx[names.index(alias)] = idx[names.index(canonical)]
         data += bytes(2)                               # gfx.c cv_alpha_hc reads up to 2 bytes ahead
         assert len(data) < 65536
         out.append(f"#define AI{s}_N {len(offs)}")

@@ -199,3 +199,13 @@ tail bytes are preserved. The editor validates a project before writing it back.
 Keep the original full recovery archive before updating: public v0.3.1 cannot
 load v0.4 projects. The [v0.4 tutorial](../../docs/PIGEON_V04_GUIDE.md) covers
 queues, scratching, per-note timing, fills and MIDI routing.
+
+## Local v0.5 playback and session tools
+
+The development loader supports independent playback points, per-chop reverse,
+cents, gain, nondestructive normalization and 0–8 ms loop crossfades. Apply chop
+settings before previewing. A draggable P marker edits the playback point. New
+metadata requires v0.5; capability checks block writes to older firmware. Named
+library entries show their bank/session contents and preview replacements.
+Complete-session download requires an opened session or a full device backup.
+The public v0.4 site is unchanged by this development work.

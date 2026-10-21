@@ -95,16 +95,17 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
 </style>
 <link rel="stylesheet" href="../../footer.css"><script type="module" src="../../footer.js"></script><link rel="icon" type="image/png" sizes="192x192" href="https://theshrimpblimp.com/home/face-icon.png">
 <link rel="shortcut icon" href="https://theshrimpblimp.com/favicon.ico">
+<link rel="stylesheet" href="../../header.css">
 </head>
 <body>
 <main>
 
-<header><a class="shrimp-brand" href="https://theshrimpblimp.com/" target="_top">theshrimpblimp</a><h1>Try PIGEON.</h1><p>An FM1 running PIGEON, right in your browser. Switch on, add your own samples, and start chopping. Nothing is preloaded.</p></header>
+<header class="pigeon-header"><a class="pigeon-brand" href="https://theshrimpblimp.com/" target="_top">theshrimpblimp<span>PIGEON / FM1 SAMPLER FIRMWARE</span></a><nav aria-label="Main"><a href="../../">PIGEON home</a><a href="../../webapp/emu/" aria-current="page">Emulator</a><a href="../../webapp/pigeon/">Sample loader</a><a href="../../#install">Install</a><a href="https://theshrimpblimp.com/blog/">Captain’s Log</a><a href="https://github.com/TheShrimpBlimp/pigeon">Source ↗</a></nav></header><div class="emulator-intro" style="padding-bottom:24px"><h1>Try PIGEON.</h1><p>An FM1 running PIGEON, right in your browser. Switch on, add your own samples, and start chopping. Nothing is preloaded.</p></div>
 <div class="install-counter"><div id="trial-total" class="nixie-digits" role="img" aria-label="Trial counter loading"></div><div class="counter-caption">BROWSER TRIALS<p id="trial-count-status">Loading shared count…</p><p>One per browser · counted after switching on</p></div><p class="counter-note" id="trial-counter-note" hidden></p></div>
 <p id="incoming-bank" role="status" hidden></p>
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 624" aria-hidden="true"></svg>
-  <canvas id="screen" width="240" height="240" role="img" aria-label="The screen"></canvas>
+  <canvas id="screen" width="240" height="240" role="img" aria-label="PIGEON screen. Enable screen announcements below to hear its contents."></canvas>
   <div class="start" id="start"><button id="go" type="button">Switch on</button><p id="status" hidden></p></div>
 </div>
 
@@ -117,25 +118,37 @@ h1{font-size:64px;font-weight:400;line-height:1.1;margin:26px 0 18px;color:var(-
   <span><kbd>Shift</kbd>-click holds a button</span>
 </p>
 
+<section aria-labelledby="record-heading">
+<h2 id="record-heading">Record your performance.</h2>
+<p class="fine">Capture the emulator’s stereo output. Stop recording, then preview or download your take as WAV or MP3 (192 kbps). Download each take before starting another.</p>
+<button id="record-start" type="button" disabled>Start recording</button>
+<button id="record-stop" type="button" disabled>Stop recording</button>
+<a id="record-download" hidden>Download WAV</a>
+<a id="record-download-mp3" hidden>Download MP3</a>
+<p id="record-status" role="status">Switch on to record.</p>
+<audio id="record-preview" controls hidden aria-label="Recorded performance" style="max-width:100%"></audio>
+</section>
+
 <section class="sample-loader" aria-labelledby="samples-heading"><p class="eyebrow">YOUR SOUNDS</p><h2 id="samples-heading">Add your samples.</h2>
-<label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 496 KiB</option><option value="unlimited">Unlimited storage</option></select>
-<p id="storage-help">The published firmware shares 496 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.</p>
+<label for="storage-mode">Storage mode</label> <select id="storage-mode" disabled><option value="fm1">FM1 storage · 500 KiB</option><option value="unlimited">Unlimited storage</option></select>
+<p id="storage-help">The published firmware shares 500 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.</p>
 <div class="sample-grid"><div class="sample-slot"><label for="song1-file">Song 1</label><input id="song1-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song1-quality">MP3 quality</label><select id="song1-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song1-name">Empty</span><div id="song1-editor" class="file-editor"></div></div><div class="sample-slot"><label for="song2-file">Song 2</label><input id="song2-file" type="file" accept="audio/*" disabled><div class="compression-controls"><label for="song2-quality">MP3 quality</label><select id="song2-quality" disabled><option value="24">24 kbps</option><option value="32">32 kbps</option><option value="40">40 kbps</option><option value="48">48 kbps</option><option value="56">56 kbps</option><option value="64" selected>64 kbps</option></select></div><span id="song2-name">Empty</span><div id="song2-editor" class="file-editor"></div></div><div class="sample-slot"><label for="kit-files">Drum kit · up to 16 files</label><input id="kit-files" type="file" accept="audio/*" multiple disabled><span id="kit-name">Empty</span><p class="fine">Choose files, edit each pad below, then apply the kit.</p><div id="pad-editors"></div><button id="apply-kit" type="button" disabled>Apply drum kit</button></div></div>
-<p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="507904" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 496 KiB</p><button id="save-bank" disabled>Save bank (.kob)</button> <label class="button">Load bank / session<input id="import-session" type="file" accept=".kob,.pigeon"></label> <button id="save-session" disabled>Save session (.pigeon)</button> <button id="open-loader" disabled>Open session in sample loader ↗</button> <button id="clear-samples" type="button" disabled>Clear samples</button><p class="fine">Bank (.kob): samples and chop settings. Session (.pigeon): bank, current sequence, saved A–D patterns and settings. Opening a session replaces this emulator workspace.</p>
+<p id="sample-status" role="status">Switch on, then load Song 1 to begin. No samples are preloaded.</p><progress id="sample-meter" max="512000" value="0" aria-label="Sample storage"></progress><p id="sample-usage">0 / 500 KiB</p><button id="save-bank" disabled>Save bank (.kob)</button> <label class="button">Load bank / session<input id="import-session" type="file" accept=".kob,.pigeon"></label> <button id="save-session" disabled>Save session (.pigeon)</button> <button id="open-loader" disabled>Open session in sample loader ↗</button> <button id="clear-samples" type="button" disabled>Clear samples</button><p class="fine">Bank (.kob): samples and chop settings. Session (.pigeon): bank, current sequence, saved A–D patterns and settings. Opening a session replaces this emulator workspace.</p>
 <p class="fine">Choosing a file stages it for editing. Press Apply to load your selected section; applied files and trim boundaries save in this browser. Processing stays on your computer. WAV and MP3 are supported when your browser can decode them. Unlimited removes the FM1 storage cap; available browser memory still applies.</p></section>
 <section aria-labelledby="reader-heading"><h2 id="reader-heading">Screen reader</h2>
 <p>PIGEON announces PIGEON's pages, knobs, patterns and actions using <a href="https://github.com/charlesvestal/fm1-reader">Charles Vestal's FM-1 Screen Reader protocol</a>.</p>
 <label><input id="reader-enable" type="checkbox"> Enable screen announcements</label>
 <label>Output <select id="reader-output"><option value="screen-reader">My screen reader</option><option value="voice">Browser voice</option></select></label>
 <button id="reader-where" type="button" disabled>Read current screen</button>
+<button id="reader-again" type="button" disabled>Say it again</button>
 <p id="reader-transcript">Switch on the emulator, then enable announcements.</p>
 <div id="reader-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 <div id="reader-alert" class="sr-only" role="alert" aria-atomic="true"></div></section>
 <section aria-labelledby="midi-heading"><h2 id="midi-heading">Connect a MIDI controller (including the FM1).</h2><button id="midi-connect" type="button" disabled>Connect a MIDI controller (including the FM1)</button> <select id="midi-input" aria-label="MIDI input"></select> <button id="midi-disconnect" type="button" disabled>Disconnect</button><p id="midi-status" role="status">Switch on first. USB MIDI needs desktop Chrome or Edge on HTTPS or localhost.</p><p>Play the selected track from your controller’s keys. Sound comes from your computer.</p><details><summary>FM1 knobs and buttons</summary><p>Requires PIGEON firmware with browser panel support. This temporarily stops local playback and routes the FM1 panel to the browser. Disconnect or close this page to return to local control. Select matching FM1 ports; this mode requests MIDI SysEx access.</p><label>FM1 input<select id="panel-input"></select></label><label>FM1 output<select id="panel-output"></select></label><button id="panel-connect" type="button">Connect FM1 panel</button><button id="panel-disconnect" type="button" disabled>Disconnect panel</button><p id="panel-status" role="status"></p><p id="panel-activity" class="fine" role="status">No knob movement received yet.</p></details></section>
 <section aria-label="Quick start" style="margin-top:24px"><h2>Make yourself at home.</h2><p>Click or tap the keys to play chops. Turn ALGORITHM to choose Song 1, drums, or Song 2. SELECT changes tempo. Drag a knob up and down, or scroll over it to turn it. K1 / K2 edit chop start / end; K3 / K4 scroll and zoom.</p><p>Press SEQ to open the step grid, REC to record, and PLAY to start or stop. SCL opens patterns and arrangement; ARP opens the mixer. Shift-click holds a button; click it again to release.</p><p>Your samples and virtual instrument save in this browser. USB transfers, firmware installation, and physical recording are outside this emulator.</p><p><a href="../../guide/KO_MODE.md">Full control guide ↗</a> · <a href="../pigeon/">Open sample tool ↗</a></p></section>
-<section class="credits" aria-labelledby="credits-heading"><p class="eyebrow">EMULATOR CREDITS</p><h2 id="credits-heading">Built on open-source work.</h2><p>The browser emulator is adapted from <a href="https://github.com/charlesvestal/fm1-x0x">Charles Vestal’s FM1 X0X emulator</a>: its <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/x0x_web.c">simulated FM1 and WebAssembly wrapper</a>, <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/worklet.js">AudioWorklet audio runtime</a>, and <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/index.html">interactive browser panel</a> underpin this version.</p><p>Felucca’s browser adaptation and firmware are by Leo Kuroshita and Hügelton Instruments. PIGEON is created and directed by The Shrimp Blimp. The emulator runs PIGEON’s firmware against a simulated FM1.</p><p><a href="https://github.com/TheShrimpBlimp/pigeon/tree/main/web/emu">PIGEON emulator source</a> · <a href="../../firmware/LICENSE">GPL-3.0 licence</a> · lit.chr / Little Character Regular by S M Astrid Bin, <a href="fonts/LittleCharacter-OFL.txt">SIL OFL 1.1</a></p></section>
-<footer class="pigeon-footer"><div class="footer-actions"><a class="footer-action" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a><button class="footer-action footer-font" id="font-nerds" type="button">for font nerds</button></div><div class="footer-info"><div><p class="footer-title">PIGEON — sampler firmware for M-VAVE FM1.</p><p>Created and directed by The Shrimp Blimp. Free and open source.</p><p>Built on <a href="https://github.com/hugelton/Felucca">Felucca</a> by <a href="https://github.com/kurogedelic">Leo Kuroshita (@kurogedelic)</a>, Hügelton Instruments, and contributors.</p></div><div><p>AI was used for menial coding. All assets, direction, conceptualization, and thought are human.</p><p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter">Little Character</a>.</p><p><a href="../../">PIGEON home</a> · <a href="../../webapp/pigeon/">Sample loader</a> · <a href="../../webapp/emu/">Emulator</a> · <a href="../../firmware/LICENSING.md">Licences</a></p></div></div><small class="footer-version version">@VERSION@@PREVIEW@</small><details class="project-credits"><summary>Credits and open-source licences</summary>
-<p>PIGEON is created and directed by The Shrimp Blimp, and is free and open source under GPL-3.0-only.</p>
+<section class="credits" aria-labelledby="credits-heading"><p class="eyebrow">EMULATOR CREDITS</p><h2 id="credits-heading">Built on open-source work.</h2><p>The browser emulator is adapted from <a href="https://github.com/charlesvestal/fm1-x0x">Charles Vestal’s FM1 X0X emulator</a>: its <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/x0x_web.c">simulated FM1 and WebAssembly wrapper</a>, <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/worklet.js">AudioWorklet audio runtime</a>, and <a href="https://github.com/charlesvestal/fm1-x0x/blob/main/web/emu/index.html">interactive browser panel</a> underpin this version.</p><p>Felucca’s browser adaptation and firmware are by Leo Kuroshita and Hügelton Instruments. PIGEON is created and directed by theshrimpblimp. The emulator runs PIGEON’s firmware against a simulated FM1.</p><p><a href="https://github.com/TheShrimpBlimp/pigeon/tree/main/web/emu">PIGEON emulator source</a> · <a href="../../firmware/LICENSE">GPL-3.0 licence</a> · lit.chr / Little Character Regular by S M Astrid Bin, <a href="fonts/LittleCharacter-OFL.txt">SIL OFL 1.1</a></p></section>
+<footer class="pigeon-footer"><div class="footer-actions"><a class="footer-action" href="https://buymeacoffee.com/theshrimpb1" target="_blank" rel="noopener noreferrer">Buy me a coffee ↗</a><button class="footer-action footer-font" id="font-nerds" type="button">for font nerds</button></div><div class="footer-info"><div><p class="footer-title">PIGEON — sampler firmware for M-VAVE FM1.</p><p>Created and directed by theshrimpblimp. Free and open source.</p><p>Built on <a href="https://github.com/hugelton/Felucca">Felucca</a> by <a href="https://github.com/kurogedelic">Leo Kuroshita (@kurogedelic)</a>, Hügelton Instruments, and contributors.</p></div><div><p>AI was used for menial coding. All assets, direction, conceptualization, and thought are human.</p><p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter">Little Character</a>.</p><p><a href="../../">PIGEON home</a> · <a href="../../webapp/pigeon/">Sample loader</a> · <a href="../../webapp/emu/">Emulator</a> · <a href="../../firmware/LICENSING.md">Licences</a></p></div></div><small class="footer-version version">@VERSION@@PREVIEW@</small><details class="project-credits"><summary>Credits and open-source licences</summary>
+<p>PIGEON is created and directed by theshrimpblimp, and is free and open source under GPL-3.0-only.</p>
 <p>Built on <a href="https://github.com/hugelton/Felucca" target="_blank" rel="noopener noreferrer">Felucca</a> by <a href="https://github.com/kurogedelic" target="_blank" rel="noopener noreferrer">Leo Kuroshita (@kurogedelic)</a> and <a href="https://hugelton.com" target="_blank" rel="noopener noreferrer">Hügelton Instruments</a>. Its platform, sampler foundation, USB transport, package format, and update loader make PIGEON possible.</p>
 <p>Installer compatibility safeguards, recovery boot stub, and commit-last update design adapted from <a href="https://github.com/Quixotic7/ChoralRootFM1" target="_blank" rel="noopener noreferrer">ChoralRoot FM-1</a> by Quixotic7 and the ChoralRoot FM-1 contributors (GPL-3.0-only). PIGEON adapts the recovery layout to preserve its sample storage.</p>
 <p>Logo by Dendy0097 · Font by Disastrid: <a href="https://github.com/disastrid/LittleCharacter" target="_blank" rel="noopener noreferrer">Little Character</a> (SIL OFL 1.1). MP3 decoding: libmad (GPL-2.0-or-later); browser MP3 encoding: lamejs/LAME (LGPL-3.0). Firmware packages include three JieLi AC79 SDK files (Apache-2.0).</p>
@@ -295,7 +308,16 @@ function syncKeys(redraw) {
   else if (!redraw) return;
   keys.forEach((k, i) => k.g.classList.toggle("held", !!((m | panelKeys) & (1 << i))));
 }
+// Assistive technology can activate a control with click alone, without pointer/key events.
+function bindAccessibleTap(element, map, id, bit, sync) {
+  element.addEventListener('click', event => {
+    if (event.detail !== 0) return;
+    map.set(id, bit); sync();
+    setTimeout(() => { map.delete(id); sync(); }, 120);
+  });
+}
 function bindButton(b) {
+  bindAccessibleTap(b.hit, btnBy, 'assistive-button-' + b.bit, b.bit, syncButtons);
   b.hit.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     if (e.shiftKey || e.button === 2) { latched ^= 1 << b.bit; syncButtons(true); return; }
@@ -307,9 +329,20 @@ function bindButton(b) {
   b.hit.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && !e.repeat) { btnBy.set("f" + b.bit, b.bit); syncButtons(); e.preventDefault(); e.stopPropagation(); }
   });
-  b.hit.addEventListener("keyup", () => { if (btnBy.delete("f" + b.bit)) syncButtons(); });
+  const releaseButton = () => { if (btnBy.delete("f" + b.bit)) syncButtons(); };
+  b.hit.addEventListener("keyup", releaseButton);
+  b.hit.addEventListener("blur", releaseButton);
 }
 function bindKey(k, i) {
+  bindAccessibleTap(k.hit, keyBy, 'assistive-key-' + i, i, syncKeys);
+  k.hit.addEventListener('keydown', event => {
+    if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+      keyBy.set('focus-key-' + i, i); syncKeys(); event.preventDefault(); event.stopPropagation();
+    }
+  });
+  const releaseKey = () => { if (keyBy.delete('focus-key-' + i)) syncKeys(); };
+  k.hit.addEventListener('keyup', releaseKey);
+  k.hit.addEventListener('blur', releaseKey);
   k.hit.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     k.hit.setPointerCapture(e.pointerId);
@@ -550,8 +583,8 @@ function refreshSamples(){
   document.getElementById('apply-kit').disabled=!loaderReady||loaderBusy||!padEditors.length;
   const used=samples.image? new DataView(samples.image.buffer,samples.image.byteOffset).getUint32(8,true)-HEAD:0;
   const meter=document.getElementById('sample-meter');meter.max=samples.unlimited?Math.max(used,1):FM1_POOL-HEAD;meter.value=used;
-  document.getElementById('sample-usage').textContent=`${(used/1024).toFixed(1)} KiB`+(samples.unlimited?' · unlimited mode': ' / 496 KiB');
-  document.getElementById('storage-help').textContent=samples.unlimited?'No FM1 storage cap. Available browser memory still applies. These samples may not fit a physical FM1.':'The published firmware shares 496 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.';
+  document.getElementById('sample-usage').textContent=`${(used/1024).toFixed(1)} KiB`+(samples.unlimited?' · unlimited mode': ' / 500 KiB');
+  document.getElementById('storage-help').textContent=samples.unlimited?'No FM1 storage cap. Available browser memory still applies. These samples may not fit a physical FM1.':'The published firmware shares 500 KiB between two songs and 16 drum pads. Songs use mono 22.05 kHz MP3 at the selected quality (24–64 kbps); drums use IMA ADPCM. The meter includes waveform, MP3 index and alignment overhead. Lower quality leaves more room for audio.';
   if(!samples.image)sampleStatus.textContent='Load Song 1 to begin. No samples are preloaded.';
 }
 function sendBank(image,unlimited,clear=false){return new Promise((resolve,reject)=>{
@@ -671,6 +704,72 @@ for(let slot=0;slot<2;slot++)document.getElementById(`song${slot+1}-quality`).on
 mode.onchange=()=>changeSamples(async()=>({...samples,unlimited:mode.value==='unlimited'}));
 document.getElementById('clear-samples').onclick=async()=>{await changeSamples(async()=>({songs:[null,null],pads:[],unlimited:mode.value==='unlimited',bitrates:qualityDraft.slice(),image:null}));const message=sampleStatus.textContent;restoreEditors();refreshSamples();sampleStatus.textContent=message;};
 
+// Capture only the firmware output, leaving sample-editor previews out of the take.
+const recordStart = document.getElementById('record-start');
+const recordStop = document.getElementById('record-stop');
+const recordStatus = document.getElementById('record-status');
+const recordDownload = document.getElementById('record-download');
+const recordPreview = document.getElementById('record-preview');
+const recordMP3 = document.getElementById('record-download-mp3');
+let capture, recordingTimer, recordingChunks = [], recordingURLs = [], finishCapture;
+async function enableRecording() {
+  try {
+    await audioContext.audioWorklet.addModule('./record-worklet.js');
+    capture = new AudioWorkletNode(audioContext, 'pigeon-capture', {outputChannelCount: [2]});
+    // The capture node emits silence; connecting it keeps its processing active.
+    node.connect(capture); capture.connect(audioContext.destination);
+    capture.port.onmessage = ({data}) => {
+      if (data.stopped) finishCapture?.();
+      else recordingChunks.push(data);
+    };
+    recordStart.disabled = false;
+    recordStatus.textContent = 'Ready to record.';
+  } catch (error) { recordStatus.textContent = `Recording unavailable: ${error.message}`; }
+}
+recordStart.onclick = async () => {
+  recordStart.disabled = true;
+  try {
+    await audioContext.resume();
+    recordingChunks = [];
+    recordPreview.pause(); recordPreview.removeAttribute('src'); recordPreview.load();
+    recordPreview.hidden = recordDownload.hidden = recordMP3.hidden = true;
+    recordingURLs.forEach(url => URL.revokeObjectURL(url)); recordingURLs = [];
+    capture.port.postMessage('start'); recordStop.disabled = false;
+    const started = performance.now();
+    const update = () => {
+      const seconds = Math.floor((performance.now() - started) / 1000);
+      recordStatus.textContent = `Recording · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    };
+    update(); recordingTimer = setInterval(update, 1000);
+  } catch (error) {
+    recordStart.disabled = false; recordStatus.textContent = `Could not record: ${error.message}`;
+  }
+};
+recordStop.onclick = async () => {
+  recordStop.disabled = true; clearInterval(recordingTimer);
+  recordStatus.textContent = 'Preparing WAV and MP3…';
+  let worker;
+  try {
+    await new Promise(resolve => { finishCapture = resolve; capture.port.postMessage('stop'); });
+    finishCapture = null;
+    worker = new Worker('./record-encode-worker.js');
+    const result = await new Promise((resolve, reject) => {
+      worker.onmessage = ({data}) => data.error ? reject(Error(data.error)) : resolve(data);
+      worker.onerror = () => reject(Error('Audio export failed. Please try again.'));
+      worker.postMessage({chunks: recordingChunks, sampleRate: audioContext.sampleRate},
+        recordingChunks.flatMap(c => [c.left.buffer, c.right.buffer]));
+    });
+    const name = `pigeon-recording-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+    for (const [format, link] of [['wav', recordDownload], ['mp3', recordMP3]]) {
+      const url = URL.createObjectURL(result[format]); recordingURLs.push(url);
+      link.href = url; link.download = `${name}.${format}`; link.hidden = false;
+    }
+    recordPreview.src = recordDownload.href; recordPreview.hidden = false;
+    recordStatus.textContent = 'Recording ready. Preview or download WAV or MP3.';
+  } catch (error) { recordStatus.textContent = `Could not export: ${error.message}`; }
+  finally { worker?.terminate(); recordingChunks = []; recordStart.disabled = false; }
+};
+
 // ------------------------------------------------------------------ switching on
 const status = document.getElementById("status");
 const say = (t) => { status.textContent = t; status.hidden = !t; };
@@ -716,6 +815,7 @@ async function switchOn() {
       node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue, bank:saved?.image, unlimited:saved?.unlimited }, [wasm]);
     });
     await ac.resume();
+    enableRecording();
     document.getElementById("start").hidden = true;
     go.textContent = "On";
     if (ac.sampleRate !== 44100) console.warn(`Felucca: the browser plays at ${ac.sampleRate} Hz, the pitch is off by ${(1200 * Math.log2(ac.sampleRate / 44100)).toFixed(0)} cents.`);

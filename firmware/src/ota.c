@@ -259,6 +259,77 @@ static int ota_ufw(uint8_t *hdr, uint32_t *fl_off, uint32_t *fl_len, uint32_t *o
     return 0;
 }
 
+#if FELUCCA_KO_STORAGE && FELUCCA_SAMPLER_ONLY
+#include "../hal/ko_layout.h"
+#ifndef OTA_BANK_BUSY
+#define OTA_BANK_BUSY() ko_upload_total
+#endif
+#ifndef OTA_BANK_USED
+#define OTA_BANK_USED() (ko_bank_active?ko_bank.used:0u)
+#endif
+static void ota_bank_sfc(uint8_t *p, uint32_t n, uint32_t base_off, uint32_t key)
+{
+    uint32_t i, j;
+    for (i = 0; i < n; i += 32u) {
+        uint32_t k = key ^ ((base_off + i) >> 2);
+        for (j = 0; j < 32u && i + j < n; j++) {
+            p[i + j] ^= (uint8_t)k;
+            k = ((k << 1) ^ (k & 0x8000u ? 0x1021u : 0u)) & 0xFFFFu;
+        }
+    }
+}
+
+/* chip key from the device's flash head: JLFS top entries (ENC 0xFFFF) -> isd_config.ini blob */
+static int ota_bank_key(uint32_t *key)
+{
+    uint8_t e[32], blob[34];
+    uint32_t off, i, sum, k;
+    for (off = 32; off < 0x400u; off += 32u) {
+        if (ota_fread(off, e, 32))
+            return -1;
+        ota_jl_enc(e, 32);
+        if (ota_crc16(e + 2, 30, 0) != ota_rd16(e))
+            return -2;
+        if (!ota_memeq(e + 16, (const uint8_t *)"isd_config.ini", 15)) {
+            if (ota_rd16(e + 14))
+                return -3;                               /* last entry, not found */
+            continue;
+        }
+        if (ota_fread(ota_rd32(e + 4), blob, 34) || ota_crc16(blob, 32, 0) != ota_rd16(blob + 32))
+            return -4;
+        for (i = 0, sum = 0; i < 16u; i++)
+            sum += blob[i];
+        sum &= 0xFFu;
+        sum = sum >= 0xE0u ? 0xAAu : sum <= 0x10u ? 0x55u : sum;
+        for (i = 0, k = 0; i < 16u; i++)
+            if ((uint32_t)(blob[16 + i] ^ blob[15 - i]) < sum)
+                k |= 1u << i;
+        *key = k;
+        return 0;
+    }
+    return -3;
+}
+
+/* Check before staging even an older package's loader, which cannot know the
+ * new tail exists. Its descriptor must preserve every occupied bank extent. */
+static int ota_bank_package(uint32_t flash_offset){
+    if(OTA_BANK_BUSY())return 0;
+#if FELUCCA_KO_MAINT
+    if(ko_reclaim_locked())return 0;
+#endif
+#if FELUCCA_USB_SAMPLE
+    if(ko_usb.state)return 0;
+#endif
+    if(OTA_BANK_USED()<=KO_BANK_V05_SIZE)return 1;
+    uint32_t key;uint8_t descriptor[32];
+    if(ota_bank_key(&key) || ota_read(flash_offset+0x4000u+KO_EXTRA_ENTRY,descriptor,32))return 0;
+    ota_bank_sfc(descriptor,32,KO_EXTRA_ENTRY,key);
+    return ota_crc16(descriptor+2,30,0)==ota_rd16(descriptor) &&
+        ota_memeq(descriptor+16,(const uint8_t *)KO_EXTRA_NAME,8) &&
+        ota_rd32(descriptor+4)==KO_GROW_LO && ota_rd32(descriptor+8)==KO_EXTRA_HI-KO_GROW_LO;
+}
+#endif
+
 /* ota_stage's failures from step 4's first erase on (-8 .. -13; the steps before: -1 .. -7 and -15, nothing written) */
 #define OTA_STAGED_RC(rc) ((rc) <= -8 && (rc) >= -13)
 static int ota_stage(void)                       /* steps 1..6; 0 = host said success */
@@ -274,6 +345,9 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         return -3;
     if (fl_len != OTA_FL_LEN)
         return -15;                                         /* another board's package: nothing staged, nothing erased */
+#if FELUCCA_KO_STORAGE && FELUCCA_SAMPLER_ONLY
+    if(!ota_bank_package(fl_off))return -17; /* export/clear before a smaller-layout downgrade */
+#endif
     /* 2. which loader: the official one (known CRCs; it rewrites the whole flash.bin
      *    including the head) or Felucca's own (app area only, checks the chip key) */
     if (ota_read(ota_off, b, 512))

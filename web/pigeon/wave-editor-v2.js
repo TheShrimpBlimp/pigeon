@@ -10,7 +10,7 @@ export class WaveEditor {
       e.preventDefault();canvas.focus();canvas.setPointerCapture(e.pointerId);
       const r=canvas.getBoundingClientRect(),p=this.position(e),[,span]=this.window(),t=span*12/r.width;
       this.anchor=p;this.original=[this.a,this.b];this.downX=e.clientX;this.downY=e.clientY;this.oldScroll=this.scroll;
-      this.drag=(e.clientY-r.top)/r.height>.86?'overview':e.altKey||e.button===1?'pan':e.shiftKey?'range':Math.abs(p-this.cursor)<t&&(e.clientY-r.top)/r.height>.125&&(e.clientY-r.top)/r.height<.25?'cursor':Math.abs(p-this.a)<t?'start':Math.abs(p-this.b)<t?'end':this.timeline?'range':p>this.a&&p<this.b?'move':'cursor';
+      this.drag=typeof this.playPoint==='number' && Math.abs(p-this.playPoint)<t && (e.clientY-r.top)/r.height>.25 && (e.clientY-r.top)/r.height<.4?'playpoint':(e.clientY-r.top)/r.height>.86?'overview':e.altKey||e.button===1?'pan':e.shiftKey?'range':Math.abs(p-this.cursor)<t&&(e.clientY-r.top)/r.height>.125&&(e.clientY-r.top)/r.height<.25?'cursor':Math.abs(p-this.a)<t?'start':Math.abs(p-this.b)<t?'end':this.timeline?'range':p>this.a&&p<this.b?'move':'cursor';
       if(this.timeline&&this.drag==='range'){this.a=this.b=p;this.onChange?.(p,p);}
       if(this.drag==='overview')this.move(e);else this.setCursor(p);
     });
@@ -49,6 +49,7 @@ export class WaveEditor {
     const p=this.position(e),n=this.pcm.length,min=Math.min(64,n),r=this.canvas.getBoundingClientRect(),[,span]=this.window();
     if(this.drag==='overview'){this.scroll=n===span?0:Math.max(0,Math.min(1,((e.clientX-r.left)/r.width*n-span/2)/(n-span)));this.viewChanged();return;}
     if(this.drag==='pan'){this.scroll=this.oldScroll;this.pan((this.downX-e.clientX)/r.width*span);return;}
+    if(this.drag==='playpoint'){this.playPoint=Math.max(this.a,Math.min(this.b-1,p));this.onPlaybackChange?.(this.playPoint);this.draw();return;}
     if(this.drag==='cursor'){this.setCursor(p);return;}
     if(Math.hypot(e.clientX-this.downX,e.clientY-this.downY)<3)return;
     if(this.drag==='start')this.a=Math.max(0,Math.min(p,this.b-min));
@@ -75,6 +76,7 @@ export class WaveEditor {
     const a=(this.a-start)/span*w,b=(this.b-start)/span*w;
     ctx.fillStyle='#b9ef7726';ctx.fillRect(a,0,b-a,waveHeight);
     for(const [x,label] of [[a,'S'],[b,'E']]){if(x<0||x>w)continue;const edge=Math.max(1,Math.min(w-2,x));ctx.fillStyle='#b9ef77';ctx.fillRect(edge,0,2,waveHeight);ctx.fillRect(Math.max(0,Math.min(w-24,edge-12)),0,24,21);ctx.fillStyle='#11150d';ctx.font= '14px "Little Character"' ;ctx.textAlign='center';ctx.fillText(label,Math.max(12,Math.min(w-12,edge)),16);}
+    if(typeof this.playPoint==='number'){const x=(this.playPoint-start)/span*w;if(x>=0 && x<=w){ctx.fillStyle='#f2ba74';ctx.fillRect(x,35,2,waveHeight-35);ctx.font='14px "Little Character"';ctx.fillText('P',x+6,48);}}
     const cursor=(this.cursor-start)/span*w;ctx.strokeStyle='#f1f4e8';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cursor,22);ctx.lineTo(cursor,waveHeight);ctx.stroke();ctx.fillStyle='#f1f4e8';ctx.beginPath();ctx.moveTo(cursor-6,22);ctx.lineTo(cursor+6,22);ctx.lineTo(cursor,29);ctx.fill();
     ctx.fillStyle='#748666';this.overview.forEach(([lo,hi],x)=>ctx.fillRect(Math.floor(x*w/columns),152-hi*9,Math.max(1,Math.ceil(w/columns)),Math.max(1,(hi-lo)*9)));
     ctx.fillStyle='#b9ef7726';ctx.fillRect(start/this.pcm.length*w,141,span/this.pcm.length*w,23);ctx.strokeStyle='#b9ef77';ctx.lineWidth=2;ctx.strokeRect(start/this.pcm.length*w+1,142,Math.max(2,span/this.pcm.length*w-2),21);

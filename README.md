@@ -10,6 +10,13 @@ screen-reader support in the standard firmware. See the [v0.4 tutorial](docs/PIG
 and [release checklist](docs/PIGEON_V04_RELEASE.md) for controls and validation details.
 Both songs and drums share **496 KiB** of sample storage.
 
+## v0.5 development
+
+The public release remains v0.4 beta. Local v0.5 work is documented in the
+[v0.5 guide](docs/PIGEON_V05_GUIDE.md); it includes independent playback points,
+per-chop reverse/cents/gain/crossfade, loader normalization and session tools.
+Nothing from v0.5 is published or flashed automatically.
+
 ## What it does
 
 - **Two independent song samples and a 16-pad drum kit**, sharing 496 KiB of

@@ -124,16 +124,21 @@ static void ko_pcm_poll(void)
         if (bank->codec!=KO_CODEC_MP3 || !ko_song(ko_pcm_track(v))) continue;
         uint32_t want = ko_pcm[v].want, slot = 0;
         if (!ko_pcm_voice(v)->active || want == ~0u || want >= bank->frames) continue;
+        const voice_t *cv=ko_pcm_voice(v);
+        uint32_t cpk=(uint32_t)cv->s[4];
+        int backwards=(cpk&(1u<<7)) || ((cpk&KO_V_SCRATCH) && ko_scratch_speed(v>=NVOICE)<0);
+        const ko_chop_t *ch=&ko_pcm_table(v)->chop[(cpk>>8)&63u];
+        uint32_t bridge=backwards?(ch->b-ch->a>KO_PCM_TAIL?ch->b-KO_PCM_TAIL:ch->a):ch->a;
         uint32_t rank = ko_pcm_voice(v)->s[6] ? 0u : 2u;
         if (ko_pcm[v].frame[0] == want || ko_pcm[v].frame[1] == want) {
             rank = ko_pcm_voice(v)->s[6] ? 1u : 2u;
             const voice_t *voice=ko_pcm_voice(v);
-            if(((uint32_t)voice->s[4]&KO_V_SCRATCH) && ko_scratch_speed(v>=NVOICE)<0) {
+            if(backwards) {
                 uint32_t chop=((uint32_t)voice->s[4]>>8)&63u;
                 const ko_chop_t *c=&(*ko_pcm_table(v)).chop[chop];
                 want=want*KO_PCM_N<=c->a+bank->skip || !want ? (c->b-1u+bank->skip)/KO_PCM_N : want-1u;
             } else want++;
-            if (voice->gate && !((uint32_t)voice->s[4]&KO_V_NO_LOOP) &&
+            if (!backwards && voice->gate && !((uint32_t)voice->s[4]&KO_V_NO_LOOP) &&
                 want*KO_PCM_N >= voice->ph[2]+bank->skip) {
                 uint32_t chop=((uint32_t)voice->s[4]>>8)&63u;
                 want=((*ko_pcm_table(v)).chop[chop].a+bank->skip)/KO_PCM_N;
@@ -143,8 +148,7 @@ static void ko_pcm_poll(void)
                 /* Cache a short bridge at the exact loop start. A block
                  * can cross the final frame and loop before the main loop
                  * ever observes that final frame as its current request. */
-                uint32_t chop=((uint32_t)voice->s[4]>>8)&63u;
-                uint32_t head=(*ko_pcm_table(v)).chop[chop].a;
+                uint32_t head=bridge;
                 if (!voice->gate || ((uint32_t)voice->s[4]&KO_V_NO_LOOP) ||
                     ko_pcm[v].bridge_pos==head || bank->samples-head<KO_PCM_TAIL) continue;
                 want=(head+bank->skip)/KO_PCM_N;slot=2;
@@ -155,7 +159,7 @@ static void ko_pcm_poll(void)
         if (slot!=2 && ko_pcm[v].frame[0] == ko_pcm[v].want) slot = 1;
         uint32_t epoch = ko_pcm[v].epoch, bank_epoch = ko_pcm_epoch;
         uint32_t first = want > 1 ? want-2 : 0;
-        uint32_t head=(*ko_pcm_table(v)).chop[((uint32_t)ko_pcm_voice(v)->s[4]>>8)&63u].a;
+        uint32_t head=bridge;
         uint32_t offset=(head+bank->skip)%KO_PCM_N;
         uint32_t last=want+1u+(slot==2 && offset+KO_PCM_TAIL>KO_PCM_N);
         uint32_t a = ko_bank_u32(bank->song_off+first*4), b = ko_bank_u32(bank->song_off+last*4);

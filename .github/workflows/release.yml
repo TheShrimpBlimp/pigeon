@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-only
+name: Signed firmware release
+on:
+  push:
+    tags: ['v*']
+permissions: {}
+jobs:
+  build:
+    uses: zvenson/fm1-build/.github/workflows/build.yml@v1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      build: |
+        python3 -m pip install fonttools==4.66.1
+        sh tools/build_signed_release.sh "${GITHUB_REF_NAME#v}"
+      packages: build/signed/*.fwsc
+      test: |
+        python3 -m pip install numpy==2.2.6 lameenc==1.9.0
+        sh tests/run_pigeon_tests.sh
+        sh tests/run_pigeon_recovery_tests.sh
+        python3 tests/signed_release_test.py

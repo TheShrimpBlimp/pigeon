@@ -4,6 +4,12 @@
 #include <stdint.h>
 static uint32_t text_checks,text_failures,screen_view,screen_track;
 static int lint_active;
+static uint32_t canvas_checks,canvas_failures;
+static void screen_canvas(uint32_t w,uint32_t h,uint32_t max){
+    canvas_checks++;
+    if(w*h>max){canvas_failures++;printf("screen: canvas %u x %u exceeds %u pixels\n",w,h,max);}
+}
+#define GFX_HOOK_CANVAS(w,h,max) screen_canvas(w,h,max)
 static void screen_text(int x0,int y0,int x1,int y1,const char *text,unsigned flags) {
     (void)x0;(void)y0;(void)x1;(void)y1;
     if(!lint_active || flags&4u) return;
@@ -55,7 +61,11 @@ int main(void) {
     for(uint32_t row=0;row<MI_COUNT;row++)if(menu_visible(row)){
         screen_view=200+row;ui.menu=1;ui.menu_sel=row;ui.force=1;lint_active=1;ui_draw();lint_active=0;
     }
+    for(uint32_t mode=2;mode<=3;mode++)for(uint32_t scroll=0;scroll<=196;scroll+=28){
+        ui.menu=mode;ui.menu_scroll=scroll;ui.force=1;ui_draw();
+    }
     ui.menu=0;
+    printf("PIGEON canvas: %u requests, %u overflows\n",canvas_checks,canvas_failures);
     printf("PIGEON screen text: %u checks, %u clipping failures\n",text_checks,text_failures);
-    return !text_checks || text_failures;
+    return !text_checks || text_failures || !canvas_checks || canvas_failures;
 }

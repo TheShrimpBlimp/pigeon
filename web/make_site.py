@@ -111,7 +111,7 @@ def main(pkg, version, out):
     for asset in ("site.css","nixie.css","nixie.js"):
         shutil.copy(HERE / "site" / asset,out / asset)
     shutil.copytree(HERE / "site" / "ui",out / "ui",dirs_exist_ok=True,ignore=shutil.ignore_patterns("*.ppm"))
-    for asset in ("footer.css", "footer.js"):
+    for asset in ("footer.css", "footer.js", "header.css"):
         shutil.copy(HERE / asset, out / asset)
     guide=out / "guide";guide.mkdir(exist_ok=True)
     for doc in ("KO_MODE.md","KO_STORAGE.md","PIGEON_CONTROLS.md","PIGEON_PERFORMANCE_AUDIT.md","PIGEON_RECOVERY.md","PIGEON_V03_RELEASE.md","PIGEON_FIRMWARE_PROFILE.md","PIGEON_V031_RELEASE.md","PIGEON_V04_RELEASE.md","PIGEON_V04_GUIDE.md","PIGEON_NOTE_TIMING.md","SCREEN_READER.md"):shutil.copy(HERE.parent / "docs" / doc,guide / doc)

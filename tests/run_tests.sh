@@ -170,6 +170,12 @@ run() { echo "== $1"; shift; "$@" || fail=1; }
 
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_test" tests/ko_test.c -lm
 run "KO: pads, independent chops, one shots, compression, metadata and unchanged project format" "$OUT/ko_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_chop_finish_test" tests/pigeon_chop_finish_test.c -lm
+run "PIGEON: per-chop tuning, gain and crossfades" "$OUT/pigeon_chop_finish_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_chop_workflow_test" tests/ko_chop_workflow_test.c -lm
+run "PIGEON: nondestructive chop reset, history and edit audition" "$OUT/ko_chop_workflow_test"
+$CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_playpoint_test" tests/ko_playpoint_test.c -lm
+run "PIGEON: independent playback points, original loop bounds and legacy metadata" "$OUT/ko_playpoint_test"
 $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/ko_sequence_test" tests/ko_sequence_test.c -lm
 run "KO: 16 steps, sample-end timing, recording LEDs and all-key chops" "$OUT/ko_sequence_test"
 $CC -w -DFELUCCA_SAMPLER_ONLY=1 -DFELUCCA_KO_DUAL=1 -Ibuild/gen -Ifirmware/src -o "$OUT/pigeon_sequence_boot_test" tests/ko_sequence_test.c -lm

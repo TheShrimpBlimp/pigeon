@@ -14,10 +14,12 @@
  * A silent track ("-", CHAIN_SILENT) plays nothing in that section: at its start the track's sequenced notes are
  * released (seq_release, as at every section) and its automation goes back to the sound's own values (motion_restore);
  * no step, automation or lock of any slot plays there. Live keys and the arp still play it (the sound stays). */
+/* Runtime caches only. Serialized FUNA projects retain all four lanes. */
+#define CHAIN_PARTS UI_TRACK_COUNT
 typedef struct {
-    step_t step[NTRK][NSTEP];
-    int16_t timing[NTRK][4];
-    uint8_t qnt[NTRK];                       /* each track's QUANTIZE (P_SQNT) as saved */
+    step_t step[CHAIN_PARTS][NSTEP];
+    int16_t timing[CHAIN_PARTS][4];
+    uint8_t qnt[CHAIN_PARTS];                       /* each track's QUANTIZE (P_SQNT) as saved */
     motion_store_t motion;
 } chain_pattern_t;
 static chain_config_t chain_config;
@@ -39,6 +41,11 @@ static uint8_t ko_pattern_sel, ko_copy_slot=255, ko_section, ko_pattern_mask;
 static volatile uint8_t ko_launch_ready, ko_launch_mode, ko_launch_pending=255;
 static volatile uint8_t ko_pattern_active=255, ko_pattern_commit=255;
 static uint32_t ko_bar_pos;
+#if FELUCCA_SAMPLER_ONLY
+static volatile uint8_t ko_scene_pending __attribute__((section(".pool")));
+static uint8_t ko_scene_mutes[3] __attribute__((section(".pool")));
+static uint8_t ko_scene_restore __attribute__((section(".pool")));
+#endif
 #endif
 /* a silent lane: its steps (empty: nothing plays) and its timing (a 4/4 bar of 1/16: the section's length when every
  * track is silent) */
@@ -46,6 +53,7 @@ static const step_t chain_silent[NSTEP] = {{{0}}};
 #define CHAIN_SIL_LEN 16
 #define CHAIN_SIL_DIV 2                      /* 1/16 */
 
+static int ko_end_boundary(const track_t *t,uint32_t n);
 static void seq_release(track_t *t);
 static void seq_stop(void);
 static uint32_t div_samples(uint32_t div);
@@ -72,7 +80,13 @@ static int chain_valid(const chain_config_t *c)
         return 0;
     for (i = 0; i < c->count; i++) {
         for (k = 0; k < NTRK; k++)
-            if (c->row[i].slot[k] > CHAIN_SILENT)
+            if (c->row[i].slot[k] >
+#if FELUCCA_SAMPLER_ONLY
+                (k==3 && c->rsv[1]==0x4Du?7u:CHAIN_SILENT)
+#else
+                CHAIN_SILENT
+#endif
+                )
                 return 0;
         if (!c->row[i].repeat || c->row[i].repeat > 16u)
             return 0;
@@ -99,7 +113,7 @@ static int chain_from_v9(chain_config_t *c, const chain_v9_t *o)
 static uint32_t chain_clock(const chain_row_t *r)
 {
     uint32_t k;
-    for (k = 0; k < NTRK; k++)
+    for (k = 0; k < (FELUCCA_SAMPLER_ONLY?SAMPLER_PARTS:NTRK); k++)
         if (r->slot[k] < CHAIN_SILENT)
             return k;
     return 0;
@@ -111,6 +125,7 @@ static const step_t *seq_steps(const track_t *t)
     uint32_t k = (uint32_t)(t - trk), s;
     if (!chain.running)
         return t->step;
+    if(k>=CHAIN_PARTS)return chain_silent;
     s = chain.lane[k];
     return s < 4u ? chain.source[s].step[k] : chain_silent;
 }
@@ -123,7 +138,10 @@ static __attribute__((noinline)) void chain_apply(void)
     chain.clk = (uint8_t)chain_clock(r);
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
-        uint32_t s = r->slot[i];
+        uint32_t s = i<CHAIN_PARTS?r->slot[i]:CHAIN_SILENT;
+#if FELUCCA_SAMPLER_ONLY
+        if(chain.config.rsv[1]==0x4Du){if(i<3)t->p[P_MUTE]=(r->slot[3]>>i)&1u;else s=CHAIN_SILENT;}
+#endif
         chain.lane[i] = (uint8_t)(s < 4u ? s : CHAIN_SILENT);
         seq_release(t);
         motion_restore(t);
@@ -146,6 +164,10 @@ static void chain_start(void)
     uint32_t i;
     if (!chain.armed)
         return;
+#if FELUCCA_SAMPLER_ONLY
+    ko_scene_pending=255;ko_scene_restore=chain.config.rsv[1]==0x4Du;
+    if(ko_scene_restore)for(uint32_t k=0;k<3;k++)ko_scene_mutes[k]=(uint8_t)trk[k].p[P_MUTE];
+#endif
     chain.rec = song.rec;
     song.rec = 0;
     for (i = 0; i < NTRK; i++) {
@@ -167,6 +189,10 @@ static void chain_stop(void)
 {
     uint32_t i;
     chain.armed = 0;
+#if FELUCCA_SAMPLER_ONLY
+    ko_scene_pending=255;
+    if(ko_scene_restore){for(uint32_t k=0;k<3;k++)trk[k].p[P_MUTE]=ko_scene_mutes[k];ko_scene_restore=0;}
+#endif
 #if FELUCCA_KO
     if(ko_launch_mode && chain.running && ko_pattern_active<4) ko_pattern_commit=ko_pattern_active;
     ko_launch_ready=ko_launch_mode=0;ko_launch_pending=ko_pattern_active=255;ko_bar_pos=0;
@@ -193,9 +219,10 @@ static void chain_tick(uint32_t n)
         uint32_t bar=16u*div_samples(2);
         ko_bar_pos+=n;
         int at_end=t->seq_idx+1u==(uint32_t)t->p[P_SLEN] && t->seq_pos+n>=step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx);
+        if(ko_seq_end(t) && !chain.running)at_end=ko_end_boundary(t,n);
         int boundary=chain_config.rsv[0]==1 ? at_end : ko_bar_pos>=bar;
         if(boundary) {
-            uint32_t carry=chain_config.rsv[0]==1 ? t->seq_pos+n-step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx) : ko_bar_pos%bar;
+            uint32_t carry=chain_config.rsv[0]==1 ? (ko_seq_end(t) && !chain.running?0:t->seq_pos+n-step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx)) : ko_bar_pos%bar;
             ko_bar_pos=carry;
             uint32_t slot=ko_launch_pending;
             if(slot<4u) {
@@ -207,6 +234,17 @@ static void chain_tick(uint32_t n)
             }
         }
         if(ko_launch_mode) return; /* one pattern loops until another is launched */
+    }
+#endif
+#if FELUCCA_SAMPLER_ONLY
+    if(chain.running && !ko_launch_mode){
+        uint32_t bar=16u*div_samples(2);ko_bar_pos+=n;
+        int at_end=t->seq_idx+1u==(uint32_t)t->p[P_SLEN] && t->seq_pos+n>=step_samples(t,div_samples(t->p[P_SDIV]),t->seq_idx);
+        int boundary=chain.config.rsv[0]==1?at_end:ko_bar_pos>=bar;
+        if(ko_bar_pos>=bar)ko_bar_pos%=bar;
+        if(boundary && ko_scene_pending<chain.config.count){
+            chain.row=ko_scene_pending;ko_scene_pending=255;chain.remaining=chain.config.row[chain.row].repeat;chain.carry=0;chain_apply();return;
+        }
     }
 #endif
     if (!chain.running || t->seq_pos >= 0x7FFFFFFFu || t->seq_idx + 1u != (uint32_t)t->p[P_SLEN])

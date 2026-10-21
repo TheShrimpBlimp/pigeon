@@ -7,9 +7,10 @@ Reference revision: aa5875af20e3046ee161f988c5d91d3ae66d0c74.
 ## Before installing
 
 Charge the FM1 fully. Use a USB data cable directly to the computer, without a
-hub; keep the computer awake. When coming from another custom firmware, revert
-to official M-VAVE V15 using its documented stock-return procedure before
-installing PIGEON. Back up your instrument and keep it connected
+hub; keep the computer awake. When coming from another custom firmware, use
+[TransitFM1](https://quixotic7.github.io/TransitFM1/) as the stopover before
+installing PIGEON. TransitFM1 is currently host-tested only. Follow its supported-source
+instructions and documented alternatives if your firmware is refused. Back up your instrument and keep it connected
 until the installer verifies the restarted identity.
 
 Browser and command-line installers read the running firmware's INFO text,
@@ -17,7 +18,7 @@ because FM-1_9xx identities are shared by forks. Stock V1–V99, PIGEON, Felucca
 1.0 or later, Melodee, and ChoralRoot are recognized update sources. Sloop,
 FM-1_000 rescue mode, Felucca 0.x/beta builds, missing INFO on a 9xx identity,
 and unknown firmware are refused before the update command. Follow the source
-firmware's official-return procedure first. CLI --force overrides this refusal
+firmware’s supported transition path first; TransitFM1 also checks compatibility. CLI --force overrides this refusal
 and is explicitly unsafe. A checksum-verified official V15 return remains possible.
 
 ## v0.3 recovery stub version 5

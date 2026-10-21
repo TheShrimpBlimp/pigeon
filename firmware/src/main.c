@@ -223,6 +223,15 @@ static void fm1_main(void)
                 song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
         }
         master_poll();
+#if FELUCCA_USB_SAMPLE
+        ko_usb_poll();
+        ko_usb_meter();
+        if(ko_usb.state){
+            ui_input();ui_leds();
+            lcd_audio_last=fm1_ticks();lcd_audio_enabled=1;
+            ui_draw();lcd_audio_enabled=0;continue;
+        }
+#endif
 #if FELUCCA_KO_STORAGE
         ko_pcm_poll();
 #endif
@@ -292,6 +301,9 @@ static void fm1_main(void)
         felucca_dbg.home = ui.home;
         felucca_dbg.stage = 1;
         ui_input();
+#if FELUCCA_USB_SAMPLE
+        if(ko_usb.state)continue; /* recording may have started from this input */
+#endif
         settings_poll();                              /* queued settings save: only while stopped */
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
         felucca_dbg.stage = 2;
@@ -311,6 +323,9 @@ static void fm1_main(void)
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             ui_input();
+#if FELUCCA_USB_SAMPLE
+            if(ko_usb.state)break;
+#endif
 #if FELUCCA_KO_STORAGE
             /* PCM deadlines follow the audio clock, not the display clock.
              * Keep refilling voices throughout the UI frame wait. */

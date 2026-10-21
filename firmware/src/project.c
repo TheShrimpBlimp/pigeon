@@ -1144,12 +1144,13 @@ static int chain_copy_source(uint32_t i)
         motion_store_t *m = &chain.source[i].motion; uint32_t n = 0;
         for (uint32_t e = 0; e < m->count; e++) {
             const motion_event_t *v = &m->event[e]; uint32_t owner = v->place >> 6;
+            if(owner>=CHAIN_PARTS)continue;
             if (MOTION_ID(v) >= P_FM1_ATK && p->t[owner].engine != trk[owner].eng_req) continue;
             m->event[n++] = *v;
         }
         m->count = (uint8_t)n;
     }
-    for (k = 0; k < NTRK; k++) {
+    for (k = 0; k < CHAIN_PARTS; k++) {
         memcpy(chain.source[i].step[k], p->t[k].step, sizeof p->t[k].step);
         proj_steps(chain.source[i].step[k]);
         chain.source[i].qnt[k] = p->t[k].p[P_SQNT] != 0;
@@ -1168,8 +1169,8 @@ static uint32_t chain_prepare(void)
         return 2;
     if (!chain_valid(&chain_config) || !chain_config.count)
         return 1;
-    for (i = 0; i < chain_config.count; i++)            /* the slots the lanes play (not the silent ones) */
-        for (k = 0; k < NTRK; k++) {
+    for (i = 0; i < chain_config.count; i++)            /* only playable lanes; sampler lane 4 stores scene mutes */
+        for (k = 0; k < (FELUCCA_SAMPLER_ONLY?SAMPLER_PARTS:NTRK); k++) {
             uint32_t s = chain_config.row[i].slot[k];
             if (s >= 4u || ((used >> s) & 1u))
                 continue;

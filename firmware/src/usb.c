@@ -41,6 +41,15 @@
 #undef FELUCCA_UAC_AS_FIRST
 #define FELUCCA_UAC_AS_FIRST 0
 #endif
+#ifndef FELUCCA_USB_SAMPLE
+#define FELUCCA_USB_SAMPLE 0
+#endif
+#if FELUCCA_USB_SAMPLE && !FELUCCA_UAC
+#error "USB sampling requires USB audio"
+#endif
+#if FELUCCA_USB_SAMPLE
+#include "usb_sample_rx.h"
+#endif
 enum { S_FADDR = 0, S_POWER = 1, S_INTRTX1 = 2, S_INTRTX2 = 3, S_INTRRX1 = 4, S_INTRRX2 = 5, S_INTRUSB = 6,
        S_INTRTX1E = 7, S_INTRTX2E = 8, S_INTRRX1E = 9, S_INTRRX2E = 10, S_INTRUSBE = 11, S_FRAME1 = 12,
        S_FRAME2 = 13, S_INDEX = 14,
@@ -251,15 +260,29 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
  * end of the walk and the audio streaming interface is parsed. The class spec gives the order no meaning
  * (Linux takes each listed interface on its own); FELUCCA_UAC_AS_FIRST=0: 1.0 .. 1.5's order (MIDI first). */
 #if FELUCCA_UAC_AS_FIRST
-#define AC_COLL(a) (a) + 2, (a) + 1
+#define AC_COLL(a) (a) + 2, RX_COLL(a) (a) + 1
 #else
-#define AC_COLL(a) (a) + 1, (a) + 2
+#define AC_COLL(a) (a) + 1, (a) + 2 RX_COLL_LAST(a)
+#endif
+#if FELUCCA_USB_SAMPLE
+#define RX_COLL(a) (a) + 3,
+#define RX_COLL_LAST(a) , (a) + 3
+#define D_RX_TERMINALS 12,0x24,2,3,0x01,0x01,0,1,0,0,0,0, 9,0x24,3,4,0x01,0x03,0,3,0,
+#define D_RX_AS(a) 9,4,(a)+3,0,0,1,2,0,0, 9,4,(a)+3,1,1,1,2,0,0, \
+    7,0x24,1,3,1,1,0, 11,0x24,2,1,1,2,16,1,0x22,0x56,0, \
+    9,5,0x04,0x09,46,0,1,0,0, 7,0x25,1,0,0,0,0,
+#else
+#define RX_COLL(a)
+#define RX_COLL_LAST(a)
+#define D_RX_TERMINALS
+#define D_RX_AS(a)
 #endif
 #define D_AC(a)                                                                                      \
     9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
-    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, AC_COLL(a),         /* AC header 1.00: audio + MIDI streaming */ \
+    10+FELUCCA_USB_SAMPLE, 0x24, 1, 0x00, 0x01, 31+22*FELUCCA_USB_SAMPLE, 0, 2+FELUCCA_USB_SAMPLE, AC_COLL(a),         /* AC header 1.00: audio + MIDI streaming */ \
     12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
-    9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */
+    9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */ \
+    D_RX_TERMINALS
 #define D_AS(s)                                                                                      \
     9, 4, (s), 0, 0, 1, 2, 0, 0,                           /* audio streaming, alt 0: no bandwidth */    \
     9, 4, (s), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
@@ -270,6 +293,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 #else
 #define D_AC(a) 9, 4, (a), 0, 0, 1, 1, 0, 0, 9, 0x24, 1, 0x00, 0x01, 9, 0, 1, (a) + 1,
 #define D_AS(s)
+#define D_RX_AS(a)
 #endif
 #define D_MIDI(m)                                                                                    \
     9, 4, (m), 0, 2, 1, 3, 0, 0,                                                                     \
@@ -282,9 +306,9 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     5, 0x25, 1, 1, 1,                                                                                \
     9, 5, 0x81, 2, 64, 0, 0, 0, 0,                                                                   \
     5, 0x25, 1, 1, 3,
-#define D_AUDIO(a) D_AC(a) D_MIDI((a) + 1) D_AS((a) + 2)   /* audio + MIDI from interface a */
-#define AUD_NIF (2 + FELUCCA_UAC)
-#define AUD_LEN (92 + (63 + FMT_LEN) * FELUCCA_UAC)
+#define D_AUDIO(a) D_AC(a) D_MIDI((a) + 1) D_AS((a) + 2) D_RX_AS(a)   /* audio + MIDI from interface a */
+#define AUD_NIF (2 + FELUCCA_UAC + FELUCCA_USB_SAMPLE)
+#define AUD_LEN (92 + (63 + FMT_LEN) * FELUCCA_UAC + 74 * FELUCCA_USB_SAMPLE)
 #define D_CDC(c)                                                                                     \
     D_IAD((c), 2, 2, 2, 1),                                /* IAD: CDC ACM */                           \
     9, 4, (c), 0, 1, 2, 2, 1, 0,                           /* communication */                          \
@@ -298,7 +322,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     7, 5, 0x83, 2, 64, 0, 0,                               /* EP3 IN bulk */
 #define CDC_LEN 66                                         /* with its IAD */
 #define BCD_LO(cdc)                                                                                  \
-    (0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + 0x08 * FELUCCA_UAC_AS_FIRST + ((cdc) ? 0x01 + 2 * FELUCCA_USB_LAYOUT : 0))
+    (0x40 * FELUCCA_USB_SAMPLE + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + 0x08 * FELUCCA_UAC_AS_FIRST + ((cdc) ? 0x01 + 2 * FELUCCA_USB_LAYOUT : 0))
 #define D_DEV(bcdusb, cls, sub, proto, cdc)                                                          \
     18, 1, (bcdusb) & 0xFF, (bcdusb) >> 8, (cls), (sub), (proto), 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF, \
     FELUCCA_USB_PID >> 8, BCD_LO(cdc), 0x03, 1, 2, 0, 1
@@ -433,6 +457,16 @@ static void uac_ep4_reset(void)                         /* drop a queued packet;
     sie_wr(S_TXCSR2, 0x40);                             /* ISO */
 }
 
+#if FELUCCA_USB_SAMPLE
+/* Called with IRQs disabled from the main loop, after pre-erasing. USB hosts
+ * send silence continuously too: clear any OUT packet/overrun left by erasing. */
+static int usb_sample_hw_begin(void)
+{
+    sie_wr(S_INDEX,4);sie_wr(S_RXCSR1,0x90);sie_wr(S_RXCSR2,0x40);
+    return usb_sample_begin();
+}
+#endif
+
 static void uac_stream(uint32_t alt)                    /* SET_INTERFACE, configuration, bus reset */
 {
     uac.go = 0;                                         /* the next render primes the ring again */
@@ -503,6 +537,11 @@ no_cdc:;
 #endif
 #if FELUCCA_UAC
     fm1_usb_ep4_txbuf(ep4tx);
+#if FELUCCA_USB_SAMPLE
+    fm1_usb_ep4_rxbuf(usb_sample_packet);
+    sie_wr(S_INDEX,4);sie_wr(S_RXMAXP,46);sie_wr(S_RXCSR1,0x90);sie_wr(S_RXCSR2,0x40);
+    usb_sample_reset(0);
+#endif
     sie_wr(S_INDEX, 4);
     sie_wr(S_TXMAXP, 0xFF);
     uac_ep4_reset();
@@ -631,8 +670,15 @@ static void ep0_service(void)
         else
             sie_wr(S_INTRRX1E, 0);
 #if FELUCCA_UAC
-        if (usb.config != 1u)
+        if (usb.config != 1u) {
             uac_stream(0);
+#if FELUCCA_USB_SAMPLE
+            usb_sample_reset(0);
+#endif
+        }
+#if FELUCCA_USB_SAMPLE
+        usb_sample_reset(0);
+#endif
         uac_rate_set(UAC_RATE);                         /* a new configuration starts at 44.1 */
 #endif
         goto ack;
@@ -645,6 +691,12 @@ static void ep0_service(void)
         e0_send(zero2, 2, wlength);
         return;
     case 0x010B:                                        /* SET_INTERFACE: alt 0 (alt 1 for the audio stream) */
+#if FELUCCA_USB_SAMPLE
+        if(s[4]==AUD_IF+3u && wvalue<=1u && usb.config){
+            sie_wr(S_INDEX,4);sie_wr(S_RXCSR1,0x90);sie_wr(S_RXCSR2,0x40);
+            usb_sample_reset(wvalue);goto ack;
+        }
+#endif
 #if FELUCCA_UAC
         if (s[4] == UAC_AS_IF && wvalue <= 1u && usb.config) {
             uac_ep4_reset();
@@ -656,6 +708,9 @@ static void ep0_service(void)
             goto ack;
         goto stall;
     case 0x810A:
+#if FELUCCA_USB_SAMPLE
+        if(s[4]==AUD_IF+3u){e0_send((const uint8_t *)&usb_sample.alt,1,wlength);return;}
+#endif
 #if FELUCCA_UAC
         if (s[4] == UAC_AS_IF) {
             static uint8_t alt;
@@ -669,7 +724,7 @@ static void ep0_service(void)
     case 0x0201: {                                      /* CLEAR_FEATURE(ENDPOINT_HALT): data toggle reset */
         uint32_t ep = s[4] & 0x0Fu, last = USB_CDC_ON ? 3u : 1u;
 #if FELUCCA_UAC
-        if (wvalue == 0 && s[4] == 0x84u)
+        if (wvalue == 0 && (s[4] == 0x84u || (FELUCCA_USB_SAMPLE && s[4] == 0x04u)))
             goto ack;                                   /* isochronous: no halt, no toggle */
 #endif
         if (wvalue != 0 || ep > last)
@@ -1204,6 +1259,19 @@ static uint32_t uac_packet(uint32_t *d)
  * and a recorder may stop reading without going back to alt 0 (a packet waiting > 20 ms). */
 static void uac_service(void)
 {
+#if FELUCCA_USB_SAMPLE
+    if(usb.up && usb.config && !usb.suspended && usb_sample.alt){
+        sie_wr(S_INDEX,4);uint32_t rx=sie_rd(S_RXCSR1)|(sie_rd(S_RXCSR2)<<8);
+        if(rx&1u){
+            uint32_t bytes=sie_rd(S_RXCOUNT1)|sie_rd(S_RXCOUNT2)<<8;
+            fm1_usb_rx_sync();
+            if((rx&4u) && usb_sample.armed)usb_sample.fault=4;
+            usb_sample_take(usb_sample_packet,bytes);
+            rx=usb_sample_ack(rx);sie_wr(S_RXCSR1,rx&255u);sie_wr(S_RXCSR2,rx>>8);
+        }
+    }
+#endif
+
     uint32_t csr, n;
     if (!usb.up || !usb.config || !uac.alt)
         return;
@@ -1293,6 +1361,9 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
 #if FELUCCA_UAC
         uac.e0_rx = 0;
         uac_stream(0);
+#if FELUCCA_USB_SAMPLE
+        usb_sample_reset(0);
+#endif
         uac_rate_set(UAC_RATE);
 #endif
         fm1_usb_ep0_buf(ep0buf);

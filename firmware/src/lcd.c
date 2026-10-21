@@ -15,6 +15,10 @@ static uint8_t lcd_small[64];
 static uint8_t lcd_busy;           /* a lcd_data DMA may still run; CS is low */
 #if FELUCCA_KO_STORAGE
 static void ko_pcm_poll(void);
+#if FELUCCA_USB_SAMPLE
+static void ko_usb_poll(void);
+static void lcd_sync(void);
+#endif
 static uint8_t lcd_audio_enabled; /* main loop enables only around UI drawing */
 static uint32_t lcd_audio_last;
 static void lcd_audio_service(void)
@@ -22,6 +26,10 @@ static void lcd_audio_service(void)
     uint32_t now=fm1_ticks();
     if (!lcd_audio_enabled || (uint32_t)(now-lcd_audio_last)<1000u*FM1_TICKS_PER_US) return;
     lcd_audio_last=now;
+#if FELUCCA_USB_SAMPLE
+    lcd_sync(); /* do not program flash with an LCD DMA still reading its source */
+    ko_usb_poll();
+#endif
     ko_pcm_poll(); /* never draws, handles input, or changes the LCD DMA source */
 }
 #endif

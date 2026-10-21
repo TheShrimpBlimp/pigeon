@@ -16,5 +16,6 @@ await reader.receive(frame(16,1,'K1 FEEDBK 10'));assert.equal(heard.at(-1).text,
 reader.mode='voice';reader.say('CANNOT SAVE',3);assert.equal(voices.length,1);const before=speech.cancelled;
 reader.say('SAVED',1);assert.equal(speech.cancelled,before,'protected warning must not be interrupted');assert.equal(voices.length,1);
 voices[0].onend();assert.equal(voices.length,2);assert.equal(voices[1].text,'saved');
+reader.repeat();assert.equal(heard.at(-1).text,'saved');
 reader.close();assert.equal(sent.at(-1)[4],2);const count=heard.length;await reader.receive(frame(16,1,'K1 20'));assert.equal(heard.length,count);
 console.log('PIGEON reader browser adapter: framing, dictionary, opt-in, WHERE, protected speech and disconnect passed.');

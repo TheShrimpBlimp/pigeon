@@ -12,6 +12,9 @@ export FELUCCA_KO_STORAGE=1
 export FELUCCA_SAMPLER_ONLY=1
 export FELUCCA_KO_DUAL=1
 export FELUCCA_CDC=0
+export FELUCCA_KO_SCRATCH=0
+export FELUCCA_USB_SAMPLE=1
+export FELUCCA_KO_MAINT=1
 ./build.sh
 "${PYTHON:-python3}" tools/pigeon_profile_audit.py build/felucca.dis
 cp build/felucca.fwsc build/pigeon.fwsc

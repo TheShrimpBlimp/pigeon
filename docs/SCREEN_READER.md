@@ -20,7 +20,13 @@ Connecting the reader does not change samples, sessions or settings.
 
 Enable **screen announcements**, then choose **My screen reader** or **Browser
 voice**. Use **Read current screen** to repeat the page. Announcements start off.
-The published v0.4 emulator includes its matching dictionary.
+The published v0.4 emulator includes its matching dictionary. The emulator remembers
+announcement and output preferences in this browser. **Say it again** repeats the
+last announcement; **Read current screen** requests all current controls.
+
+Panel buttons and piano keys support screen-reader activation clicks. Tab to a
+key and press Enter or Space to hold it; release to stop. Focused knobs respond
+to arrow keys. Moving focus away releases a keyboard-held button or piano key.
 
 ## Announcements
 

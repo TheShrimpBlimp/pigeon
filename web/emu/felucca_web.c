@@ -641,7 +641,7 @@ EXPORT uint32_t web_sample_pool_size(void) { return web_bank_capacity; }
 EXPORT void web_clear_bank(void) {
     seq_stop();for(uint32_t k=0;k<NTRK;k++)trk_all_off(&trk[k]);
     web_bank_memory=0;web_bank_capacity=KO_BANK_CAPACITY;
-    for(uint32_t off=0;off<0x7D000u;) {uint32_t avail,phys=ko_bank_phys(off,&avail);memset(nor+phys,255,avail);off+=avail;}
+    for(uint32_t off=0;off<0x7E000u;) {uint32_t avail,phys=ko_bank_phys(off,&avail);memset(nor+phys,255,avail);off+=avail;}
     memset(nor+SMP_USER_BASE+SLC_REC_OFF,255,4096u);
     for(uint32_t k=0;k<SMP_USER_SLOTS;k++)smp_user_scan(k);
     memset(ko_states,0,sizeof ko_states);ko.on=1;ko_setup();ui.force=1;web_flash_writes++;

@@ -27,6 +27,15 @@
 #if FELUCCA_KO_DUAL && !FELUCCA_KO
 #error "Two-song profile requires KO"
 #endif
+#ifndef FELUCCA_KO_MAINT
+#define FELUCCA_KO_MAINT 0
+#endif
+#ifndef FELUCCA_USB_SAMPLE
+#define FELUCCA_USB_SAMPLE 0
+#endif
+#ifndef FELUCCA_KO_SCRATCH
+#define FELUCCA_KO_SCRATCH 1 /* optional deck; 0.5 product reserves its memory for USB sampling */
+#endif
 #define SAMPLER_PARTS (FELUCCA_KO_DUAL ? 3u : 2u)
 #define UI_TRACK_COUNT (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NTRK)
 #include "project_identity.h"

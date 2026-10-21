@@ -9,8 +9,10 @@ This guide describes PIGEON v0.4 and Sample Loader 2.0: 496 KiB shared storage, 
 ## 1. Prepare your FM1
 
 Back up samples and projects before changing firmware. When coming from
-another custom firmware, revert to official M-VAVE V15 using that firmware’s
-documented stock-return procedure, then install PIGEON. Use a charged FM1,
+another custom firmware, use [TransitFM1](https://quixotic7.github.io/TransitFM1/)
+as the stopover, following its supported-source instructions, then install PIGEON.
+TransitFM1 is currently host-tested only. Follow its documented alternatives if
+it refuses your source firmware. Use a charged FM1,
 a direct USB data cable and desktop Chrome or Edge. Stop playback, release
 keys, close other MIDI apps and keep the computer awake during transfers.
 

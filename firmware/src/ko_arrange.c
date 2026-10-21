@@ -77,6 +77,7 @@ static int ko_pattern_select(uint32_t slot)
     if(transport_busy()) {
         if(!song.playing || !ko_launch_ready || (chain.running && !ko_launch_mode)) {ui_message("STOP / PLAY PATTERNS");return 0;}
         if(!(ko_pattern_mask&(1u<<slot))) {ui_message("EMPTY PATTERN");return 0;}
+        if(ko_launch_pending==slot){ko_launch_pending=255;ui.force=1;ui_message("LAUNCH CANCELLED");return 1;}
         ko_pattern_sel=(uint8_t)slot;RING_PUBLISH();ko_launch_pending=(uint8_t)slot;
         ui.force=1;ui_message(chain_config.rsv[0]==1?"QUEUED: PATTERN END":"QUEUED: NEXT BAR");return 1;
     }
@@ -97,7 +98,7 @@ static int ko_pattern_request(uint32_t slot){
 static void ko_pattern_copy(void)
 {
     if(transport_busy()) {ui_message("STOP TO COPY");return;}
-    for(uint32_t k=0;k<NTRK;k++) {
+    for(uint32_t k=0;k<CHAIN_PARTS;k++) {
         memcpy(ko_clipboard.step[k],trk[k].step,sizeof trk[k].step);
         for(uint32_t j=0;j<4;j++) ko_clipboard.timing[k][j]=motion_base_value(&trk[k],P_SLEN+j);
         ko_clipboard.qnt[k]=(uint8_t)trk[k].p[P_SQNT];
@@ -132,7 +133,7 @@ static void ko_section_add(uint32_t slot)
     if(chain_config.count>=CHAIN_ROWS) {ui_message("16 SECTIONS FULL");return;}
     uint32_t at=(ko.view==9 || ko.view==18) && ko_section<chain_config.count ? ko_section+1u : chain_config.count;
     for(uint32_t i=chain_config.count;i>at;i--) chain_config.row[i]=chain_config.row[i-1];
-    chain_config.row[at]=chain_row_of(slot,1);chain_config.count++;ko_section=(uint8_t)at;ui.force=1;
+    chain_config.row[at]=chain_row_of(slot,1);if(chain_config.rsv[1]==0x4D)chain_config.row[at].slot[3]=0;chain_config.count++;ko_section=(uint8_t)at;ui.force=1;
 }
 static void ko_section_delete(void)
 {
@@ -164,7 +165,7 @@ static void ko_arrange_turn(uint32_t k,int32_t steps)
     if(ko.view==8) {
         if(!k) ko_pattern_request((uint32_t)clamp((int32_t)ko_pattern_sel+steps,0,3));
         else if(k==1) {
-            if(transport_busy()) {ui_message("STOP TO COPY");return;}
+            if(transport_busy()) {chain_config.rsv[0]=(uint8_t)(steps>0);ui.force=1;ui_message(steps>0?"AT PATTERN END":"AT NEXT BAR");return;}
             uint32_t slot=(uint32_t)clamp((ko_copy_slot<4?ko_copy_slot:0)+steps,0,3);
             if(project_used(slot) && chain_copy_source(slot)) {ko_clipboard=chain.source[slot];ko_clip_valid=1;ko_copy_slot=(uint8_t)slot;ko_paste_target=255;ui_message("SAVED PATTERN COPIED");}
             else ui_message("EMPTY PATTERN");
@@ -176,7 +177,7 @@ static void ko_arrange_turn(uint32_t k,int32_t steps)
         if(k==3) {if(steps>0) ko_section_add(ko_pattern_sel);else ko_section_delete();}
         else if(ko_section<chain_config.count) {
             chain_row_t *r=&chain_config.row[ko_section];
-            if(k==1) {*r=chain_row_of((uint32_t)clamp((int32_t)r->slot[0]+steps,0,3),r->repeat);ko_pattern_sel=r->slot[0];}
+            if(k==1) {uint32_t track=song.sel<SAMPLER_PARTS?song.sel:0;r->slot[track]=(uint8_t)clamp((int32_t)r->slot[track]+steps,0,CHAIN_SILENT);if(r->slot[track]<4)ko_pattern_sel=r->slot[track];}
             else if(k==2) r->repeat=(uint8_t)clamp((int32_t)r->repeat+steps,1,16);
         }
     }
@@ -185,16 +186,28 @@ static void ko_arrange_turn(uint32_t k,int32_t steps)
 static void ko_pattern_keys(uint32_t notes)
 {
     for(uint32_t key=0;key<27;key++) if((notes>>key)&1u) {
-        int32_t pad=ko_pad(key);if(pad<0 || pad>3) continue;
-        if(ko.view==9) ko_section_add((uint32_t)pad);else ko_pattern_request((uint32_t)pad);
+        int32_t pad=ko_pad(key);if(pad<0)continue;
+#if FELUCCA_SAMPLER_ONLY
+        if(ko.view==9 && chain.running && !ko_launch_mode){if((uint32_t)pad<chain.config.count){ko_scene_pending=ko_scene_pending==pad?255:(uint8_t)pad;ui.force=1;}continue;}
+#endif
+        if(pad>3)continue;
+        if(ko.view==9)ko_section_add((uint32_t)pad);else ko_pattern_request((uint32_t)pad);
     }
 }
+#if FELUCCA_SAMPLER_ONLY
+static void ko_scene_capture(void){
+ if(transport_busy() || ko_section>=chain_config.count){ui_message("STOP / SELECT A SECTION");return;}
+ if(chain_config.rsv[1]!=0x4D){for(uint32_t i=0;i<chain_config.count;i++)chain_config.row[i].slot[3]=0;chain_config.rsv[1]=0x4D;}
+ uint32_t mask=0;for(uint32_t k=0;k<3;k++)mask|=(trk[k].p[P_MUTE]!=0)<<k;
+ chain_config.row[ko_section].slot[3]=(uint8_t)mask;ui.force=1;ui_message("SCENE MUTES CAPTURED");
+}
+#endif
 static int ko_pattern_start(int arrangement)
 {
     if(transport_busy()) return 0;
     if(arrangement) {ko_launch_ready=ko_launch_mode=0;ko_launch_pending=255;chain_play_ui();return chain.armed;}
     ko_pattern_preload();
     if(!(ko_pattern_mask&(1u<<ko_pattern_sel))) {ui_message("EMPTY PATTERN");return 0;}
-    chain.config.count=1;chain.config.row[0]=chain_row_of(ko_pattern_sel,1);
+    chain.config.rsv[1]=0;chain.config.count=1;chain.config.row[0]=chain_row_of(ko_pattern_sel,1);
     ko_launch_mode=1;RING_PUBLISH();chain.armed=1;transport_req=1;ui.force=1;return 1;
 }

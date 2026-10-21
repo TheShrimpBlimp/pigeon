@@ -50,23 +50,26 @@ static void ko_arrange_draw(int force)
         ko_pattern_prompt(text,sizeof text);
         ko_line(140,text,T_MID);
         ko_pattern_tiles(force);
-        ko_line(158,"K1 SLOT / K2 COPY FROM",T_MID);
+        ko_line(158,song.playing?"K2 BAR- / PATTERN END+":"K1 SLOT / K2 COPY FROM",T_MID);
         ko_line(176,"K3 CHAIN ADD+ / REMOVE-",T_MID);
         ko_line(194,"FX COPY / LFO PASTE",T_MID);
         ko_line(205,"SAVE ALL / PLAY LOOP",T_MID);
         ko_line(224,"SCL ARRANGE / EDIT BACK",T_MID);
     } else {
         ko_line(29,"ARRANGEMENT / ALL TRACKS",T_THEME);
-        ko_page("ARRANGEMENT", "SAVE ALL / PLAY SONG", "SCL WAVE / ENV TOOLS");
+        ko_page("ARRANGEMENT", "FX CAPTURE MUTES / SAVE ALL", "SCL WAVE / ENV TOOLS");
         uint32_t row=chain.running && !ko_launch_mode?chain.row:ko_section;
         ko_fx_number(0,"K1 SECTION",row+1,"",0);
         if(row<chain_config.count){
             const chain_row_t *r=chain.running && !ko_launch_mode?&chain.config.row[row]:&chain_config.row[row];
-            char pattern[2]={r->slot[0]<4?(char)('A'+r->slot[0]):'-',0};
-            int mixed=0;for(uint32_t k=1;k<SAMPLER_PARTS;k++)mixed|=r->slot[k]!=r->slot[0];
-            ko_card(1,"K2 PATTERN",mixed?"MIXED LANES":pattern);
+            char pattern[16]={r->slot[song.sel]<4?(char)('A'+r->slot[song.sel]):'-',0};
+            if(chain_config.rsv[1]==0x4D && ((r->slot[3]>>song.sel)&1u))str_cpy(pattern+1," MUTED",sizeof pattern-1);
+            ko_card(1,"K2 THIS TRACK",pattern);
             ko_fx_number(2,"K3 REPEATS",r->repeat,"",0);
         }else {ko_card(1,"KEYS 1-4 APPEND","A / B / C / D");ko_card(2,"K3 REPEATS","EMPTY");}
         ko_card(3,"K4 + / -","INSERT / DEL");
+#if FELUCCA_SAMPLER_ONLY
+        if(ko_scene_pending<chain_config.count && chain.running)ko_value(49,"QUEUED SCENE ",ko_scene_pending+1);
+#endif
     }
 }

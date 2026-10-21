@@ -59,7 +59,9 @@ typedef struct {
     uint8_t pad;
 } drum_lane_t;
 
+#if !FELUCCA_SAMPLER_ONLY
 ENG_MEM_FITS("DRUM", sizeof(drum_lane_t) * DV_NLANE);
+#endif
 /* 1.4.1: each part's lanes muted (bit l: lane l), the EDIT layer's black keys 1..8 (ui_layer.c EQA_DRUM): a channel
  * mute. The lane plays on as always (hits, keys, MIDI: its voice, the CPU, the choke) and drum_render drops its output,
  * so unmuted it sounds as if it never was. Performance state: not saved, not recorded, no undo; a sound load into the

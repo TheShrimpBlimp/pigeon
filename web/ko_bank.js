@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Pure local bank preview. No MIDI access or upload occurs here. */
 (function(root) {
-  const SIZE=0x7D000, HEAD=4096, HEADER=668;
+  const SIZE=0x7E000, HEAD=4096, HEADER=668;
   function crc(b) { let c=0xffffffff; for(const x of b) { c^=x; for(let i=0;i<8;i++) c=(c>>>1)^((c&1)?0xedb88320:0); } return (c^0xffffffff)>>>0; }
   function inspect(bytes) {
     const b=new Uint8Array(bytes), v=new DataView(b.buffer,b.byteOffset,b.byteLength);
@@ -10,7 +10,7 @@
     if(u(0)!==0x32424f4b || ![2,3].includes(version) || used<HEAD || used>SIZE || ![used,used+4096].includes(b.length) || crc(b.subarray(HEAD,used))!==u(12)) throw Error('Invalid bank length or CRC');
     function song(off) {
       const f=Array.from({length:20},(_,i)=>u(off+4*i));
-      if(f[0]!==0x32424f4b || crc(b.subarray(off,off+HEADER-4))!==u(off+HEADER-4) || f[2]!==used || f[3]!==u(12) || ![1,2].includes(f[4]) || f[5]<4000 || f[5]>44100 || !f[6] || f[6]>8000000 || f[11]>16 || f[16]<1 || f[16]>32 || f[15]<1 || f[15]>4096 || !(HEAD<=f[9] && f[9]+f[10]<=f[7] && f[7]<f[7]+f[8] && f[7]+f[8]<=f[14] && f[14]+f[15]*2<=used)) throw Error('Invalid song descriptor');
+      if(f[0]!==0x32424f4b || crc(b.subarray(off,off+HEADER-4))!==u(off+HEADER-4) || f[2]!==used || f[3]!==u(12) || ![1,2].includes(f[4]) || f[5]<4000 || f[5]>44100 || !f[6] || f[6]>8000000 || f[11]>16 || f[16]<1 || f[16]>32 || f[15]<1 || f[15]>4096 || !(HEAD<=f[9] && f[9]+f[10]<=used && HEAD<=f[7] && f[7]<f[7]+f[8] && f[7]+f[8]<=f[14] && f[14]+f[15]*2<=used) || (f[10] && f[7]<f[9]+f[10] && f[9]<f[14]+f[15]*2)) throw Error('Invalid song descriptor');
       if(f[18] || f[19] || f[17] !== (off===0 && version===3 ? HEADER : 0) || f[1] !== (off===0 ? version : 2)) throw Error('Unsupported song descriptor');
       const starts=Array.from({length:f[16]},(_,i)=>u(off+80+i*4));
       if(starts[0] || starts.some((n,i)=>n>=f[6] || (i && n<=starts[i-1]))) throw Error('Invalid chops');
@@ -34,7 +34,7 @@
     const songs=[song(0)];
     if(version===3) {
       const second=song(HEADER), f=second.fields;
-      if(f[11] || f[10] || f[7]<songs[0].fields[14]+songs[0].fields[15]*2) throw Error('Overlapping second song');
+      if(f[11] || f[10] || (songs[0].fields[10] && f[7]<songs[0].fields[9]+songs[0].fields[10] && songs[0].fields[9]<f[14]+f[15]*2) || !(f[7]>=songs[0].fields[14]+songs[0].fields[15]*2 || songs[0].fields[7]>=f[14]+f[15]*2)) throw Error('Overlapping second song');
       songs.push(second);
     }
     return {version,used,songs,pads:u(44),kitBytes:u(40),payloadUsed:used-HEAD,capacity:SIZE-HEAD,free:SIZE-used,headerBytes:HEADER*songs.length};

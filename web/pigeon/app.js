@@ -1,3 +1,5 @@
+import {mountChopLibrary} from './chop-library.js';
+import {sessionInfo,replacementNotice} from "./session-info.js";
 import { arrangeWorkspace } from "./layout.js";
 import {cloneClips,deleteRange,sliceTimeline,splitTimeline,pasteTimeline,moveClip,timelineLength} from "./timeline.js";
 import {assemble,trimmedSegments,mergedChops} from './audio-assembly.js';
@@ -17,7 +19,7 @@ import {
   HEAD,
   join,
 } from "./bank.js";
-import { editors as createEditors } from "./editors.js?v=31";
+import { editors as createEditors } from "./editors.js?v=32";
 import { WaveEditor } from "./wave-editor-v2.js";
 import { Package, logicalImage } from "../fm1pkg.js";
 import { Updater } from "../fm1ota.js";
@@ -39,7 +41,7 @@ const sources = [null, null],
   pendingPads = Array(16).fill(null);
 let labels = {};
 let kitReplaceAll = false,
-  editors = null;
+  editors = null, chopLibrary = null;
 const trimWaves = [null, null], clipLists=[[],[]], draftEditors=[null,null];
 let audioClipboard=[],activeAudioEditor=null;
 const db = new Promise((resolve, reject) => {
@@ -83,10 +85,12 @@ function controls() {
       initializing ||
       busy ||
       (e.hasAttribute("data-bank") && !image) ||
-      (e.hasAttribute("data-device") && !device);
+      (e.hasAttribute("data-device") && !device) || (e.hasAttribute("data-session") && !archive);
   });
   $("send-help").textContent=initializing?"Preparing the tool…":busy?"Operation in progress — keep USB connected.":!image?"Open a .kob bank or import Song 1 before sending.":!device?"Bank ready. Connect the FM1 and select matching MIDI ports before sending.":"Bank and FM1 ready. Press Send bank to review the transfer.";
   $("undo").disabled = initializing || busy || !(activeAudioEditor!==null?draftEditors[activeAudioEditor]?.canUndo():undoStack.length);
+  if($("chop-undo"))$("chop-undo").disabled=initializing||busy||!undoStack.length;
+  if($("chop-redo"))$("chop-redo").disabled=initializing||busy||!redoStack.length;
   $("redo").disabled = initializing || busy || !(activeAudioEditor!==null?draftEditors[activeAudioEditor]?.canRedo():redoStack.length);
   draftEditors.forEach(editor=>editor?.controls());
   $("open-emulator").disabled=initializing||busy||!image;
@@ -221,7 +225,7 @@ function wave(canvas, pcm, starts = []) {
     c.stroke();
   }
 }
-async function play(pcm, rate = 22050, loop = false, wave = null, offset = 0) {
+async function play(pcm, rate = 22050, loop = false, wave = null, offset = 0, options = {}) {
   const c = await context();
   playing?.stop();
   const b = c.createBuffer(1, pcm.length, rate);
@@ -229,9 +233,9 @@ async function play(pcm, rate = 22050, loop = false, wave = null, offset = 0) {
   playing = c.createBufferSource();
   playing.buffer = b;
   playing.connect(c.destination);
-  playing.loop = loop;
-  playing.start();
-  if(wave){const source=playing,start=c.currentTime;const tick=()=>{if(playing!==source||!wave.pcm)return;const elapsed=(c.currentTime-start)*rate;if(!source.loop&&elapsed>=pcm.length)return;wave.setCursor(offset+(source.loop?elapsed%pcm.length:elapsed));frame=requestAnimationFrame(tick);};let frame=requestAnimationFrame(tick);source.onended=()=>cancelAnimationFrame(frame);}
+  playing.loop = loop;playing.playbackRate.value=options.playbackRate||1;playing.loopStart=(options.loopStart||0)/rate;playing.loopEnd=pcm.length/rate;
+  playing.start(0,(options.start||0)/rate);
+  if(wave){const source=playing,start=c.currentTime;const tick=()=>{if(playing!==source||!wave.pcm)return;const elapsed=(options.start||0)+(c.currentTime-start)*rate*(options.playbackRate||1);if(!source.loop&&elapsed>=pcm.length)return;const pos=source.loop&&elapsed>=pcm.length?(options.loopStart||0)+(elapsed-pcm.length)%(pcm.length-(options.loopStart||0)):elapsed;wave.setCursor(options.mapPosition?options.mapPosition(pos):offset+pos);frame=requestAnimationFrame(tick);};let frame=requestAnimationFrame(tick);source.onended=()=>cancelAnimationFrame(frame);}
 }
 async function songAudio(slot) {
   const s = component(image, slot);
@@ -298,9 +302,10 @@ async function remember(key, name) {
 }
 function render() {
   editors?.refresh();
+  chopLibrary?.refresh();
   const info = image ? inspect(image) : null;
   $("used").textContent = info
-    ? `${(info.payloadUsed / 1024).toFixed(1)} / 496 KiB used`
+    ? `${(info.payloadUsed / 1024).toFixed(1)} / 500 KiB used`
     : "No bank loaded";
   $("free").textContent = info
     ? `${(info.free / 1024).toFixed(1)} KiB free`
@@ -571,6 +576,7 @@ $("open").onchange = () =>
     if (file.name.toLowerCase().endsWith(".pigeon")) {
       const a = JSON.parse(await file.text()),
         v = validateArchive(a);
+      if(image && !confirm(replacementNotice(snapshot(),{image:v.bank,archive:a})))return;
       await updateBank(v.bank);
       archive = a;
       if (a.labels && typeof a.labels === "object") {
@@ -583,9 +589,11 @@ $("open").onchange = () =>
         "Session opened and validated locally. Restore sends its projects, settings, and samples.",
       );
     } else {
+      const next=new Uint8Array(await file.arrayBuffer());inspect(next);
+      if(image && !confirm(replacementNotice(snapshot(),{image:next,archive:null})))return;
       archive = null;
       await store("session", null);
-      await updateBank(new Uint8Array(await file.arrayBuffer()));
+      await updateBank(next);
       status("Sample bank opened locally.");
     }
     sources.fill(null);clipLists.forEach(c=>c.length=0);draftEditors.forEach(e=>e?.reset());
@@ -702,7 +710,7 @@ async function protect() {
 $("upload").onclick = () => {
   if(busy || initializing || !image || !device){controls();return;}
   const info=inspect(image);
-  $("send-summary").textContent=`Replace both FM1 songs and the kit with ${info.songs.map(s=>s.name).join(" + ")} and ${info.pads} drum pads (${(info.payloadUsed/1024).toFixed(1)} KiB)?`;
+  $("send-summary").textContent=`Sample-bank transfer: patterns and device settings are kept. Replace both FM1 songs and the kit with ${info.songs.map(s=>s.name).join(" + ")} and ${info.pads} drum pads (${(info.payloadUsed/1024).toFixed(1)} KiB)?`;
   $("send-review").hidden=false;
   $("send-review").scrollIntoView({block:"nearest"});
   $("send-confirm").focus();
@@ -736,7 +744,11 @@ $("restore").onclick = () =>
     validateArchive(archive);
     if (
       !confirm(
-        "Restore the opened session, replacing the FM1 projects, settings, and samples? Stop playback and release all keys. A recovery session will be saved first. Keep USB connected until verification finishes.",
+        `Restore this complete session to the FM1?
+
+${sessionInfo({image,archive})}
+
+This replaces projects, settings, and samples. Stop playback and release all keys. A recovery session will be saved first. Keep USB connected until verification finishes.`,
       )
     )
       return;
@@ -783,21 +795,33 @@ async function offline() {
 async function libraryEntries() { return (await load("saved-library")) || []; }
 async function refreshLibrary() {
   const entries=await libraryEntries();
-  $("library-list").replaceChildren(...entries.map(e=>new Option(`${e.name} (${e.value.archive?"session":"bank"})`,e.id)));
+  const selected=$("library-list").value;$("library-list").replaceChildren(...entries.map(e=>new Option(`${e.name} (${e.value.archive?"session":"bank"})`,e.id)));if(entries.some(e=>e.id===selected))$("library-list").value=selected;await libraryPreview();
 }
+async function libraryPreview(){const entry=(await libraryEntries()).find(e=>e.id===$("library-list").value);$("library-preview").textContent=entry?`${entry.name}
+${sessionInfo(entry.value)}`:"No saved entries. Save a named bank or complete session to begin.";}
+$("library-list").onchange=()=>libraryPreview().catch(e=>status(e.message,true));
+$("session-download").onclick=()=>run(async()=>{if(!archive)throw Error("Open a complete session or back up the FM1 first; a bank alone has no patterns to export.");saveArchive(`${$("library-name").value.trim()||'pigeon-session'}.pigeon`,archive);status("Complete session downloaded, including patterns and samples");});
 $("library-save").onclick=()=>run(async()=>{
   if(!image)throw Error("Open a bank or session first");
   const name=$("library-name").value.trim();if(!name)throw Error("Enter a library name");
-  const entries=await libraryEntries();entries.push({id:crypto.randomUUID(),name,value:snapshot()});
+  const entries=await libraryEntries(),value=snapshot();if($("library-kind").value==='bank')value.archive=null;
+  const old=entries.find(e=>e.name===name);
+  if(old){if(!confirm(`Overwrite saved “${name}”?
+
+${sessionInfo(old.value)}
+
+WITH
+${sessionInfo(value)}`))return;old.value=value;old.updated=new Date().toISOString();}
+  else entries.push({id:crypto.randomUUID(),name,value,updated:new Date().toISOString()});
   await store("saved-library",entries);await refreshLibrary();status("Saved in this browser’s library");
 });
 $("library-load").onclick=()=>run(async()=>{
   const entry=(await libraryEntries()).find(e=>e.id===$("library-list").value);
-  if(!entry)throw Error("Choose a library entry");await restoreWorkspace(entry.value);status("Library entry loaded locally");
+  if(!entry)throw Error("Choose a library entry");if(image && !confirm(replacementNotice(snapshot(),entry.value)))return;const before=snapshot();await restoreWorkspace(entry.value);undoStack.push(before);redoStack.length=0;status("Library entry loaded locally");
 });
 $("library-rename").onclick=()=>run(async()=>{
   const entries=await libraryEntries(),entry=entries.find(e=>e.id===$("library-list").value),name=$("library-name").value.trim();
-  if(!entry||!name)throw Error("Choose an entry and enter its new name");entry.name=name;await store("saved-library",entries);await refreshLibrary();
+  if(!entry||!name)throw Error("Choose an entry and enter its new name");if(entries.some(e=>e.id!==entry.id && e.name===name))throw Error("Another saved entry already has that name");entry.name=name;await store("saved-library",entries);await refreshLibrary();
 });
 $("library-download").onclick=()=>run(async()=>{
   const entry=(await libraryEntries()).find(e=>e.id===$("library-list").value);if(!entry)throw Error("Choose an entry");
@@ -813,6 +837,7 @@ editors = createEditors({
   bank: () => image,
   archive: () => archive,
   setBank: updateBank,
+  history: historyStep,
   setArchive: async (a) => {
     validateArchive(a);
     await store("session", a);
@@ -940,6 +965,10 @@ if(emulatorLink){
   status(session?'Emulator session ready: current sequence, saved A–D patterns, settings, and samples. Connect your FM1, then use Restore session to FM1. This replaces its projects, settings, and sample bank.':'Emulator bank ready, including chop settings. Connect your FM1, then press Send bank to FM1. This replaces its sample bank.');
  }catch(e){status(`Emulator bank could not be opened: ${e.message}`,true);}
 }
+chopLibrary=mountChopLibrary({bank:()=>image,load,store,run,play,download,encode,songAudio,setBank:updateBank,stop:()=>playing?.stop(),
+  resample:async(pcm,rate,target)=>{const offline=new OfflineAudioContext(1,Math.ceil(pcm.length*target/rate),target),buffer=offline.createBuffer(1,pcm.length,rate);buffer.copyToChannel(pcm,0);const source=offline.createBufferSource();source.buffer=buffer;source.connect(offline.destination);source.start();return (await offline.startRendering()).getChannelData(0).slice();}
+});
+await chopLibrary.ready;
 arrangeWorkspace();
 const offlineReady = await caching;
 initializing = false;

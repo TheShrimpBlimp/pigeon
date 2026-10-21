@@ -26,7 +26,7 @@ try{
  assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'0000001');
  assert(await page.locator('#save-bank').isDisabled());assert(await page.locator('#open-loader').isDisabled());
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
- assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 496 KiB');
+ assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 500 KiB');
  await page.locator('#song1-file').setInputFiles({name:'editable.wav',mimeType:'audio/wav',buffer:wav(2)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'Empty','choosing a file must not load it before editing');
@@ -93,7 +93,7 @@ try{
  await page.locator('#song1-file').setInputFiles({name:'too-long.wav',mimeType:'audio/wav',buffer:wav(65)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  await page.locator('#song1-editor .apply-section').click();
- await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('496 KiB'));
+ await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('500 KiB'));
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
  await page.locator('#song1-quality').evaluate(e=>e.closest('details').open=true);await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'compressed.wav',mimeType:'audio/wav',buffer:wav(65)});
@@ -101,7 +101,7 @@ try{
  await page.locator('#song1-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'compressed.wav');
- assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=507904);
+ assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=512000);
  await page.locator('#storage-mode').selectOption('unlimited');await page.locator('#song1-file:not([disabled])').waitFor();
  assert(await page.locator('#song1-quality').isHidden());
  await page.locator('#save-bank').click();await page.getByText('This unlimited bank is too large for an FM1. Switch to limited storage mode and reduce the audio or MP3 quality before exporting.',{exact:true}).waitFor();

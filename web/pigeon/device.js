@@ -73,7 +73,7 @@ export class Device {
       a.length !== 10 ||
       a[0] !== 75 ||
       ![2, 3].includes(a[1]) ||
-      ![0x67000,0x7D000].includes(a[2] | (a[3]<<7) | (a[4]<<14)) ||
+      ![0x67000,0x7D000,0x7E000].includes(a[2] | (a[3]<<7) | (a[4]<<14)) ||
       !same(a.slice(5, 8), u21(HEAD)) ||
       a[9] !== 3
     )
@@ -116,6 +116,10 @@ export class Device {
   async writeBank(image) {
     const info = inspect(image),
       cap = await this.negotiate();
+    if(image.length>=info.used+4096){
+      const v=new DataView(image.buffer,image.byteOffset,image.byteLength),modern=[256,1024].some(off=>v.getUint32(info.used+off,true)===0x324f4b46);
+      if(modern){let features;try{features=await this.ask(98,[],1500);}catch{throw Error("This bank uses v0.5 chop settings. Install PIGEON v0.5 before sending it; nothing was written.");}if(!same(features,[75,5,63]))throw Error("Connected firmware cannot read v0.5 chop settings. Nothing was written.");}
+    }
     if (info.version === 3 && cap[1] !== 3)
       throw Error("Firmware does not support two songs");
     if(info.used>this.capacity)

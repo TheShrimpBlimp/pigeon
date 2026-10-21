@@ -9,6 +9,7 @@ import {
 } from "./bank.js";
 import {
   songChops,
+  originalSongChops,
   saveChops,
   padSettings,
   savePadSettings,
@@ -21,9 +22,11 @@ import {
   updateObject,
 } from "./editing.js";
 import { unb64 } from "./device.js";
+import {normalizedGain,chopPreview} from "./chop-audio.js";
 import { WaveEditor } from "./wave-editor-v2.js";
 export function editors(api) {
   const $ = (id) => document.getElementById(id);
+  let auditionTimer;
   let loaded = null,
     slot = 1,
     chop = 0,
@@ -35,19 +38,26 @@ export function editors(api) {
     step = 0;
   const block = document.createElement("section");
   block.className = "kit";
-  block.innerHTML = `<div class="section-heading"><h2>Chop editor</h2><label>Song<select id="chop-song"><option value="1">Song 1</option><option value="2">Song 2</option></select></label><button id="load-chops" data-bank>Load waveform</button></div><p>Drag the S/E flags to trim, or drag the selected region to move it. Click to place the cursor. Shift-drag makes a new selection. Scroll to zoom; drag the overview to pan. Double-click resets the view. Edits remain local until you send the bank. To overwrite a key, select its destination chop, choose Copy from, then Copy whole chop here. Swap exchanges both keys. Move shifts the intervening keys without discarding chops. Copy replaces its boundaries and playback settings without shifting other keys.</p><canvas class="wave" id="chop-wave"></canvas><div class="edit-fields"><label>Chop<select id="chop-index"></select></label><label>Start (s)<input id="chop-start" type="number" min="0" step="0.001"></label><label>End (s)<input id="chop-end" type="number" min="0" step="0.001"></label><label>Choke group<input id="chop-choke" type="number" min="0" max="3" value="0"></label><label>Pitch<input id="chop-pitch" type="number" min="-24" max="24" value="0"></label><label>Attack (ms)<input id="chop-attack" type="number" min="0" max="155" step="5" value="0"></label><label>Release (ms)<input id="chop-release" type="number" min="0" max="310" step="10" value="0"></label><label>Trigger<select id="chop-mode"><option value="0">Hold</option><option value="1">One-shot</option><option value="2">Latch</option></select></label><label>Loop<select id="chop-loop"><option value="1">On</option><option value="0">Off</option></select></label><label>Zoom<input id="chop-zoom" type="range" min="0" max="8" step="0.01" value="0"></label><output id="chop-cursor">Cursor 0.000 s</output><label>Transient sensitivity<input id="chop-sensitivity" type="number" min="0" max="100" value="50"></label><label>Copy from<select id="chop-copy"></select></label></div><div class="song-actions"><button id="chop-apply" data-bank>Apply chop</button><button id="chop-play" data-bank>Preview chop</button><button id="chop-stop">Stop preview</button><button id="chop-auto" data-bank>Detect transients</button><button id="chop-duplicate" data-bank>Duplicate</button><button id="chop-split" data-bank>Split</button><button id="chop-merge" data-bank>Merge previous</button><button id="chop-paste" data-bank>Copy settings</button><button id="chop-full" data-bank>Copy whole chop here</button><button id="chop-swap" data-bank>Swap selected with Copy from</button><button id="chop-move" data-bank>Move selected to Copy from key</button></div><p>Attack/release and explicit trigger modes require the updated firmware. Release 0 uses the track default.</p><div class="edit-fields"><label>Song name (device: 8 characters)<input id="rename-song" maxlength="8"></label><button id="rename-apply" data-bank>Rename song</button></div>`;
+  block.innerHTML = `<div class="section-heading"><h2>Chop editor</h2><label>Song<select id="chop-song"><option value="1">Song 1</option><option value="2">Song 2</option></select></label><button id="load-chops" data-bank>Load waveform</button></div><p>Drag the S/E flags to trim, or drag the selected region to move it. Click to place the cursor. Shift-drag makes a new selection. Scroll to zoom; drag the overview to pan. Double-click resets the view. Edits remain local until you send the bank. To overwrite a key, select its destination chop, choose Copy from, then Copy whole chop here. Swap exchanges both keys. Move shifts the intervening keys without discarding chops. Copy replaces its boundaries and playback settings without shifting other keys.</p><canvas class="wave" id="chop-wave"></canvas><div class="edit-fields"><label>Chop<select id="chop-index"></select></label><label>Start (s)<input id="chop-start" type="number" min="0" step="0.001"></label><label>End (s)<input id="chop-end" type="number" min="0" step="0.001"></label><label>Choke group<input id="chop-choke" type="number" min="0" max="3" value="0"></label><label>Playback point (s)<input id="chop-playpoint" type="number" min="0" step="0.001"></label><label>Direction<select id="chop-reverse"><option value="0">Forward</option><option value="1">Reverse</option></select></label><label>Cents<input id="chop-cents" type="number" min="-100" max="100" value="0"></label><label>Gain (%)<input id="chop-gain" type="number" min="1" max="1600" value="100" step="1"></label><label>Loop crossfade (ms)<input id="chop-xfade" type="number" min="0" max="8" value="0"></label><label>Pitch<input id="chop-pitch" type="number" min="-24" max="24" value="0"></label><label>Attack (ms)<input id="chop-attack" type="number" min="0" max="155" step="5" value="0"></label><label>Release (ms)<input id="chop-release" type="number" min="0" max="310" step="10" value="0"></label><label>Trigger<select id="chop-mode"><option value="0">Hold</option><option value="1">One-shot</option><option value="2">Latch</option></select></label><label>Loop<select id="chop-loop"><option value="1">On</option><option value="0">Off</option></select></label><label>Zoom<input id="chop-zoom" type="range" min="0" max="8" step="0.01" value="0"></label><output id="chop-cursor">Cursor 0.000 s</output><label>Transient sensitivity<input id="chop-sensitivity" type="number" min="0" max="100" value="50"></label><label>Copy from<select id="chop-copy"></select></label></div><div class="song-actions"><button id="chop-undo">Undo chop edit</button><button id="chop-redo">Redo chop edit</button><button id="chop-reset" data-bank>Reset all chops</button><label><input id="chop-audition" type="checkbox">Audition edits</label><button id="chop-apply" data-bank>Apply chop</button><button id="chop-play" data-bank>Preview chop</button><button id="chop-stop">Stop preview</button><button id="chop-point-cursor" data-bank>Start playback at cursor</button><button id="chop-point-reset" data-bank>Reset playback point</button><button id="chop-normalize" data-bank>Normalize chop</button><button id="chop-auto" data-bank>Detect transients</button><button id="chop-duplicate" data-bank>Duplicate</button><button id="chop-split" data-bank>Split</button><button id="chop-merge" data-bank>Merge previous</button><button id="chop-paste" data-bank>Copy settings</button><button id="chop-full" data-bank>Copy whole chop here</button><button id="chop-swap" data-bank>Swap selected with Copy from</button><button id="chop-move" data-bank>Move selected to Copy from key</button></div><p>Playback points, direction, cents, gain and crossfade require v0.5. Normalization changes gain without altering the audio. Crossfades overlap up to 8 ms and shorten each loop by that overlap. Release 0 uses the track default.</p><div class="edit-fields"><label>Song name (device: 8 characters)<input id="rename-song" maxlength="8"></label><button id="rename-apply" data-bank>Rename song</button></div>`;
   $("songs").after(block);
   const wave = new WaveEditor($("chop-wave"), (a, b) => {
+    if(typeof wave.playPoint==='number'){wave.playPoint=Math.max(a,Math.min(b-1,wave.playPoint));$("chop-playpoint").value=(wave.playPoint/component(api.bank(),slot).h[5]).toFixed(5);}
     $("chop-start").value = (a / component(api.bank(), slot).h[5]).toFixed(5);
     $("chop-end").value = (b / component(api.bank(), slot).h[5]).toFixed(5);
+    audition();
   });
   function select() {
+    clearTimeout(auditionTimer);api.stop();
     const c = chops[chop];
     if (!c) return;
     const rate = component(api.bank(), slot).h[5];
     $("chop-start").value = (c.a / rate).toFixed(5);
     $("chop-end").value = (c.b / rate).toFixed(5);
     $("chop-pitch").value = c.pitch;
+    $("chop-playpoint").value=((c.play?c.a+Math.floor((c.b-c.a)*c.play/65536):c.reverse?c.b-1:c.a)/rate).toFixed(5);
+    $("chop-playpoint").dataset.original=$("chop-playpoint").value;
+    $("chop-reverse").value=c.reverse||0;$("chop-cents").value=c.cents||0;$("chop-gain").value=((c.gain||256)*100/256).toFixed(2);$("chop-xfade").value=c.xfade||0;
+    wave.playPoint=Number($("chop-playpoint").value)*rate;
     $("chop-choke").value = c.flags >> 14;
     $("chop-attack").value = ((c.flags >> 2) & 31) * 5;
     $("chop-release").value = ((c.flags >> 7) & 31) * 10;
@@ -119,8 +129,7 @@ export function editors(api) {
   wave.onCursorChange=p=>$("chop-cursor").textContent=`Cursor ${(p/(component(api.bank(),slot)?.h[5]||22050)).toFixed(3)} s`;
   wave.onViewChange=zoom=>$("chop-zoom").value=zoom;
   $("chop-zoom").oninput=()=>wave.setZoom(Number($("chop-zoom").value));
-  $("chop-apply").onclick = () =>
-    api.run(async () => {
+  function draftChop() {
       if (!chops[chop]) throw Error("Song is empty");
       const c = { ...chops[chop] },
         rate = component(api.bank(), slot).h[5],
@@ -128,6 +137,11 @@ export function editors(api) {
       c.a = Math.round(Number($("chop-start").value) * rate);
       c.b = Math.round(Number($("chop-end").value) * rate);
       c.pitch = Number($("chop-pitch").value);
+      const defaultPoint=!chops[chop].play && $("chop-playpoint").value===$("chop-playpoint").dataset.original;
+      const at=defaultPoint?(Number($("chop-reverse").value)?c.b-1:c.a):Math.round(Number($("chop-playpoint").value)*rate);
+      if(!Number.isFinite(at)||at<c.a||at>=c.b)throw Error("Playback point must lie within the chop");
+      c.play=defaultPoint?0:Math.min(65535,Math.max(0,Math.round((at-c.a)*65536/(c.b-c.a))));
+      c.reverse=Number($("chop-reverse").value);c.cents=Number($("chop-cents").value);const percent=Number($("chop-gain").value);if(!Number.isFinite(percent)||percent<1||percent>1600)throw Error("Gain must be between 1 and 1600 percent");c.gain=Math.min(4095,Math.round(percent*256/100));c.xfade=Number($("chop-xfade").value);
       for (const [id, max] of [
         ["chop-choke", 3],
         ["chop-attack", 155],
@@ -143,25 +157,33 @@ export function editors(api) {
         (mode === 2 ? 2 : mode === 1 ? 8192 : 4096) |
         (Math.round(Number($("chop-attack").value) / 5) << 2) |
         (Math.round(Number($("chop-release").value) / 10) << 7);
-      const next = structuredClone(chops);
-      next[chop] = c;
-      await save(next, "Chop updated locally");
-    });
+      const next=structuredClone(chops);next[chop]=c;
+      saveChops(api.bank(),slot,next); // Validate the same rules before preview or apply.
+      return c;
+  }
+  $("chop-apply").onclick=()=>api.run(async()=>{
+    const next=structuredClone(chops);next[chop]=draftChop();
+    await save(next,"Chop updated locally");
+  });
   $("chop-play").onclick = () =>
     api.run(async () => {
       if (!pcm) pcm = (await api.songAudio(slot)).pcm;
-      const c = chops[chop];
-      if (!c) throw Error("Song is empty");
-      await api.play(
-        pcm.slice(c.a, c.b),
-        component(api.bank(), slot).h[5],
-        Number($("chop-loop").value) === 1 &&
-          Number($("chop-mode").value) !== 1,
-        wave,c.a,
-      );
+      const c = draftChop();
+      const rate=component(api.bank(),slot).h[5],loop=!(c.flags&1) && !(c.flags&8192),preview=chopPreview(pcm,c,rate,loop);
+      await api.play(preview.pcm,rate,loop,wave,c.a,preview);
       api.status(`Playing chop ${chop + 1}`);
     });
-  $("chop-stop").onclick = api.stop;
+
+  const audition=()=>{clearTimeout(auditionTimer);if($("chop-audition").checked)auditionTimer=setTimeout(()=>$("chop-play").click(),180);};
+  block.addEventListener('input',event=>{if(event.target.id?.startsWith('chop-') && !['chop-zoom','chop-sensitivity'].includes(event.target.id))audition();});
+  $("chop-stop").onclick=()=>{clearTimeout(auditionTimer);api.stop();};
+  $("chop-undo").onclick=()=>api.history(false);
+  $("chop-redo").onclick=()=>api.history(true);
+  $("chop-reset").onclick=()=>api.run(async()=>{chop=0;await save(originalSongChops(api.bank(),slot),"Original chops restored; undo is available");});
+  wave.onPlaybackChange=p=>{$("chop-playpoint").value=(p/(component(api.bank(),slot)?.h[5]||22050)).toFixed(5);audition();};
+  $("chop-point-cursor").onclick=()=>{const c=chops[chop];if(!c)return;wave.playPoint=Math.max(c.a,Math.min(c.b-1,wave.cursor));wave.onPlaybackChange(wave.playPoint);wave.draw();};
+  $("chop-point-reset").onclick=()=>api.run(async()=>{const next=structuredClone(chops);if(!next[chop])throw Error("Choose a chop");next[chop].play=0;await save(next,"Playback point reset");});
+  $("chop-normalize").onclick=()=>api.run(async()=>{if(!pcm)pcm=(await api.songAudio(slot)).pcm;const next=structuredClone(chops),c=next[chop];if(!c)throw Error("Choose a chop");c.gain=normalizedGain(pcm,c.a,c.b);await save(next,"Chop normalized locally; source audio unchanged");});
   $("chop-auto").onclick = () =>
     api.run(async () => {
       if (!pcm) pcm = (await api.songAudio(slot)).pcm;
@@ -205,7 +227,7 @@ export function editors(api) {
           if(op==="swap") {const target=Number($("chop-copy").value);[next[chop],next[target]]=[next[target],next[chop]];chop=target;}
           else if(op==="move") {const target=Number($("chop-copy").value);next.splice(chop,1);next.splice(target,0,c);chop=target;}
           else if(op==="full")next[chop]={...source};
-          else{c.pitch = source.pitch;c.flags = source.flags;}
+          else{for(const key of ["pitch","flags","play","reverse","cents","gain","xfade"])c[key]=source[key]??0;}
         }
         await save(next, "Chops updated locally");
       });

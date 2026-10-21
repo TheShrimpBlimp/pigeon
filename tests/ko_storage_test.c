@@ -20,7 +20,7 @@ static int allowed(uint32_t off,uint32_t n)
 {
     return off <= sizeof bank_flash && n <= sizeof bank_flash-off &&
         ((off>=0xA0000 && off+n<=0xDC000) || (off>=KO_APP_HI && off+n<=KO_APP_DATA_HI) ||
-         (off>=KO_TOP_LO && off+n<=KO_TOP_HI) || (off>=KO_EXTRA_LO && off+n<=KO_EXTRA_HI));
+         (off>=KO_TOP_LO && off+n<=KO_TOP_HI) || (off>=KO_GROW_LO && off+n<=KO_EXTRA_HI));
 }
 static int st_read(uint32_t off,void *p,uint32_t n)
 { if (!allowed(off,n)) { bad_flash++; return -1; } memcpy(p,bank_flash+off,n); return 0; }
@@ -57,7 +57,7 @@ static uint32_t packed(uint8_t *a,const uint8_t *p,uint32_t n)
 static int request(uint32_t cmd,const uint8_t *a,uint32_t n)
 {
     uint8_t f[640]={0x7D,0x46,0x4C,(uint8_t)cmd};
-    memcpy(f+4,a,n); so_r=so_w; ed_handle(f,n+4);
+    if(n)memcpy(f+4,a,n); so_r=so_w; ed_handle(f,n+4);
     return ed_n>=7 ? ed_out[5] : -1;
 }
 static int write_page(uint32_t off,const uint8_t *p,uint32_t n)
@@ -75,7 +75,8 @@ static int upload(const uint8_t *p,uint32_t n)
     for (uint32_t off=KO_BANK_HEAD;off<n;off+=256)
         if (write_page(off,p+off,n-off>256?256:n-off)) return -2;
     for (uint32_t off=0;off<sizeof(ko_bank_hdr_t)*(p[4]==3?2u:1u);off+=256)
-        if (write_page(off,p+off,sizeof(ko_bank_hdr_t)*(p[4]==3?2u:1u)-off>256?256:sizeof(ko_bank_hdr_t)*(p[4]==3?2u:1u)-off)) return -3;
+        {if (write_page(off,p+off,sizeof(ko_bank_hdr_t)*(p[4]==3?2u:1u)-off>256?256:sizeof(ko_bank_hdr_t)*(p[4]==3?2u:1u)-off)) return -3;
+         ko_bank_scan(); /* A normal background rescan must leave the draft intact. */}
     return request(93,0,0);
 }
 static void pump(uint32_t n)
@@ -113,7 +114,7 @@ int KO_STORAGE_TEST_MAIN(int argc,char **argv)
     bad+=check("bank capacity negotiated without writes",request(90,0,0)==0x4B&&ed_out[6]==(FELUCCA_KO_DUAL?3:2)&&erases==before);
     bad+=check("upload begins invalid and interrupted commit is refused",request(91,a,3)==0&&!ko_bank_active&&request(93,0,0)==2);
     bad+=check("out-of-order payload rejected",write_page(KO_BANK_HEAD+256,mp3+KO_BANK_HEAD,256)==1);
-    bad+=check("full MP3 bank uploads with header last",upload(mp3,nm)==0&&ko_bank_active&&usr_nz[1]==16);
+    bad+=check("full MP3 bank uploads with header last",upload(mp3,nm)==0&&ko_bank_active&&usr_nz[1]==16&&!ko_upload_total);
     int reads_ok=1;
     for(uint32_t off=0;off<nm;off+=257) {
         uint8_t bytes[257];uint32_t n=nm-off>sizeof bytes ? sizeof bytes : nm-off;

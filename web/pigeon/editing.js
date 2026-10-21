@@ -6,6 +6,8 @@ const dv = (b) => new DataView(b.buffer, b.byteOffset, b.byteLength);
 const SONG_OFF = [256, 1024],
   KIT_OFF = 1792,
   REC_SIZE = 544;
+const PLAY_OFF=3648,PLAY_SIZE=288,PLAY_MAGIC=0x3254504b;
+const playValid=(m,v)=>m.length===4096 && v.getUint32(PLAY_OFF,true)===PLAY_MAGIC && v.getUint32(PLAY_OFF+PLAY_SIZE-4,true)===crc(m.subarray(PLAY_OFF,PLAY_OFF+PLAY_SIZE-4));
 export function withMetadata(image) {
   const info = inspect(image);
   return image.length > info.used
@@ -22,7 +24,7 @@ export function songChops(image, slot) {
     h = s.h;
   if (
     meta.length === 4096 &&
-    v.getUint32(off, true) === 0x314f4b46 &&
+    [0x314f4b46,0x324f4b46].includes(v.getUint32(off, true)) &&
     v.getUint32(off + 4, true) === crc(s.song) &&
     v.getUint32(off + 540, true) === crc(meta.subarray(off, off + 540))
   ) {
@@ -45,11 +47,24 @@ export function songChops(image, slot) {
           c.flags & ~65535
         )
           throw Error("Invalid stored chop");
+        const packed=v.getUint32(p+8,true),modern=v.getUint32(off,true)===0x324f4b46;
+        Object.assign(c,{cents:modern?(packed<<24)>>24:0,gain:modern?(packed>>>8)&4095:0,xfade:modern?(packed>>>20)&15:0,empty:modern?(packed>>>24)&1:0,play:0,reverse:0});
+        if(playValid(meta,v) && v.getUint32(PLAY_OFF+4+(slot-1)*4,true)===crc(s.song)){
+          c.play=v.getUint16(PLAY_OFF+12+(slot-1)*128+i*2,true);
+          c.reverse=(v.getUint32(PLAY_OFF+268+(slot-1)*8,true)>>>i)&1;
+        }
+        if(Math.abs(c.cents)>100 || c.xfade>8)throw Error("Invalid chop tuning or crossfade");
         chops.push(c);
       }
       return chops;
     }
   }
+  return originalSongChops(image,slot);
+}
+// The bank header retains the original assignments even after metadata edits.
+export function originalSongChops(image,slot) {
+  const s=component(image,slot);if(!s)return [];
+  const h=s.h;
   const starts = Array.from({ length: h[16] }, (_, i) =>
     dv(image).getUint32((slot === 2 ? HEADER : 0) + 80 + i * 4, true),
   );
@@ -70,13 +85,13 @@ export function saveChops(image, slot, chops) {
     off = SONG_OFF[slot - 1],
     v = dv(meta),
     valid =
-      v.getUint32(off, true) === 0x314f4b46 &&
+      [0x314f4b46,0x324f4b46].includes(v.getUint32(off, true)) &&
       v.getUint32(off + 540, true) === crc(meta.subarray(off, off + 540));
   if (!valid) {
     meta.fill(0, off, off + REC_SIZE);
     meta.set([12, 1, 10, 10, 0, 12, 1, 10, 10, 0], off + 528);
   }
-  v.setUint32(off, 0x314f4b46, true);
+  v.setUint32(off, 0x324f4b46, true);
   v.setUint32(off + 4, crc(s.song), true);
   const f = info.songs[0].fields;
   v.setUint32(off + 8, crc(out.subarray(f[9], f[9] + f[10])), true);
@@ -100,9 +115,18 @@ export function saveChops(image, slot, chops) {
     const p = off + 16 + i * 16;
     v.setUint32(p, c.a, true);
     v.setUint32(p + 4, c.b, true);
+    const cents=c.cents??0,gain=c.gain??0,xfade=c.xfade??0,play=c.play??0,reverse=c.reverse??0;
+    for(const [x,lo,hi] of [[cents,-100,100],[gain,0,4095],[xfade,0,8],[play,0,65535],[reverse,0,1]])if(!Number.isInteger(x)||x<lo||x>hi)throw Error("Invalid v0.5 chop settings");
+    v.setUint32(p+8,((cents&255)|(gain<<8)|(xfade<<20)|((c.empty?1:0)<<24))>>>0,true);
     v.setInt16(p + 12, c.pitch, true);
     v.setUint16(p + 14, c.flags, true);
   });
+  if(!playValid(meta,v)){meta.fill(0,PLAY_OFF,PLAY_OFF+PLAY_SIZE);v.setUint32(PLAY_OFF,PLAY_MAGIC,true);}
+  v.setUint32(PLAY_OFF+4+(slot-1)*4,crc(s.song),true);
+  let reversed=0;
+  for(let i=0;i<32;i++){const c=chops[i];v.setUint16(PLAY_OFF+12+(slot-1)*128+i*2,c?.play??0,true);if(c?.reverse)reversed=(reversed|(1<<i))>>>0;}
+  v.setUint32(PLAY_OFF+268+(slot-1)*8,reversed,true);
+  v.setUint32(PLAY_OFF+PLAY_SIZE-4,crc(meta.subarray(PLAY_OFF,PLAY_OFF+PLAY_SIZE-4)),true);
   v.setUint32(off + 540, crc(meta.subarray(off, off + 540)), true);
   return out;
 }
