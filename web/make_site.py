@@ -107,6 +107,17 @@ def main(pkg, version, out):
                     ignore=shutil.ignore_patterns("native_check", "*.f32"))
     safe_version=re.sub(r'[^A-Za-z0-9.-]', '-', version)
     landing=(HERE / "site" / "index.html").read_text()
+    # Keep the complete on-page feature reference in sync with the source guide.
+    features=[]
+    for section in (HERE.parent / "docs/PIGEON_V05_FEATURES.md").read_text().split("\n## ")[1:]:
+        title, _, body = section.partition("\n")
+        if title == "New and expanded in 0.5": break
+        items=[line[2:] for line in body.splitlines() if line.startswith("- ")]
+        if not items: continue
+        def feature_text(value):
+            return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html_escape.escape(value))
+        features.append('<details><summary>'+html_escape.escape(title)+'</summary><ul>'+''.join('<li>'+feature_text(item)+'</li>' for item in items)+'</ul></details>')
+    landing=landing.replace("{{FEATURES_HTML}}", "\n".join(features))
     tokens={"RELEASE_STATUS":release_status,"VERSION":safe_version,"BUILD_DATE":datetime.now(ZoneInfo("America/Toronto")).strftime("%B %d, %Y"),"PACKAGE_BYTES":f"{len(raw):,}","SHA256":hashlib.sha256(raw).hexdigest()}
     for key,value in tokens.items():landing=landing.replace("{{"+key+"}}",html_escape.escape(value))
     (out / "index.html").write_text(landing,encoding="utf-8")
