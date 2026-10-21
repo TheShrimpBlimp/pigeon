@@ -276,3 +276,24 @@ capacity negotiation tests pass. The emulator source capacity is synchronized,
 but its WASM binary has not been rebuilt. Browser layout automation requires
 the missing Playwright dependency. This candidate has not been flashed; the
 new sector still requires the hardware checks below.
+
+### Final software validation
+
+The full PIGEON product suite and update/recovery suite pass, including target
+budgets, sanitizers, expanded-bank readback and USB recording persistence.
+Emscripten 4.0.23 rebuilt the matching 555,558-byte PIGEON-0.5-dev WASM. Its
+Node and installed-Chrome checks pass for capacity/playback/persistence, loader
+layout, session and chop editing, collection assembly, offline reload and
+screen-reader announcements. WAV/MP3 checks pass for stereo separation, decoded
+audio, download and repeated takes, including capture through the actual WASM.
+
+Two stale test expectations were corrected: the metadata empty flag and the
+FKO2 export signature. Browser recording diagnostics now report the visible
+status on failure, and 0.5 browser waits are bounded. No firmware behavior or
+package bytes changed in this validation pass. The local site is rebuilt; no
+site deployment, release tag, signing or hardware flash was performed.
+
+Hardware acceptance of the exact package recorded in PIGEON_V05_ACCEPTANCE.md
+remains required. After acceptance, set the embedded release version, build and
+test that release package, then verify its GitHub attestation before publishing
+the matching site.

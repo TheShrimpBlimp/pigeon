@@ -19,6 +19,8 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({headless: true, ...(process.env.CHROME_PATH ? {executablePath: process.env.CHROME_PATH} : {})});
 try {
   const page = await browser.newPage();
+  page.setDefaultTimeout(30000);
+  page.on('pageerror', error => console.error('Recording page error:', error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}${emuPath}`);
   // Exercise the page's real recording controls with a deterministic stereo source,
   // independently of firmware builds or stored sample banks.
@@ -38,7 +40,8 @@ try {
     assert(await page.locator('#record-download-mp3').isHidden());
     await page.waitForTimeout(600);
     await page.locator('#record-stop').click();
-    await page.locator('#record-download-mp3').waitFor({state: 'visible'});
+    try { await page.locator('#record-download-mp3').waitFor({state: 'visible'}); }
+    catch (error) { console.error('Recording status:', await page.locator('#record-status').textContent()); throw error; }
     for (const [id, ext] of [['record-download', 'wav'], ['record-download-mp3', 'mp3']]) {
       const result = await page.evaluate(async id => {
         const link = document.getElementById(id), bytes = await (await fetch(link.href)).arrayBuffer();

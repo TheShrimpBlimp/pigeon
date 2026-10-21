@@ -70,7 +70,7 @@ try{
  assert.equal(download.suggestedFilename(),'pigeon-emulator-bank.kob');
  const bank=new Uint8Array(await fs.readFile(await download.path())),info=inspect(bank);
  assert.equal(info.songs.length,2);assert.equal(info.pads,1);assert.equal(bank.length,info.used+4096);
- for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x314f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
+ for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x324f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
  assert(songChops(bank,1).length>0);assert(songChops(bank,2).length>0);
  const sessionDownload=page.waitForEvent('download');await page.locator('#save-session').click();const sessionFile=await sessionDownload;
  assert.equal(sessionFile.suggestedFilename(),'pigeon-emulator-session.pigeon');const session=JSON.parse(await fs.readFile(await sessionFile.path(),'utf8')),validated=validateArchive(session);

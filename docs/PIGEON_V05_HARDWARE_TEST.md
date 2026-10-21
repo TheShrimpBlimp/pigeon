@@ -7,8 +7,11 @@ single-core execution model are unchanged.
 ## Install and prepare
 
 1. Use the sample loader's **Firmware update** section. Choose
-   `build/pigeon-0.5-dev-usb-trim.fwsc`, then **Back up and install firmware**.
+   `build/pigeon.fwsc`, then **Back up and install firmware**.
    Keep the downloaded full recovery archive and the released 0.4.1 package.
+   Record its SHA-256 and compare it with the current candidate in
+   [the acceptance record](PIGEON_V05_ACCEPTANCE.md). Do not use an older
+   USB candidate for the final flash-expansion tests.
 2. Reconnect after the update. Confirm the device displays **v0.5-dev**.
 3. Keep at least **64 KiB free** in the sample bank for this short test. Recording
    appends into unused sectors; a full bank cannot immediately replace a song.
@@ -60,7 +63,7 @@ backup of the trimmed bank.
 
 ## Report
 
-Please note the computer OS, the audio device/output format offered, whether a
+Please record the package SHA-256, computer OS, the audio device/output format offered, whether a
 clean four-second tone saves and survives restart, whether Song 1/kit remain,
 and the exact displayed error if capture fails. USB timing during real flash
 programming and controller overrun detection are the outstanding release gates.

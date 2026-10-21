@@ -3,7 +3,30 @@
 Local candidate prepared 2026-10-20. Not published, not attested, and not yet
 accepted on physical hardware. Source remains on the development branch.
 
-## Candidate
+## Current flash-expansion candidate
+
+Use `build/pigeon.fwsc` (611106 bytes), not the historical USB candidates
+below. SHA-256: `bb5be04cee08ac779529e93b76ee5c3fc98d4bf7b1b27e04a0c416652bfbed70`.
+
+- Embedded version: `v0.5-dev`.
+- Application: 364,548 bytes; body growth room: 7900 bytes (4096 required).
+- Main RAM: 53,544 / 65,536; pool RAM: 353,604 / 376,832.
+- Sample bank: 504 KiB total, **500 KiB usable**.
+- Host storage/codec, expanded-bank, update/recovery and loader-capacity checks
+  pass. Hardware acceptance of this exact package remains pending.
+- Matching emulator WASM rebuilt successfully: 555,558 bytes, PIGEON-0.5-dev.
+- Full product and recovery suites pass, including sanitizers and target budgets.
+- Chrome browser checks pass for emulator playback/persistence, loader editing
+  and offline reload, chop collections, screen-reader live announcements,
+  desktop/mobile layout, and WAV/MP3 recording with stereo/download checks.
+- Release guards reject a 0.5.0 tag while the embedded version is v0.5-dev;
+  no release package was signed or published.
+
+A rebuild may change the package hash. Record the hash of the actual tested
+package with the hardware results. Earlier entries below are historical
+evidence, not acceptance of this candidate.
+
+## Historical USB candidate
 
 - Package: `build/pigeon-0.5-dev-usb.fwsc` (610995 bytes).
 - SHA-256: `6d66fadda93d5f7aef419616366b8ac08f038892316b0730e0690a749d8efe76`.
@@ -49,10 +72,10 @@ recording uses unused pool sectors alongside the existing bank, so saving a
 replacement does not reclaim its old payload until the loader repacks it.
 Selected-chop compaction is implemented in the loader, not as an FM1 menu action.
 
-The public site/emulator stay on the existing release. A matching 0.5 WebAssembly
-build and its emulator browser acceptance are still required before publishing
-the 0.5 website; this environment currently has no `emcc` executable. The final
-release version/tag, signed GitHub build and deployment follow acceptance.
+The public site/emulator stay on the existing release. The matching 0.5
+WebAssembly build and browser acceptance now pass locally. The final release
+version/tag, signed GitHub build, attestation verification and deployment follow
+hardware acceptance. Local build checks do not constitute GitHub attestation.
 
 ## First hardware result and receive-path correction
 

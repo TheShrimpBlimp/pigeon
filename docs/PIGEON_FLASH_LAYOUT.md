@@ -44,5 +44,5 @@ Host tests cover full-capacity upload and CRC/readback, stable old addresses,
 reboot scanning, protected sectors, downgrade rejection before erase, and
 update/recovery paths. Real-device acceptance is listed in
 [PIGEON_V05_HARDWARE_TEST.md](PIGEON_V05_HARDWARE_TEST.md). The candidate has
-not been flashed. Emulator sources use the new capacity; a WASM rebuild is
-still needed.
+not been flashed. The matching emulator WASM has been rebuilt and its native
+and Chrome browser acceptance checks pass locally.

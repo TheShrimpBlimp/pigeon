@@ -48,7 +48,7 @@ let bank = new Uint8Array(
   ),
   before = component(bank, 2).song;
 let chops = songChops(bank, 1);
-chops[0] = { ...chops[0], cents:0,gain:0,xfade:0,play:0,reverse:0, a: 0, b: 10000, pitch: -7, flags: 4096 | (10 << 2) | (20 << 7) };
+chops[0] = { ...chops[0], empty:0,cents:0,gain:0,xfade:0,play:0,reverse:0, a: 0, b: 10000, pitch: -7, flags: 4096 | (10 << 2) | (20 << 7) };
 bank = saveChops(bank, 1, chops);
 assert.deepEqual(songChops(bank, 1), chops);
 assert.deepEqual(component(bank, 2).song, before);
