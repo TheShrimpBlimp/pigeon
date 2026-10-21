@@ -20,24 +20,25 @@ int main(void)
 {
     int bad=0;ui_power_on();memset(bank_flash,255,sizeof bank_flash);
     slc_store_boot();ko.on=1;
-    static const uint32_t old_lo[]={0xA0000,0xB4000,0x78000,0xEA000};
-    static const uint32_t old_size[]={0x13000,0x28000,0x1A000,0x12000};
+    static const uint32_t old_lo[]={0xA0000,0xB4000,0x78000,0xEA000,0x60000};
+    static const uint32_t old_size[]={0x13000,0x28000,0x1A000,0x12000,0x16000};
     uint32_t logical=0;int stable=1;
-    for(uint32_t k=0;k<4;k++)for(uint32_t n=0;n<old_size[k];n+=4096) {
+    for(uint32_t k=0;k<5;k++)for(uint32_t n=0;n<old_size[k];n+=4096) {
         uint32_t avail;stable&=ko_bank_phys(logical+n,&avail)==old_lo[k]+n;
         if(n+4096==old_size[k]) logical+=old_size[k];
     }
-    bad+=check("every old bank sector keeps its physical address",stable&&logical==KO_BANK_BASE_SIZE);
+    bad+=check("every old bank sector keeps its physical address",stable&&logical==KO_BANK_V05_SIZE);
     uint32_t avail;
     bad+=check("new storage is appended below the unchanged boot marker",
         ko_bank_phys(KO_BANK_BASE_SIZE,&avail)==KO_EXTRA_LO && avail==KO_EXTRA_HI-KO_EXTRA_LO &&
-        KO_BANK_CAPACITY-KO_BANK_HEAD==496u*1024u && KO_EXTRA_HI==0x76000);
-    memset(bank_flash+KO_EXTRA_LO-4096,0xA6,4096);
+        ko_bank_phys(KO_BANK_V05_SIZE,&avail)==KO_GROW_LO && avail==KO_EXTRA_LO-KO_GROW_LO &&
+        KO_BANK_CAPACITY-KO_BANK_HEAD==500u*1024u && KO_EXTRA_HI==0x76000);
+    memset(bank_flash+KO_GROW_LO-4096,0xA6,4096);
     memset(bank_flash+KO_EXTRA_HI,0xB7,0x2000);
     make_bank(KO_BANK_CAPACITY);
-    bad+=check("a full 496 KiB payload uploads and validates",upload(image,KO_BANK_CAPACITY)==0 && ko_bank_active);
+    bad+=check("a full 500 KiB payload uploads and validates",upload(image,KO_BANK_CAPACITY)==0 && ko_bank_active);
     int intact=1;
-    for(uint32_t i=0;i<4096;i++) intact&=bank_flash[KO_EXTRA_LO-4096+i]==0xA6;
+    for(uint32_t i=0;i<4096;i++) intact&=bank_flash[KO_GROW_LO-4096+i]==0xA6;
     for(uint32_t i=0;i<0x2000;i++) intact&=bank_flash[KO_EXTRA_HI+i]==0xB7;
     bad+=check("bank upload never writes firmware or boot-marker sectors",intact&&!bad_flash);
     uint8_t row[256];ko_bank_read(KO_BANK_BASE_SIZE,row,sizeof row);

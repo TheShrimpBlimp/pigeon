@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {songChops,saveChops,originalSongChops} from './editing.js';
+import {component,inspect,crc} from './bank.js';
+import {normalizedGain,chopPreview} from './chop-audio.js';
+import {sessionInfo,replacementNotice} from './session-info.js';
+const image=new Uint8Array(fs.readFileSync(new URL('../../build/ko-fixtures/minute-mp3.kob',import.meta.url)));
+const c={empty:0,a:100,b:10000,pitch:-2,flags:4096,play:32768,reverse:1,cents:-37,gain:768,xfade:8};
+const edited=saveChops(image,1,[c,{...c,a:200,b:9000,reverse:0,play:12345}]);
+assert.deepEqual(songChops(edited,1)[0],c);assert.equal(songChops(edited,1)[1].reverse,0);
+assert.deepEqual(component(image,1).song,component(edited,1).song,'metadata editing must not alter compressed audio');
+const reset=saveChops(edited,1,originalSongChops(edited,1));
+assert.deepEqual(songChops(reset,1).map(c=>[c.a,c.b,c.pitch,c.play,c.reverse]),songChops(image,1).map(c=>[c.a,c.b,c.pitch,0,0]));
+assert.deepEqual(component(reset,1).song,component(image,1).song,'reset preserves encoded source audio');
+const again=saveChops(edited,1,songChops(edited,1).toReversed());assert.equal(songChops(again,1)[1].play,32768);
+assert.throws(()=>saveChops(image,1,[{...c,cents:101}]));assert.throws(()=>saveChops(image,1,[{...c,xfade:9}]));
+const legacy=edited.slice(),off=inspect(legacy).used,v=new DataView(legacy.buffer);v.setUint32(off+256,0x314f4b46,true);v.setUint32(off+280,0,true);v.setUint32(off+796,crc(legacy.subarray(off+256,off+796)),true);legacy.fill(255,off+3648);
+const old=songChops(legacy,1)[0];assert.equal(old.cents,0);assert.equal(old.gain,0);assert.equal(old.xfade,0);assert.equal(old.play,0);assert.equal(old.reverse,0);
+const pcm=Float32Array.from({length:1000},(_,i)=>Math.sin(i*.03)*.25);assert.ok(normalizedGain(pcm)>900);assert.equal(normalizedGain(new Float32Array(10)),256);
+const p=chopPreview(pcm,{a:0,b:1000,pitch:12,play:32768,reverse:1,gain:512,xfade:4,cents:0},22050,true);
+assert.equal(p.start,499);assert.equal(p.playbackRate,2);assert.equal(p.loopStart,88);assert.equal(p.mapPosition(0),999);assert.equal(p.pcm[999],p.pcm[87]);
+assert.ok(sessionInfo({image}).includes('Sample bank'));assert.ok(replacementNotice({image},{image:edited}).includes('connected FM1 is not changed'));
+console.log('v0.5 metadata, legacy import, audio preview, normalization and session summaries PASS');
+const {Device,validateArchive}=await import('./device.js');const {SIZE,HEAD}=await import('./bank.js');const u21=n=>[n&127,(n>>>7)&127,(n>>>14)&127];
+const calls=[];const oldDevice=new Device(async([cmd])=>{calls.push(cmd);if(cmd===90)return [75,3,...u21(SIZE),...u21(HEAD),1,3];throw Error('unsupported command');});
+await assert.rejects(()=>oldDevice.writeBank(edited),/Install PIGEON v0.5/);assert.deepEqual(calls,[90,98],'unsupported firmware must not receive an erase command');
+const projectBytes=new Uint8Array(fs.readFileSync(new URL('../../build/expansion-project.funa',import.meta.url)));
+const archive={format:'pigeon-archive',version:1,bank:Buffer.from(edited).toString('base64'),bank_crc:crc(edited),objects:Array.from({length:10},(_,id)=>{const data=id===0||id===2?projectBytes:id===1?new Uint8Array([0,0,0,0]):new Uint8Array();return {id,size:data.length,crc:crc(data),data:Buffer.from(data).toString('base64')};})};
+validateArchive(archive);const summary=sessionInfo({image:edited,archive});assert.match(summary,/Complete session/);assert.match(summary,/Pattern A/);assert.match(summary,/Pattern B: empty/);assert.match(replacementNotice({image},{image:edited,archive}),/Complete session/);
+console.log('v0.5 old-device write refusal and complete-session preview PASS');
+
+fs.writeFileSync(new URL('../../build/v05-session-fixture.pigeon',import.meta.url),JSON.stringify(archive));
+
+fs.writeFileSync(new URL('../../build/v05-chop-metadata.kob',import.meta.url),edited);

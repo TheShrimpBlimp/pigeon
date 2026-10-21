@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import {
+  HEAD, HEADER,
   normalize,
   imaEncode,
   imaDecode,
@@ -56,6 +57,20 @@ const a = song(),
   dual = repack(first, second, 2);
 assert.deepEqual(component(dual, 1).song, component(first, 1).song);
 assert.deepEqual(dual.slice(inspect(dual).used), metadata);
+// On-device recording can append Song 1 after the existing Song 2.
+const reordered = dual.slice(), rv = new DataView(reordered.buffer);
+for (const [lo, hi] of [[16,36],[48,68],[80,208],[656,664]]) {
+  reordered.set(dual.slice(HEADER+lo, HEADER+hi), lo);
+  reordered.set(dual.slice(lo, hi), HEADER+lo);
+}
+rv.setUint32(HEADER+36, HEAD, true);
+for (const at of [0, HEADER]) rv.setUint32(at+HEADER-4, crc(reordered.subarray(at,at+HEADER-4)), true);
+assert.equal(inspect(reordered).songs.length, 2);
+assert.deepEqual(component(reordered,1).song, component(dual,2).song);
+const overlapping = reordered.slice(), ov = new DataView(overlapping.buffer);
+for (const [lo, hi] of [[16,36],[48,68],[80,208]]) overlapping.set(reordered.slice(HEADER+lo,HEADER+hi),lo);
+ov.setUint32(HEADER-4,crc(overlapping.subarray(0,HEADER-4)),true);
+assert.throws(()=>inspect(overlapping), /Overlapping/);
 const changed = repack(dual, second, 1);
 assert.deepEqual(component(changed, 2).song, component(dual, 2).song);
 const kit = replaceKit(dual, [x, x.subarray(0, 501)]);

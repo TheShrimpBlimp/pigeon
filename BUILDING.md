@@ -94,12 +94,12 @@ fixtures. `tools/package_pigeon_ui.py` creates a gallery, contact sheets, PDF an
 ZIP under `build/pigeon-ui-atlas/`. `tests/pigeon_screen_test.c` checks product
 text layout. Emulator/browser check commands are documented in the
 [sample-tool guide](web/pigeon/README.md); screen-reader checks are in
-[v0.4 development notes](docs/PIGEON_V04_DEVELOPMENT.md).
+[0.5 development notes](docs/PIGEON_V05_DEVELOPMENT.md).
 
 ## Prepare a package
 
 ```sh
-.venv/bin/python tools/prepare_pigeon_beta.py --version 0.4 --verify-reproducible
+.venv/bin/python tools/prepare_pigeon_beta.py --version 0.5-dev --verify-reproducible
 ```
 
 The script builds firmware, checks target budgets, compares repeated builds when
@@ -127,14 +127,14 @@ require a version bump and `FM1_STUB_LOCK=update`. Follow the
 [recovery guide](docs/PIGEON_RECOVERY.md) for interrupted updates, first-install
 limits and dark-device recovery.
 
-Current controls: [published control reference](docs/PIGEON_CONTROLS.md) and
-[v0.4 development guide](docs/PIGEON_V04_GUIDE.md). Storage details:
+Current controls: [candidate control reference](docs/PIGEON_CONTROLS.md) and
+[0.5 tutorial](docs/PIGEON_V05_GUIDE.md). Storage details:
 [KO_STORAGE.md](docs/KO_STORAGE.md). Performance findings:
 [PIGEON_PERFORMANCE_AUDIT.md](docs/PIGEON_PERFORMANCE_AUDIT.md).
 
-## v0.4 release gate
+## 0.5 release gate
 
-The [v0.4 release checklist](docs/PIGEON_V04_RELEASE.md) identifies the exact
+The [0.5 acceptance record](docs/PIGEON_V05_ACCEPTANCE.md) identifies the exact
 local candidate and short physical smoke test. Candidate generation does not
 flash, publish, tag or push a release. Keep the generated manifest and checksums
 with the package actually tested. Full host/recovery/reader and browser checks

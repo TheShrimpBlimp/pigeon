@@ -5,33 +5,24 @@ shared bank. Synth engines are excluded from the sampler profile, while
 serialized project and backup IDs remain compatible. For the user workflow,
 start with [the tutorial](KO_MODE.md).
 
-v0.3 adds an 88 KiB extent at `0x60000–0x76000`, bringing the shared payload to 496 KiB plus a 4 KiB header. Existing extents keep their physical addresses; boot-marker sectors `0x76000–0x78000` stay reserved. The package declares KOPOOL3 alongside KOPOOL2. Tools negotiate capacity before writing; older 408 KiB firmware rejects larger banks before erase. Storage/recovery simulation checks pass; full expanded-pool hardware endurance checks remain pending.
+## Candidate capacity and formats
 
-## Published capacity and formats
+The 0.5 bank is **516,096 bytes (504 KiB)** including a 4 KiB header, leaving
+**512,000 bytes (500 KiB)** for encoded audio, waveforms and MP3 seek indices.
+Both songs and the 16-pad kit share this payload. The previous expanded layout
+provided 496 KiB usable; earlier base layouts provided 408 KiB. Tools negotiate
+the connected device's actual capacity before starting an erase.
 
-The bank is 512,000 bytes (500 KiB). Its header sector takes 4 KiB, leaving
-507,904 bytes (496 KiB) shared by encoded audio, waveform and MP3 seek indices.
-Drums use mono IMA ADPCM at 22.05 kHz. The song uses either:
+Songs support indexed mono MP3 at 22.05 kHz, 24–64 kbps (32 kbps default), or
+mono IMA ADPCM at 8, 11.025, 16 or 22.05 kHz. The importer disables the MP3 bit
+reservoir and creates seek indices; ordinary MP3 files cannot be copied directly
+into flash. Drums and USB recordings use mono 22.05 kHz IMA ADPCM.
 
-- Indexed mono MP3 at 22.05 kHz, 24–64 kbps; default 32 kbps. The importer disables
-  the bit reservoir so chops can seek with bounded decode work. Ordinary MP3
-  files cannot be copied directly to the device.
-- Mono IMA ADPCM at 8, 11.025, 16 or 22.05 kHz, selected at import.
-
-| Song format | With 3.2 seconds of drums total | With 9.6 seconds of drums total |
-|---|---:|---:|
-| MP3 24 kbps | about 119 seconds | about 96 seconds |
-| MP3 32 kbps | about 90 seconds | about 73 seconds |
-| MP3 48 kbps | about 61 seconds | about 49 seconds |
-| ADPCM 11.025 kHz | about 68 seconds | about 55 seconds |
-| ADPCM 22.05 kHz | about 34 seconds | about 28 seconds |
-
-These estimates include the maximum 8 KiB waveform and MP3 frame index where
-applicable. Encoder padding/alignment slightly reduce the limit. The importer
-reports actual usage and rejects oversized banks before connecting to a device.
-A tested 60-second, 32 kbps song plus sixteen 0.6-second drum hits uses 367,694
-bytes, leaving 54,194 bytes free. A minute of 11.025 kHz ADPCM also fits with a
-shorter kit. Neither MP3 nor lowered-rate ADPCM restores lost audio quality later.
+Duration depends on all loaded components, encoding quality, waveform/index
+space and alignment. Use the loader's actual byte meter rather than assuming
+a fixed duration per song. Lower bitrate saves space; it cannot restore lost
+source quality. The new 4 KiB sector is appended logically, keeping every old
+bank byte at the same physical address. See [flash layout](PIGEON_FLASH_LAYOUT.md).
 
 ## Build and import
 
@@ -45,8 +36,8 @@ Use `--bitrate 24` for more MP3 duration, or `--codec adpcm --rate 11025` for th
 lower CPU option. Up to sixteen drum WAV paths are assigned in the supplied pad
 order. Host import computes waveform peaks and transient chop starts; all chop
 controls remain editable. The existing KO loop/latch, pitch, zoom and FX controls
-continue to apply. MP3 song playback requires KO mode on T1; SAMPLE/GRAIN
-continue to use ADPCM sources. Compressed reverse playback is disabled.
+continue to apply. Song tracks support forward and per-chop reverse playback with both MP3 and
+ADPCM. The PIGEON profile has two song tracks and a separate drum kit.
 
 After separately installing and validating this firmware on the device:
 
@@ -56,15 +47,12 @@ python3 tools/ko_bank.py upload beat.kob
 python3 tools/ko_bank.py export backup.kob
 ```
 
-Upload replaces the entire song/kit bank. Back up the existing three FSMP slots
-before migration using the existing Web editor full backup; the first new bank
-overwrites their contents. The new uploader negotiates the exact bank layout
-before any write. Its legacy counterpart is blocked while a KOB2 bank is active.
-Export includes the separate 4 KiB chop/compressor metadata sector; uploading
-that export restores those edits. The existing Web editor full backup does not
-include this new bank, so use `ko_bank.py export` for its audio and edits. Audio hashes bind edits to the matching song
-and kit. An interrupted upload leaves the bank unavailable, rather than exposing
-partially uploaded audio. Re-upload a complete bank to recover.
+Upload replaces the entire two-song/kit bank. Save a complete `.pigeon`
+recovery archive first. `.kob` export includes audio and the separate 4 KiB
+chop/compressor metadata sector, but not sequence projects/settings. Use the
+sample loader for complete-session backup/restore. Audio hashes bind settings
+to their matching source. An interrupted upload leaves the bank unavailable;
+re-upload the complete bank to recover.
 
 For a standard-firmware downgrade, export the bank and use
 `python3 tools/ko_bank.py erase` **before** installing the standard firmware.
@@ -72,7 +60,7 @@ The updated loader rejects the downgrade while the KOB2 marker exists. Erase
 invalidates the bank and legacy slot headers; it does not securely erase audio.
 Older loaders and external full-flash tools do not know these protections.
 
-## Published flash layout
+## Candidate flash layout
 
 | Physical range (end exclusive) | Bank allocation |
 |---|---:|
@@ -80,11 +68,13 @@ Older loaders and external full-flash tools do not know these protections.
 | `0xB4000–0xDC000` | 160 KiB |
 | `0x78000–0x92000` | 104 KiB reclaimed application space |
 | `0xEA000–0xFC000` | 72 KiB package-declared USR region |
+| `0x60000–0x76000` | 88 KiB previously appended sample extent |
+| `0x5F000–0x60000` | 4 KiB appended in 0.5 |
 | `0xB3000–0xB4000` | Separate chop/compressor metadata |
 
 Project, preset, settings, bootloader and Bluetooth configuration regions are
 excluded. The linker and package maker enforce the smaller application boundary.
-A checked `KOPOOL2` package descriptor tells the loader to preserve reclaimed
+Checked `KOPOOL2` and `KOPOOL3` package descriptors tell the loader to preserve reclaimed
 audio during updates. Record cleanup also preserves the top sample region, even
 if audio bytes resemble an OTA record. No additional physical flash is assumed.
 
@@ -157,12 +147,9 @@ waveform position no longer requests a complete waveform redraw.
 
 ## Two independent songs (bank version 3)
 
-On v0.3, both songs and up to sixteen drum hits share the same 496 KiB payload pool.
-The duration estimates above are combined song duration, not duration per
-song; the second song also has its own seek index and waveform. The default
-32 kbps encoding can hold roughly 90 seconds combined without drums, or
-roughly 73 seconds with sixteen 0.6-second drum hits. Actual importer size
-checks are authoritative. Encoding options apply to both songs in `build`.
+Both songs and up to sixteen drum hits share the 500 KiB candidate payload.
+The second song also needs its own seek index and waveform. The combined size
+reported by the importer is authoritative; encoding options apply to both songs.
 
 ```sh
 .venv/bin/python tools/ko_bank.py build dual.kob song1.wav kick.wav snare.wav --song2 song2.wav
@@ -185,14 +172,16 @@ version 3 bank from the source files to replace its audio.
 ### Preview shared storage before uploading
 
 `tools/ko_bank.py preview BANK.kob` validates a bank locally and shows both songs'
-names, durations and codecs, kit usage, combined consumption of the **496 KiB**
+names, durations and codecs, kit usage, combined consumption of the **500 KiB**
 audio payload, and free space. The `upload` command prints the same preview before
-opening MIDI or writing flash. Preview requires no connected synth.
+opening MIDI or writing flash. Preview requires no connected FM1.
 
-In `web/editor.html`, connect a sampler firmware and open Samples. Choose a `.kob`
+The legacy `web/editor.html` sample-transfer panel remains available for compatible
+firmware. In that panel, connect a sampler firmware and open Samples. Choose a `.kob`
 bank to see the combined storage bar and song/kit breakdown before clicking Upload
-sample bank. Banks are created with the Python build/add-song commands; the browser
-does not transcode audio. CRC, descriptor and frame checks run before upload, and
+sample bank. Banks are created with the Python build/add-song commands; that legacy panel
+does not transcode audio. The current PIGEON sample loader does import and encode
+audio locally. CRC, descriptor and frame checks run before upload, and
 the firmware capability is checked again before erase. Two-song banks cannot upload
 to one-song firmware. The browser retains the legacy slot editor for other firmware.
 

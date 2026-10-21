@@ -13,6 +13,8 @@ typedef struct {
 } ko_bank_hdr_t;
 _Static_assert(sizeof(ko_bank_hdr_t) == 668u, "KOB2 header ABI");
 static ko_bank_hdr_t ko_bank,ko_bank_second;
+/* While uploading these inactive headers hold the unpublished draft. */
+static uint32_t ko_upload_total;
 static uint32_t ko_bank_second_crc;
 static uint8_t ko_bank_active;
 static uint32_t ko_bank_song_crc, ko_bank_kit_crc;
@@ -21,10 +23,13 @@ static uint32_t ko_bank_song_crc, ko_bank_kit_crc;
 #endif
 static uint8_t ko_bank_byte(uint32_t off)
 {
+#if FELUCCA_KO_MAINT
+    if(ko_reclaim_locked())return ko_reclaim_byte(off);
+#endif
     uint32_t avail, phys = ko_bank_phys(off, &avail);
     return avail ? KO_BANK_XIP(phys)[0] : 0;
 }
-static void ko_bank_read(uint32_t off, void *dst, uint32_t n)
+static void ko_bank_read_raw(uint32_t off, void *dst, uint32_t n)
 {
     uint8_t *p = dst;
     /* Translate each contiguous extent once, rather than once per byte of
@@ -36,6 +41,12 @@ static void ko_bank_read(uint32_t off, void *dst, uint32_t n)
         memcpy(p,KO_BANK_XIP(phys),take);
         p+=take;off+=take;n-=take;
     }
+}
+static void ko_bank_read(uint32_t off,void *dst,uint32_t n){
+#if FELUCCA_KO_MAINT
+ if(ko_reclaim_locked()){uint8_t *p=dst;while(n--)*p++=ko_reclaim_byte(off++);return;}
+#endif
+ ko_bank_read_raw(off,dst,n);
 }
 static uint32_t ko_bank_u32(uint32_t off)
 {
@@ -75,7 +86,7 @@ static int ko_bank_header_valid(const ko_bank_hdr_t *h)
         !ko_bank_range(h->kit_off,h->kit_len,h->used) || h->kit_n > 16 ||
         !h->auto_n || h->auto_n > 32 || h->apos[0] ||
         !h->wave_bins || h->wave_bins > 4096 || !ko_bank_range(h->wave_off,h->wave_bins*2,h->used) ||
-        h->song_off < h->kit_off+h->kit_len || h->wave_off < h->song_off+h->song_len)
+        (h->kit_len && h->song_off<h->kit_off+h->kit_len && h->kit_off<h->wave_off+h->wave_bins*2u) || h->wave_off < h->song_off+h->song_len)
         return 0;
     if (h->version==3) { if (h->rsv[0]!=sizeof *h || h->rsv[1] || h->rsv[2]) return 0; }
     else for (i = 0; i < 3; i++) if (h->rsv[i]) return 0;
@@ -121,12 +132,14 @@ static int ko_bank_second_valid(const ko_bank_hdr_t *first,const ko_bank_hdr_t *
 {
     return first->version==2 || (FELUCCA_KO_DUAL && second->version==2 &&
         ko_bank_header_valid(second) && second->used==first->used && second->crc==first->crc &&
-        second->kit_n==0 && second->kit_len==0 && second->song_off>=first->wave_off+first->wave_bins*2u &&
+        second->kit_n==0 && second->kit_len==0 && (!first->kit_len || second->song_off>=first->kit_off+first->kit_len || second->wave_off+second->wave_bins*2u<=first->kit_off) &&
+        (second->song_off>=first->wave_off+first->wave_bins*2u || first->song_off>=second->wave_off+second->wave_bins*2u) &&
         ko_bank_index_of(second));
 }
 static int ko_bank_index_valid(void) { return ko_bank_index_of(&ko_bank); }
 static void ko_bank_scan(void)
 {
+    if(ko_upload_total)return; /* background scans must not overwrite the draft */
     ko_bank_active = 0;ko_bank_second_crc=0;
     memset(&ko_bank_second,0,sizeof ko_bank_second);
     for (uint32_t k = 0; k < SMP_USER_SLOTS; k++) {

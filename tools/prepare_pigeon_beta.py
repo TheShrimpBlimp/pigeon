@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+from ko_bank import SIZE, HEAD
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,7 +65,7 @@ def main():
         dest = out / name.replace('pigeon.', 'pigeon-' + args.version + '.')
         shutil.copyfile(ROOT / 'build' / name, dest)
         artifacts[dest.name] = {'bytes': dest.stat().st_size, 'sha256': sha(dest)}
-    for name in ('KO_MODE.md', 'PIGEON_CONTROLS.md', 'PIGEON_PERFORMANCE_AUDIT.md', 'PIGEON_RECOVERY.md', 'PIGEON_V03_RELEASE.md', 'PIGEON_V04_RELEASE.md', 'PIGEON_V04_GUIDE.md', 'PIGEON_NOTE_TIMING.md', 'SCREEN_READER.md'):
+    for name in ('KO_MODE.md', 'PIGEON_CONTROLS.md', 'PIGEON_PERFORMANCE_AUDIT.md', 'PIGEON_RECOVERY.md', 'PIGEON_V03_RELEASE.md', 'PIGEON_V04_RELEASE.md', 'PIGEON_V04_GUIDE.md', 'PIGEON_V05_GUIDE.md', 'PIGEON_V05_ACCEPTANCE.md', 'PIGEON_V05_HARDWARE_TEST.md', 'PIGEON_V05_TEST_RUN_20261021.md', 'PIGEON_FLASH_LAYOUT.md', 'RELEASE_SIGNING.md', 'PIGEON_NOTE_TIMING.md', 'SCREEN_READER.md'):
         source = ROOT / 'docs' / name
         if source.exists():
             shutil.copyfile(source, out / name)
@@ -78,7 +79,7 @@ def main():
     manifest = {'product': 'PIGEON', 'candidate': args.version, 'source_commit': revision,
                 'source_has_uncommitted_changes': dirty, 'source_file_hashes_sha256': sha(source_hash_path), 'flashed': False, 'hardware_verified': False,
                 'identical_rebuild': args.verify_reproducible, 'host_suite_run': args.run_tests,
-                'target_budget_passed': True, 'sample_payload_bytes': 496 * 1024,
+                'target_budget_passed': True, 'sample_payload_bytes': SIZE - HEAD,
                 'shared_song_voice_limit': 8, 'dedicated_drum_voice_limit': 4, 'app_bytes': values[0],
                 'ram_bytes': values[1], 'ram_limit': values[2],
                 'pool_bytes': values[3], 'pool_limit': values[4], 'artifacts': artifacts}

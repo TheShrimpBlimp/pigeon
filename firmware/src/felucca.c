@@ -90,6 +90,10 @@
 
 /* --------------------------------------------- storage, update, editor --- */
 #if FELUCCA_FLASH
+#if FELUCCA_USB_SAMPLE
+#include "usb_sample_flash.h"
+#define FL_PROGRAM_POLL() usb_sample_flash_poll()
+#endif
 #include "fm1_flash.h"
 #include "storage_hw.c"
 #include "storage.c"
@@ -113,4 +117,13 @@ static int ann_wire_send(const uint8_t *p,uint32_t n)
 #include "pigeon_reader.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
+#if FELUCCA_USB_SAMPLE
+#if FELUCCA_KO_MAINT
+#include "ko_reclaim.c"
+#endif
+#include "ko_usb_sample.c"
+#if FELUCCA_KO_MAINT
+#include "ko_collect.c"
+#endif
+#endif
 #include "main.c"

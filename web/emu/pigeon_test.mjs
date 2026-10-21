@@ -30,7 +30,7 @@ for(const bitrate of [24,32,40,48,56,64]){
 const expanded=[{name:'expanded.wav',pcm:tone(900000)},null];
 const expandedBank=buildBank(expanded,[],true);assert(expandedBank.length>0x67000 && expandedBank.length<=FM1_POOL);assert.equal(load(expandedBank),0,'expanded hardware bank must play');
 const large=[{name:'long.wav',pcm:tone(1100000)},null];
-assert.throws(()=>buildBank(large),/496 KiB/);
+assert.throws(()=>buildBank(large),/500 KiB/);
 const unlimited=buildBank(large,[],true);assert(unlimited.length>FM1_POOL);
 assert.equal(load(unlimited),1,'hardware cap enforced in WASM');
 assert.equal(load(unlimited,true),0);assert.equal(e.web_sample_pool_size(),unlimited.length);

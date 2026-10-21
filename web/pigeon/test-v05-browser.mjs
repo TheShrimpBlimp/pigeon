@@ -1,0 +1,43 @@
+import {fileURLToPath} from 'node:url';
+const {chromium}=await import(process.env.PIGEON_PLAYWRIGHT_MODULE||new URL('../../repositories/pigeon-tool/node_modules/playwright/index.mjs',import.meta.url).href);
+import assert from 'node:assert/strict';import http from 'node:http';import fs from 'node:fs/promises';import path from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));const server=http.createServer(async(req,res)=>{try{let name=decodeURIComponent(new URL(req.url,'http://localhost').pathname);if(name.endsWith('/'))name+='index.html';const f=path.join(root,name);const data=await fs.readFile(f);res.setHeader('Content-Type',f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':f.endsWith('.html')?'text/html':'application/octet-stream');res.end(data);}catch{res.statusCode=404;res.end('not found');}});await new Promise(r=>server.listen(0,'127.0.0.1',r));const b=await chromium.launch({headless:true,executablePath:process.env.PIGEON_CHROMIUM});const p=await b.newPage();p.setDefaultTimeout(30000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
+try{
+ await p.goto(`http://127.0.0.1:${server.address().port}/pigeon/`,{waitUntil:'networkidle'});
+ await p.locator('#open').setInputFiles(fileURLToPath(new URL('../../build/ko-fixtures/minute-mp3.kob',import.meta.url)));
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('opened locally'));
+ await p.locator('#load-chops').click();await p.waitForFunction(()=>!document.querySelector('#load-chops').disabled);
+ await p.locator('#chop-cents').evaluate(el=>{for(let a=el.parentElement;a;a=a.parentElement)if(a.tagName==='DETAILS')a.open=true;});
+ await p.locator('#chop-cents').fill('-37');await p.locator('#chop-gain').fill('200');await p.locator('#chop-xfade').fill('4');await p.locator('#chop-reverse').selectOption('1');await p.locator('#chop-apply').click();
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Chop updated locally'));
+ assert.equal(await p.locator('#chop-cents').inputValue(),'-37');assert.equal(await p.locator('#chop-gain').inputValue(),'200.00');
+ await p.locator('#chop-play').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Playing chop'));await p.locator('#chop-stop').click();
+ await p.locator('#chop-reset').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Original chops restored'));
+ assert.equal(await p.locator('#chop-cents').inputValue(),'0');assert.equal(await p.locator('#chop-reverse').inputValue(),'0');
+ await p.locator('#chop-undo').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Local edit undone'));
+ assert.equal(await p.locator('#chop-cents').inputValue(),'-37');
+ await p.locator('#chop-redo').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Local edit redone'));
+ assert.equal(await p.locator('#chop-cents').inputValue(),'0');
+ await p.locator('#chop-audition').check();
+ await p.locator('#status').evaluate(e=>e.textContent='Waiting for audition');
+ await p.locator('#chop-cents').fill('22');await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Playing chop'));
+ await p.locator('#chop-audition').uncheck();await p.locator('#chop-stop').click();
+ await p.locator('#chop-index').selectOption('0');assert.equal(await p.locator('#chop-cents').inputValue(),'0','preview must not apply draft edits');
+ assert.equal(await p.locator('#chop-normalize').count(),1);await p.locator('#chop-normalize').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('normalized locally'));
+ await p.locator('#library-name').evaluate(el=>{for(let a=el.parentElement;a;a=a.parentElement)if(a.tagName==='DETAILS')a.open=true;});
+ await p.locator('#library-name').fill('V05 TEST');await p.locator('#library-save').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('browser’s library'));
+ assert.match(await p.locator('#library-preview').textContent(),/Sample bank/);
+ p.on('dialog',async d=>{assert.match(d.message(),/Overwrite|Replace/);await d.accept();});
+ await p.locator('#library-save').click();await p.waitForTimeout(300);assert.equal(await p.locator('#library-list option').count(),1);
+ await p.locator('#library-load').click();await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Library entry loaded'));
+ await p.locator('#open').setInputFiles(fileURLToPath(new URL('../../build/v05-session-fixture.pigeon',import.meta.url)));await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('Session opened and validated'));
+ await p.locator('#library-name').fill('Full V05 Session');await p.locator('#library-kind').selectOption('auto');await p.locator('#library-save').click();await p.waitForTimeout(300);
+ await p.locator('#library-list').selectOption({label:'Full V05 Session (session)'});await p.waitForFunction(()=>document.querySelector('#library-preview').textContent.includes('Pattern A'));
+ assert.match(await p.locator('#library-preview').textContent(),/Complete session/);
+ // Inspect the exact exported Blob as well as the browser's download event.
+ await p.evaluate(()=>{const create=URL.createObjectURL.bind(URL);URL.createObjectURL=blob=>{window.sessionExport=blob;return create(blob);};});
+ const downloaded=p.waitForEvent('download');await p.locator('#session-download').click();const dl=await downloaded;
+ assert.match(dl.suggestedFilename(),/\.pigeon$/);const data=JSON.parse(await p.evaluate(()=>window.sessionExport.text()));assert.equal(data.format,'pigeon-archive');assert.equal(data.objects.length,10);
+ assert.deepEqual(errors,[]);console.log('v0.5 browser: playback editing, normalization, named bank/session save/overwrite/load, previews and complete-session download PASS');
+ await p.screenshot({path:fileURLToPath(new URL('../../build/v05-loader.png',import.meta.url)),fullPage:true});
+}finally{await b.close();server.close();}

@@ -12,23 +12,45 @@ static void ko_publish(int dirty)
     if (dirty && memcmp(ko_table(), &ko.table[ko.current ^ 1u], sizeof(ko_table_t))) {
         ko.undo = *ko_table(); ko.undo_selected = ko.selected; ko.undo_valid = 1;
     }
+    /* Decoder work belongs to the main loop, never the note-on ISR. */
+    const slc_src_t *src=slc_get(ko_src());
+    ko_table_t *next=&ko.table[ko.current^1u];
+    if(src)for(uint32_t j=0;j<next->n;j++) {
+        ko_chop_t *c=&next->chop[j];const ko_chop_t *old=&ko_table()->chop[j];
+        if(!c->play)c->play_st=c->st;
+        else if(dirty && j<ko_table()->n && c->a==old->a && c->b==old->b && c->st==old->st && c->play==old->play)c->play_st=old->play_st;
+        else c->play_st=slc_state_at(src,ko_play_pos(c));
+    }
     __asm__ volatile("" ::: "memory");
     ko.current ^= 1u; ko.revision++;
+    if(dirty)for(uint32_t vi=0;vi<NVOICE;vi++)ko_blend_data(ko_id())[vi].ready=0;
     if (dirty) ko.dirty = 1;
 }
-static void ko_auto(void)
+static void ko_default_table(ko_table_t *d)
 {
     const slc_src_t *s = slc_get(ko_src());
-    ko_table_t *d = ko_edit(); memset(d, 0, sizeof *d);
+    memset(d, 0, sizeof *d);
     if (s) {
         d->n = s->nauto < KO_CHOPS ? s->nauto : KO_CHOPS;
         for (uint32_t j = 0; j < d->n; j++) {
             d->chop[j].a = s->apos[j];
             d->chop[j].b = j + 1u < d->n ? s->apos[j + 1u] : s->len;
-            d->chop[j].st = s->ast[j];
+            d->chop[j].st = d->chop[j].play_st = s->ast[j];
         }
     }
+
+}
+static void ko_auto(void)
+{
+    ko_default_table(ko_edit());
     ko.selected = ko.bank = 0; ko.cursor = 0; ko.undo_valid = 0; ko_publish(0);
+}
+/* Restore the source bank's original assignments without touching encoded audio. */
+static int ko_reset_chops(void)
+{
+    if(!ko_table()->n)return 0;
+    ko_default_table(ko_edit());
+    ko_publish(1);ko.selected=ko.bank=0;ko.cursor=0;return 1;
 }
 static int ko_restore(const ko_table_t *in)
 {
@@ -37,7 +59,7 @@ static int ko_restore(const ko_table_t *in)
     for (uint32_t j = 0; j < in->n; j++) {
         const ko_chop_t *c = &in->chop[j];
         if (c->a >= c->b || c->b > s->len || c->b - c->a < SLC_MIN || c->pitch < -24 || c->pitch > 24 ||
-            (c->rsv & ~KO_FLAGS_MASK)) return 0;
+            (c->rsv & ~KO_FLAGS_MASK) || c->reverse>1 || c->cents<-100 || c->cents>100 || c->gain>4095 || c->xfade>8) return 0;
     }
     ko_table_t *d = ko_edit(); *d = *in;
     for (uint32_t j = 0; j < d->n; j++) d->chop[j].st = slc_state_at(s, d->chop[j].a);
@@ -88,10 +110,10 @@ static void ko_select(uint32_t j)
 {
     uint32_t n = ko_table()->n;
     uint32_t selected=n ? (j<n ? j : n-1u) : 0;
-    uint32_t cursor=n ? ko_table()->chop[selected].a : 0;
+    uint32_t cursor=n ? (ko_play_edit?ko_play_pos(&ko_table()->chop[selected]):ko_table()->chop[selected].a) : 0;
     if (ko.selected==selected && ko.cursor==cursor && ko.bank==selected/KO_PADS) return;
     ko.selected = (uint8_t)selected;
-    ko.bank = ko.selected / KO_PADS; ko.cursor = n ? ko_table()->chop[ko.selected].a : 0;
+    ko.bank = ko.selected / KO_PADS; ko.cursor = cursor;
     ko.revision++;
 }
 /* Keep movement proportional to the waveform window, including unzoomed songs. */
@@ -128,7 +150,15 @@ static void ko_chop_turn(uint32_t knob, int32_t clicks)
     ko_table_t *d = ko_edit(); uint32_t j = ko.selected; ko_chop_t *c = &d->chop[j];
     int32_t quantum = (int32_t)ko_wave_quantum(s,256);
     int32_t delta = clamp(clicks, -1000, 1000) * (quantum ? quantum : 1);
-    if (knob == 0) {
+    if(knob==0 && ko_play_edit==3) {c->cents=(int16_t)clamp(c->cents+clicks,-100,100);}
+    else if(knob==0 && ko_play_edit==4) {c->gain=(uint16_t)clamp((c->gain?c->gain:256)+clicks*8,1,4095);}
+    else if(knob==0 && ko_play_edit==5) {c->xfade=(uint16_t)clamp(c->xfade+clicks,0,8);}
+    else if (knob == 0 && ko_play_edit==2) {
+        c->reverse=(uint16_t)(clicks>0);
+    } else if (knob == 0 && ko_play_edit==1) {
+        c->play=(uint16_t)clamp((int32_t)c->play+clamp(clicks,-1000,1000)*(256>>ko.zoom?256>>ko.zoom:1),0,65535);
+        ko.cursor=ko_play_pos(c);
+    } else if (knob == 0) {
         int32_t lo = 0, hi = (int32_t)c->b - SLC_MIN;
         uint32_t next=(uint32_t)clamp((int32_t)c->a + delta * 2, lo, hi);
         if(next!=c->a) {c->a=next; c->st=slc_state_at(s,c->a); }
@@ -213,7 +243,7 @@ static int ko_copy_settings(uint32_t source)
 {
     if(source>=ko_table()->n || !ko_table()->n)return 0;
     ko_table_t *d=ko_edit();d->chop[ko.selected].pitch=d->chop[source].pitch;
-    d->chop[ko.selected].rsv=d->chop[source].rsv;ko_publish(1);return 1;
+    d->chop[ko.selected].rsv=d->chop[source].rsv;d->chop[ko.selected].play=d->chop[source].play;d->chop[ko.selected].reverse=d->chop[source].reverse;d->chop[ko.selected].cents=d->chop[source].cents;d->chop[ko.selected].gain=d->chop[source].gain;d->chop[ko.selected].xfade=d->chop[source].xfade;ko_publish(1);return 1;
 }
 static void ko_envelope_turn(uint32_t knob,int32_t clicks)
 {

@@ -70,14 +70,14 @@ export function arrangeWorkspace() {
     song.querySelector('.wave-help').textContent='Drag to select · Backspace deletes · S splits · Scroll to zoom · Drag clips to reorder';
   }
   const chop = $('chop-wave').closest('section'); chop.id='chop-workspace';
-  const playbackFields = ['chop-choke','chop-pitch','chop-attack','chop-release','chop-mode','chop-loop'].map(n=>$(n).closest('label'));
-  const playbackSettings = fold('Chop playback settings', [group('Playback',playbackFields)]);
+  const playbackFields = ['chop-playpoint','chop-reverse','chop-cents','chop-gain','chop-xfade','chop-choke','chop-pitch','chop-attack','chop-release','chop-mode','chop-loop'].map(n=>$(n).closest('label'));
+  const playbackSettings = fold('Chop playback settings', [group('Playback',playbackFields),group('Playback tools',['chop-point-cursor','chop-point-reset','chop-normalize'].map($))]);
   const assign = fold('Copy, move & detect chops', [
     group('Detect',[$('chop-sensitivity').closest('label'),$('chop-auto')]),
     group('Assign keys',[$('chop-copy').closest('label'),...['chop-paste','chop-full','chop-swap','chop-move'].map($)])
   ]);
   const chopActions = $('chop-apply').parentElement;
-  chopActions.replaceChildren(group('Edit', ['chop-duplicate','chop-split','chop-merge'].map($)),group('Listen', ['chop-play','chop-stop'].map($)), $('chop-apply'));
+  chopActions.replaceChildren(group('Edit', ['chop-duplicate','chop-split','chop-merge','chop-reset'].map($)),group('History', ['chop-undo','chop-redo'].map($)),group('Listen', [...['chop-play','chop-stop'].map($),$('chop-audition').closest('label')]), $('chop-apply'));
   secondary([...chopActions.querySelectorAll('button')].filter(n=>n.id!=='chop-apply'));
   chopActions.after(playbackSettings,assign);
   chop.querySelector('.section-heading').nextElementSibling.textContent='Choose a song and load its waveform. Select a chop to adjust its range, then apply. Scroll to zoom; drag the overview to pan.';
@@ -89,7 +89,7 @@ export function arrangeWorkspace() {
   if(firmware) {const drawer=fold('Firmware update',[]);firmware.before(drawer);drawer.append(firmware);}
   const rename=$('rename-song').closest('.edit-fields');
   const naming=fold('Song label',[rename]);chop.append(naming);
-  for(const [id,label] of [['songs','Songs'],['chop-workspace','Chops'],['drum-workspace','Drums'],['pattern-workspace','Patterns'],['device-tools','FM1']]) {
+  for(const [id,label] of [['songs','Songs'],['chop-workspace','Chops'],['chop-collection','Chop library'],['drum-workspace','Drums'],['pattern-workspace','Patterns'],['device-tools','FM1']]) {
     const a=document.createElement('a');a.href='#'+id;a.textContent=label;nav.append(a);
   }
   document.querySelector('.preparation-note').after(nav);

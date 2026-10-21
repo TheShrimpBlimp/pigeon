@@ -162,7 +162,7 @@ static void set_fl_size(uint8_t *lg, uint32_t size)
 int main(int argc, char **argv)
 {
     size_t olen;
-    static uint8_t user[0x1000], reclaimed[KO_APP_DATA_HI-KO_APP_HI], top[KO_TOP_HI-KO_TOP_LO], extra[KO_EXTRA_HI-KO_EXTRA_LO];
+    static uint8_t user[0x1000], reclaimed[KO_APP_DATA_HI-KO_APP_HI], top[KO_TOP_HI-KO_TOP_LO], extra[KO_EXTRA_HI-KO_GROW_LO];
     int expanded = argc > 3 && !strcmp(argv[3], "ko-storage");
     int extra_pool=0;
     uint8_t *old, head[0x4000];
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
         memcpy(nor+KO_TOP_LO,top,sizeof top);
         if(extra_pool) {
             for(i=0;i<sizeof extra;i++)extra[i]=(uint8_t)(i*17u+9u);
-            memcpy(nor+KO_EXTRA_LO,extra,sizeof extra);
+            memcpy(nor+KO_GROW_LO,extra,sizeof extra);
         }
     }
     /* a sector that comes in different the second time (a transfer error after the check) is read again */
@@ -250,8 +250,8 @@ int main(int argc, char **argv)
     bad += check("a sector changed in transfer after the check is read again", flip_seen == 3);
     flip_addr = 0xFFFFFFFFu;
     bad += check("app area and every reserved sample extent match",
-        !memcmp(nor+0x4000,logical+nfo+0x4000,(extra_pool?KO_EXTRA_LO:expanded?KO_APP_HI:0x93000)-0x4000) &&
-        (!extra_pool || (!memcmp(nor+KO_EXTRA_LO,extra,sizeof extra) &&
+        !memcmp(nor+0x4000,logical+nfo+0x4000,(extra_pool?KO_GROW_LO:expanded?KO_APP_HI:0x93000)-0x4000) &&
+        (!extra_pool || (!memcmp(nor+KO_GROW_LO,extra,sizeof extra) &&
           !memcmp(nor+KO_EXTRA_HI,logical+nfo+KO_EXTRA_HI,KO_APP_HI-KO_EXTRA_HI))) &&
         (!expanded || (!memcmp(nor+KO_APP_DATA_HI,logical+nfo+KO_APP_DATA_HI,0x93000-KO_APP_DATA_HI) &&
           !memcmp(nor+KO_APP_HI,reclaimed,sizeof reclaimed) && !memcmp(nor+KO_TOP_LO,top,sizeof top))));

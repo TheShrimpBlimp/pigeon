@@ -10,6 +10,9 @@ static void ko_pattern_paste(void);
 static void ko_pattern_save(void);
 static void ko_pattern_keys(uint32_t notes);
 static void ko_arrange_turn(uint32_t k,int32_t steps);
+#if FELUCCA_SAMPLER_ONLY
+static void ko_scene_capture(void);
+#endif
 static int ko_pattern_start(int arrangement);
 static void ko_pattern_preload(void);
 static void ko_mixer_turn(uint32_t k,int32_t steps);
@@ -108,8 +111,31 @@ static uint32_t ko_loop_bpm(void) {
     uint32_t rate=(src->rate*44100u+32768u)>>16,len=c->b-c->a;return (60u*ko_loop_beats*rate+len/2u)/len;
 }
 static void ko_ui_invalidate(void);
+#if FELUCCA_SAMPLER_ONLY
+/* Retrigger only notes explicitly held for local boundary audition. */
+static void ko_edit_audition(uint32_t knob)
+{
+    uint32_t held=kb_tail & fm1_in.notes;
+    if(knob>1 || !held)return;
+    fm1_irq_off();
+    for(uint32_t key=0;key<27;key++)if((held & (1u<<key)) && kb_trk[key]==song.sel) {
+        trk_note_off(TSEL,kb_note[key]);ko_tail_preview=(uint8_t)(knob==1?1:2);
+        trk_note_on(TSEL,kb_note[key],100);ko_tail_preview=0;
+    }
+    fm1_irq_on();
+}
+#endif
 static void ko_knob(uint32_t k, int32_t s)
 {
+#if FELUCCA_KO_MAINT
+    if(ko.view==34){
+        if(!k)ko_select((uint32_t)clamp((int32_t)ko.selected+s,0,(int32_t)ko_table()->n-1));
+        else if(k==1)ko_keep_target=(uint8_t)clamp((int32_t)ko_keep_target+s,0,1);
+        else if(k==2){if(s>0)ko_keep_mask[ko_id()]|=1u<<ko.selected;else ko_keep_mask[ko_id()]&=~(1u<<ko.selected);}
+        else ko_keep_mask[ko_id()]=s>0?~0u:0;
+        ko_keep_confirm=0;ui.force=1;return;
+    }
+#endif
     if (!ko_ready()) return;
     if (ko.view==0 && song.sel!=1) { ko_manual_ms=fm1_ms; ko_follow_a=~0u; }
     track_t *t = TSEL;
@@ -297,7 +323,12 @@ static void ko_knob(uint32_t k, int32_t s)
         }
     } else if (ko.view==6) ko_performance_turn(k,s);
     else if (ko.view == 0) {
-        if (song.sel!=1) ko_chop_turn(k, s);
+        if (song.sel!=1) {
+            ko_chop_turn(k, s);
+#if FELUCCA_SAMPLER_ONLY
+            if(s)ko_edit_audition(k);
+#endif
+        }
         else {
             static const uint8_t ids[4] = {P_LEVEL, P_E1, P_E2, P_E4};
             uint32_t id = ids[k];
@@ -317,7 +348,7 @@ static void ko_knob(uint32_t k, int32_t s)
     } else if (ko.view == 5 && song.sel!=1) {
         if (!k) ko_flag_turn(KO_NO_LOOP, s);
         else if (k == 1) ko_flag_turn(KO_LATCH, s);
-        else if (k==3 && s) ui_message(ko_undo() ? "CHOP UNDO / REDO" : "NO CHOP EDIT TO UNDO");
+        else if (k==3 && s) ui_message(s>0?(ko_reset_chops()?"CHOPS RESET":"NO CHOPS TO RESET"):(ko_undo()?"CHOP UNDO / REDO":"NO CHOP EDIT TO UNDO"));
         else if (k == 2 && s) {
             int ok = s > 0 ? ko_split() : ko_join();
             ui_message(ok ? "CHOPS UPDATED" : "CANNOT EDIT CHOP");
@@ -334,7 +365,11 @@ static void ko_knob(uint32_t k, int32_t s)
     }
     ui.force = 1;
 }
-static struct { uint8_t y; uint16_t ink; char text[48]; } ko_lines[20];
+static struct { uint8_t y; uint16_t ink; char text[48]; } ko_lines[20]
+#if FELUCCA_SAMPLER_ONLY
+    __attribute__((section(".pool")))
+#endif
+    ;
 static uint8_t ko_line_n, ko_ui_valid, ko_fx_valid;
 static struct {char text[64];int32_t amount;} ko_fx_cache[4];
 static void ko_ui_invalidate(void) { ko_ui_valid=0; ko_line_n=0;ko_fx_valid=0; ko_follow_a=~0u; }
@@ -431,24 +466,24 @@ static const voice_t *ko_latest_voice(void)
 }
 /* Reuse the existing canvas. Each changed column lands with its final colours,
  * without a background clear before the waveform or markers. */
-static int16_t ko_marks[3]={-1,-1,-1};
+static int16_t ko_marks[4]={-1,-1,-1,-1};
 static void ko_wave_draw(uint32_t a,uint32_t span,const ko_chop_t *c,int force)
 {
     int moved=force || a!=ko_wave_a || span!=ko_wave_span;
-    uint32_t points[3]={c->a,c->b,ko.cursor};int16_t marks[3];
-    for(uint32_t i=0;i<3;i++) marks[i]=points[i]>=a && points[i]-a<=span ?
+    uint32_t points[4]={c->a,c->b,ko.cursor,ko_play_pos(c)};int16_t marks[4];
+    for(uint32_t i=0;i<4;i++) marks[i]=points[i]>=a && points[i]-a<=span ?
         (int16_t)((points[i]-a)*(KO_WAVE_COLS-1)/span) : -1;
     ko_wave_peaks(a,a+span);
     for(uint32_t x=0;x<KO_WAVE_COLS;) {
         int dirty=moved;
-        for(uint32_t i=0;i<3;i++) if(marks[i]!=ko_marks[i] && (marks[i]==(int32_t)x || ko_marks[i]==(int32_t)x)) dirty=1;
+        for(uint32_t i=0;i<4;i++) if(marks[i]!=ko_marks[i] && (marks[i]==(int32_t)x || ko_marks[i]==(int32_t)x)) dirty=1;
         if(!dirty) {x++;continue;}
         uint32_t width=moved?KO_WAVE_COLS:1;
         cv_begin(width,69,T_BG);
         for(uint32_t q=0;q<width;q++) {
             int32_t hi=132-ko_wave_cache.hi[x+q]/2,lo=132-ko_wave_cache.lo[x+q]/2;
             cv_rect(q,hi-98,1,lo-hi+1,T_MID);
-            for(uint32_t i=0;i<3;i++) if(marks[i]==(int32_t)(x+q)) cv_rect(q,0,1,69,i==2?T_ACCENT:T_THEME);
+            for(uint32_t i=0;i<4;i++) if(marks[i]==(int32_t)(x+q)) cv_rect(q,0,1,69,i>=2?T_ACCENT:T_THEME);
         }
         cv_blit(12+x,98);x+=width;
     }
@@ -637,13 +672,13 @@ static void ko_draw(void)
             uint32_t a = ko.cursor > span / 2 ? ko.cursor - span / 2 : 0;
             if (a > s->len - span) a = s->len - span;
             if(ko_follow_a!=~0u) a=ko_follow_a;
-            ko_line(52, "K1 START / K2 END", T_MID);
+            ko_line(52, ko_play_edit==5?"K1 CROSSFADE / K2 END":ko_play_edit==4?"K1 GAIN / K2 END":ko_play_edit==3?"K1 CENTS / K2 END":ko_play_edit==2?"K1 DIRECTION / K2 END":ko_play_edit?"K1 PLAY POINT / K2 END":"K1 LOOP START / K2 END", T_MID);
             ko_line(74, "K3 SCROLL / K4 ZOOM", T_MID);
             ko_wave_draw(a,span,c,layout);
-            ko_value(184, "OCT PITCH semis ", c->pitch);
+            if(ko_play_edit==5)ko_value(184,"LOOP CROSSFADE ms ",c->xfade);else if(ko_play_edit==4)ko_value(184,"GAIN percent ",(c->gain?c->gain:256)*100u/256u);else if(ko_play_edit==3)ko_value(184,"FINE cents ",c->cents);else if(ko_play_edit==2)ko_line(184,c->reverse?"REVERSE":"FORWARD",T_THEME);else ko_value(184, "OCT PITCH semis ", c->pitch);
 
         }
-        if(s && tab->n){if(ko_queue[ko_id()].on)ko_value(205,"QUEUE / WAITING ",ko_queue[ko_id()].count);else ko_line(205,"EDIT CHOPS / FX EFFECTS",T_MID);ko_line(224,"HOLD SEL + KEY: END",T_MID);}
+        if(s && tab->n){if(ko_queue[ko_id()].on)ko_value(205,"QUEUE / WAITING ",ko_queue[ko_id()].count);else ko_line(205,"EDIT CHOPS / FX EFFECTS",T_MID);ko_line(224,"LFO NEXT CONTROL / SEL END",T_MID);}
     } else if (ko.view == 0) {
         ko_page("DRUM KIT", "16 PADS / ONE-SHOT SAMPLES", "ENV PAD / FX EFFECTS");
         ko_fx_number(0,"K1 LEVEL",TSEL->p[P_LEVEL],"",127);
@@ -712,7 +747,39 @@ static void ko_draw(void)
         if(length)ko_fx_number(1,"K2 NOTE LENGTH",length,"steps",0);else ko_card(1,"K2 NOTE LENGTH","TRACK GATE");
         ko_fx_number(2,"K3 NOTE NUDGE",ko_note_nudge(data),"/16 step",0);
         ko_fx_number(3,"K4 STEP",step+1,"",0);
-    } else if(ko.view==30) {
+    }
+#if FELUCCA_KO_MAINT
+    else if(ko.view==34){
+        ko_page("KEEP SELECTED CHOPS","","REC MARK / SEL KEEP / LFO BACK");
+        ko_fx_number(0,"K1 CHOP",ko.selected+1,"",0);ko_card(1,"K2 DESTINATION",ko_keep_target?"SONG 2":"SONG 1");
+        ko_card(2,"K3 + / -",(ko_keep_mask[ko_id()]&(1u<<ko.selected))?"MARKED":"NOT MARKED");ko_card(3,"K4 + / -","ALL / NONE");
+        ko_line(178,ko_keep_target==ko_id()?"KEEPS KEYS / OTHERS SILENT":"APPEND TO EMPTY KEYS",T_MID);
+        ko_line(205,ko_keep_confirm?"SEL AGAIN TO CONFIRM":"BACK UP BEFORE REPLACING",T_MID);
+    }
+#endif
+#if FELUCCA_USB_SAMPLE
+    else if(ko.view==33){
+        ko_page("USB SAMPLER","",ko_usb.state>=5?"CONFIRM ABOVE / LFO BACK":ko_usb.state==4?"ENV RETRY / SEL KEEP / LFO DROP":"ENV REC/STOP / LFO DROP");
+        if((ko_usb.state?ko_usb.target:song.sel==1?2:song.sel==2)==2)ko_value(66,"DRUM PAD ",(ko_usb.state?ko_usb.pad:ko_kit_pad)+1);
+        else ko_line(66,(ko_usb.state?ko_usb.target:song.sel==2)?"DESTINATION SONG 2":"DESTINATION SONG 1",T_MID);
+        if(ko_usb.state>=4){ko_value(80,"K1 START ms ",ko_usb.trim_a*20u/441u);ko_value(102,"K2 END ms ",ko_usb.trim_b*20u/441u);}
+        else {ko_value(80,"INPUT / 100: ",ko_usb.level);
+        ko_line(102,ko_usb.clipped?"CLIP / LOWER HOST LEVEL":usb_sample.alt?"INPUT READY":"SELECT USB AUDIO OUT",T_MID);}
+        const char *status=ko_usb.state==1?(ko_usb.triggered?"RECORDING":"WAITING FOR AUDIO"):ko_usb.state==2?"FINISHING":ko_usb.state==4?(ko_usb.preview?"PLAYING / PLAY STOP":"READY / PLAY LISTEN"):ko_usb.state==5?"REPLACE? SEL YES / LFO BACK":ko_usb.state==6?"RETRY? ENV YES / LFO BACK":ko_usb.state==3?"TAKE FAILED":ko_rec_options.reclaim?"RECLAIM? SEL YES / LFO NO":"ENV START / FX EXIT";
+        ko_line(130,status,T_THEME);
+        if(!ko_usb.state){
+            ko_value(154,"K1 THRESHOLD % ",ko_rec_options.threshold);
+            ko_value(178,ko_rec_options.bars?"K3 BARS ":"K2 SECONDS ",ko_rec_options.bars?ko_rec_options.bars:ko_rec_options.seconds);
+        } else {
+            ko_value(154,ko_usb.state>=4?"KEEP ms ":"REC SEC ",ko_usb.state>=4?(ko_usb.trim_b-ko_usb.trim_a)*20u/441u:ko_usb.samples/22050u);
+            ko_value(178,"LEFT SEC ",ko_usb_remaining());
+        }
+        if(ko_usb.state==3)ko_line(205,ko_usb.error==11?"USB STREAM RESET":ko_usb.error==12?"USB PACKET ERROR":ko_usb.error==13?"USB RECORD BUFFER FULL":ko_usb.error==14?"USB RECEIVE OVERRUN":ko_usb.error==15?"USB DISCONNECTED":ko_usb.error==16?"USB SUSPENDED":ko_usb.error==1?"NO USB STREAM":ko_usb.error==2?"TAKE TOO SHORT":"FLASH ERROR",T_MID);
+        else if(!ko_usb.state)ko_line(205,"SEL RECLAIM / BACK UP FIRST",T_MID);
+        else ko_line(205,"BACK UP BEFORE REPLACING",T_MID);
+    }
+#endif
+    else if(FELUCCA_KO_SCRATCH && ko.view==30) {
         uint32_t id=ko_id();const ko_table_t *tab=ko_table();const slc_src_t *src=slc_get(ko_src());
         const voice_t *v=ko_latest_voice();
         char heading[64],ct[12];str_cpy(heading,ko_scratch[id].controls?"K1 SEEK / PRESETS ":"K1 JOG / PRESETS ",sizeof heading);
@@ -769,7 +836,7 @@ static void ko_draw(void)
         ko_fx_number(0,"K1 SOURCE",ko.selected+1,"",0);ko_fx_number(1,"K2 DESTINATION",ko_copy_chop+1,"",0);
         ko_card(2,"K3 TURN RIGHT","SWAP");ko_card(3,"K4 TURN RIGHT","MOVE");
     } else if(ko.view==20) {
-        ko_page("CHOP / COPY + SPLIT", "REC COPY WHOLE CHOP", "ENV MOVE / FX GROUPS");
+        ko_page("CHOP / COPY + SPLIT", "REC COPY WHOLE CHOP", "SEL KEEP / ENV MOVE / FX GROUPS");
         ko_fx_number(0,"K1 TARGET",ko.selected+1,"",0);ko_fx_number(1,"K2 COPY FROM",ko_copy_chop+1,"",0);
         ko_card(2,"K3 + / -","DUPE / SPLIT");ko_card(3,"K4 + / -","SET / MERGE");
     } else if(ko.view==21) {
@@ -827,10 +894,10 @@ static void ko_draw(void)
         ko_line(224,"EDIT RESET / HOME SAMPLE",T_MID);
     } else if (ko.view == 5 && song.sel!=1) {
         const ko_table_t *tab=ko_table();
-        ko_page("CHOP / PLAYBACK", "ENV ENVELOPE / LFO CHOPS", "FX SCRATCH / ARP QUEUE");
+        ko_page("CHOP / PLAYBACK", "ENV ENVELOPE / LFO CHOPS", FELUCCA_USB_SAMPLE?"FX USB SAMPLE / ARP QUEUE":FELUCCA_KO_SCRATCH?"FX SCRATCH / ARP QUEUE":"ARP CHOP QUEUE");
         if(tab->n){const ko_chop_t *c=&tab->chop[ko.selected];
             ko_card(0,"K1 HELD LOOP",c->rsv&KO_NO_LOOP?"OFF":"ON");ko_card(1,"K2 LATCH",c->rsv&KO_LATCH?"ON":"OFF");
-            ko_card(2,"K3 + / -","SPLIT / JOIN");ko_card(3,"K4 TURN","UNDO / REDO");}
+            ko_card(2,"K3 + / -","SPLIT / JOIN");ko_card(3,"K4 - / +","UNDO / RESET");}
         else ko_line(96,"ADD A SONG IN SAMPLE LOADER",T_MID);
     } else {
         ko_comp_t c=ko.comp[song.sel==1];int bypass=c.ratio==1 && c.makeup==0;

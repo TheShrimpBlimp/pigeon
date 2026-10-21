@@ -1,5 +1,7 @@
 # PIGEON v0.4 tutorial
 
+Historical 0.4 documentation. For the 0.5 candidate use the [current tutorial](PIGEON_V05_GUIDE.md) and [acceptance record](PIGEON_V05_ACCEPTANCE.md).
+
 These controls describe the released PIGEON v0.4 firmware, verified on physical FM1 hardware.
 For build status and verification notes, see [development notes](PIGEON_V04_DEVELOPMENT.md).
 
@@ -7,8 +9,11 @@ For build status and verification notes, see [development notes](PIGEON_V04_DEVE
 
 1. Export a complete recovery archive in the sample tool. Keep the downloaded
    file outside the browser. v0.4 projects cannot be opened by public v0.3.1.
-2. Coming from another custom firmware? Revert to official M-VAVE **V15** using
-   that firmware's stock-return procedure first. Use a charged FM1, a direct USB
+2. Coming from another custom firmware? Use
+   [TransitFM1](https://quixotic7.github.io/TransitFM1/) as the stopover first.
+   Follow its supported-source instructions; it is currently host-tested only.
+   If your firmware is refused, follow its documented alternative path.
+   Use a charged FM1, a direct USB
    data cable and desktop Chrome or Edge. Close other MIDI applications. Install
    the approved PIGEON package; keep power and USB connected until reboot.
 3. Open the sample tool. Add one or more audio files to Song 1; adding another

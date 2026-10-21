@@ -1286,15 +1286,16 @@ static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l
     cv_blit(SPL_X0, y);
 }
 #ifndef PIGEON_SPLASH_TITLE
-#define PIGEON_SPLASH_TITLE "PIGEON V0.4 DEV"
+#define PIGEON_SPLASH_TITLE "PIGEON V0.5 BETA"
 #endif
 static void draw_splash(void)
 {
 #if FELUCCA_SAMPLER_ONLY && BRAND_SPLASH_AVAILABLE
     lcd_fill(0, 0, 240, 240, T_BG);
     /* Reuse the existing canvas one row at a time; no extra RAM buffer. */
+    cv_begin(BRAND_SPLASH_W, 1, T_BG);
     for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
-        cv_begin(BRAND_SPLASH_W, 1, T_BG);
+        lcd_sync(); /* retain prior-row pixels, after DMA releases the canvas */
         brand_splash_row(y, cv_px);
         cv_blit((240u-BRAND_SPLASH_W)/2u, y);
     }

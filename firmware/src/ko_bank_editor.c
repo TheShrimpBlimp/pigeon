@@ -1,13 +1,19 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Commands 90..96, explicitly negotiated before any erase. All addresses are
  * logical pool offsets, never host-supplied physical flash addresses. */
-static ko_bank_hdr_t ko_upload_header;
-static ko_bank_hdr_t ko_upload_second;
-static uint32_t ko_upload_total, ko_upload_next, ko_upload_hbytes, ko_metadata_next;
+/* Command 91 silences/invalidate all sources before sharing these headers.
+ * No extra sector/header scratch survives between editor requests. */
+#define ko_upload_header ko_bank
+#define ko_upload_second ko_bank_second
+static uint32_t ko_upload_next, ko_upload_hbytes, ko_metadata_next;
 static uint32_t ko_wire_u21(const uint8_t *a) { return a[0] | (uint32_t)a[1]<<7 | (uint32_t)a[2]<<14; }
 static void ko_wire_out(uint32_t v) { ed_b(v); ed_b(v>>7); ed_b(v>>14); }
 static int ko_bank_handle(uint32_t cmd, const uint8_t *a, uint32_t na)
 {
+#if FELUCCA_KO_MAINT
+    if(cmd>=91 && cmd<=93 && ko_reclaim_locked()){ed_b(6);return 1;}
+#endif
+    if(cmd==98){ed_b(75);ed_b(5);ed_b(63);return 1;} /* read-only v0.5 chop capabilities */
     if (cmd == 97) { /* RAM-only diagnostics, no flash or transport changes. */
         if (na>1 || (na && a[0]>1)) { ed_b(1); return 1; }
         if (na && a[0]) ko_diag_reset();
@@ -103,9 +109,8 @@ static int ko_bank_handle(uint32_t cmd, const uint8_t *a, uint32_t na)
     /* commit, header last; failed CRC cannot publish an incomplete bank */
     if (na || !ko_upload_total || ko_upload_next!=ko_upload_total || ko_upload_hbytes!=sizeof ko_upload_header*(ko_upload_header.version==3 ? 2u : 1u) ||
         ko_upload_header.used!=ko_upload_total || !ko_bank_header_valid(&ko_upload_header) || !ko_bank_second_valid(&ko_upload_header,&ko_upload_second)) { ed_b(2); return 1; }
-    ko_bank=ko_upload_header;ko_bank_second=ko_upload_second;
     if (ko_bank_crc(KO_BANK_HEAD,ko_bank.used-KO_BANK_HEAD)!=ko_bank.crc || !ko_bank_index_valid()) { ed_b(3); return 1; }
     if (ko_upload_header.version==3 && st_prog(SMP_USER_BASE+sizeof ko_upload_header,&ko_upload_second,sizeof ko_upload_second)) { ed_b(4);return 1; }
     if (st_prog(SMP_USER_BASE,&ko_upload_header,sizeof ko_upload_header)) { ed_b(4);return 1; }
-    ko_bank_scan(); ed_b(ko_bank_active?0:5); return 1;
+    ko_upload_total=0;ko_bank_scan(); ed_b(ko_bank_active?0:5); return 1;
 }

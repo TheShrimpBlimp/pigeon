@@ -26,7 +26,7 @@ try{
  assert.equal(await page.locator('#trial-total .nixie-active').allTextContents().then(a=>a.join('')),'0000001');
  assert(await page.locator('#save-bank').isDisabled());assert(await page.locator('#open-loader').isDisabled());
  assert.equal(await page.locator('#song1-name').textContent(),'Empty');
- assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 496 KiB');
+ assert.equal(await page.locator('#sample-usage').textContent(),'0.0 KiB / 500 KiB');
  await page.locator('#song1-file').setInputFiles({name:'editable.wav',mimeType:'audio/wav',buffer:wav(2)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'Empty','choosing a file must not load it before editing');
@@ -70,7 +70,7 @@ try{
  assert.equal(download.suggestedFilename(),'pigeon-emulator-bank.kob');
  const bank=new Uint8Array(await fs.readFile(await download.path())),info=inspect(bank);
  assert.equal(info.songs.length,2);assert.equal(info.pads,1);assert.equal(bank.length,info.used+4096);
- for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x314f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
+ for(const offset of [256,1024]){const meta=bank.subarray(info.used),v=new DataView(meta.buffer,meta.byteOffset,meta.length);assert.equal(v.getUint32(offset,true),0x324f4b46);assert.equal(v.getUint32(offset+540,true),crc(meta.subarray(offset,offset+540)));}
  assert(songChops(bank,1).length>0);assert(songChops(bank,2).length>0);
  const sessionDownload=page.waitForEvent('download');await page.locator('#save-session').click();const sessionFile=await sessionDownload;
  assert.equal(sessionFile.suggestedFilename(),'pigeon-emulator-session.pigeon');const session=JSON.parse(await fs.readFile(await sessionFile.path(),'utf8')),validated=validateArchive(session);
@@ -93,7 +93,7 @@ try{
  await page.locator('#song1-file').setInputFiles({name:'too-long.wav',mimeType:'audio/wav',buffer:wav(65)});
  await page.getByText('Song 1 selected. Edit the section, then press Apply to Song 1.',{exact:true}).waitFor();
  await page.locator('#song1-editor .apply-section').click();
- await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('496 KiB'));
+ await page.waitForFunction(()=>document.getElementById('sample-status').textContent.includes('500 KiB'));
  assert.equal(await page.locator('#song1-name').textContent(),'my-song.wav');
  await page.locator('#song1-quality').evaluate(e=>e.closest('details').open=true);await page.locator('#song1-quality').selectOption('24');await page.locator('#song1-file:not([disabled])').waitFor();
  await page.locator('#song1-file').setInputFiles({name:'compressed.wav',mimeType:'audio/wav',buffer:wav(65)});
@@ -101,7 +101,7 @@ try{
  await page.locator('#song1-editor .apply-section').click();
  await page.getByText('Samples loaded. Play the keys to try them.',{exact:true}).waitFor();
  assert.equal(await page.locator('#song1-name').textContent(),'compressed.wav');
- assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=507904);
+ assert(Number(await page.locator('#sample-meter').getAttribute('value'))<=512000);
  await page.locator('#storage-mode').selectOption('unlimited');await page.locator('#song1-file:not([disabled])').waitFor();
  assert(await page.locator('#song1-quality').isHidden());
  await page.locator('#save-bank').click();await page.getByText('This unlimited bank is too large for an FM1. Switch to limited storage mode and reduce the audio or MP3 quality before exporting.',{exact:true}).waitFor();

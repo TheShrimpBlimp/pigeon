@@ -945,6 +945,9 @@ static void mix_block(int32_t *out, uint32_t n)
     perf = perf_begin(n);                               /* the FX hold layer at work (perform.c) */
     for (i = 0; i < (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NPART); i++)
         mix_part(&trk[i], n);
+#if FELUCCA_USB_SAMPLE
+    ko_usb_audio(n);
+#endif
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);

@@ -63,8 +63,9 @@ int KO_TEST_MAIN(void)
 #if BRAND_SPLASH_AVAILABLE && FELUCCA_SAMPLER_ONLY
     draw_splash();
     int photo_ok = BRAND_SPLASH_W == 240 && BRAND_SPLASH_H == 240;
+    uint16_t row[BRAND_SPLASH_W]={0};
     for (uint32_t y = 0; y < BRAND_SPLASH_H; y++) {
-        uint16_t row[BRAND_SPLASH_W];brand_splash_row(y,row);
+        brand_splash_row(y,row);
         for (uint32_t x = 0; x < BRAND_SPLASH_W; x++)
             if ((y < 24 || y >= 123 || x >= 168) && !(x >= 20 && x < 64 && y >= 211 && y < 224)) photo_ok &= host_screen[y*240u+(240u-BRAND_SPLASH_W)/2u+x] ==
                         row[x];

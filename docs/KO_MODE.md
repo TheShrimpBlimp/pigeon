@@ -1,25 +1,30 @@
-# PIGEON sample workflow — v0.4
+# PIGEON sample workflow — v0.5 candidate
 
 PIGEON has three tracks: Song 1, Drums and Song 2. Each song is one audio
 source with up to 32 chops; a source can combine several imported files.
 There is no fourth playable track in the sampler profile.
 
-This guide describes PIGEON v0.4 and Sample Loader 2.0: 496 KiB shared storage, eight shared song voices and four dedicated drum voices. The v0.4 hardware smoke test passed, including busy playback and sample/project preservation.
+This guide describes the 0.5 candidate and matching sample loader: 500 KiB
+usable shared storage, eight shared song voices and four dedicated drum voices.
+Final hardware acceptance is pending; see the [test sheet](PIGEON_V05_HARDWARE_TEST.md).
 
 ## 1. Prepare your FM1
 
 Back up samples and projects before changing firmware. When coming from
-another custom firmware, revert to official M-VAVE V15 using that firmware’s
-documented stock-return procedure, then install PIGEON. Use a charged FM1,
+another custom firmware, use [TransitFM1](https://quixotic7.github.io/TransitFM1/)
+as the stopover, following its supported-source instructions, then install PIGEON.
+TransitFM1 is currently host-tested only. Follow its documented alternatives if
+it refuses your source firmware. Use a charged FM1,
 a direct USB data cable and desktop Chrome or Edge. Stop playback, release
 keys, close other MIDI apps and keep the computer awake during transfers.
 
-The public installer serves v0.4. Building locally does not update your FM1.
+The public installer remains on its deployed release until 0.5 acceptance.
+Building locally does not update your FM1.
 See [building](https://github.com/TheShrimpBlimp/pigeon/blob/main/BUILDING.md) and [recovery](PIGEON_RECOVERY.md).
 
 ## 2. Make a song in Sample Loader 2.0
 
-Open the [sample loader](https://theshrimpblimp.github.io/pigeon-website/webapp/pigeon/).
+Open the [sample loader](https://theshrimpblimp.com/pigeon/webapp/pigeon/).
 It starts empty; audio is decoded and edited on your computer.
 
 1. Under Song 1, choose **Add audio files**. Select one or several files.
@@ -94,7 +99,7 @@ sequence notes belong to the current phrase.
 
 ## 6. Save a phrase and a complete session
 
-SCL opens Patterns. Select A–D, stop playback and release keys, then press SAVE.
+SEL opens Patterns. Select A–D, stop playback and release keys, then press SAVE.
 One phrase stores all three sequences together, including timing, automation
 and arrangement. Patterns share the loaded bank and chop layouts; changing A–D
 does not load different samples. The unsaved indicator warns before discarding
@@ -117,10 +122,13 @@ playback of compressed songs. MIDI controllers (including the FM1) can play
 the browser instrument. Full physical panel relay requires compatible firmware
 and still needs hardware verification.
 
-Read [storage formats](KO_STORAGE.md) and the [v0.4 release checklist](PIGEON_V04_RELEASE.md) for more detail.
+Read [storage formats](KO_STORAGE.md) and the [0.5 acceptance record](PIGEON_V05_ACCEPTANCE.md) for more detail.
 
 Page buttons respond on press. HOME returns to the waveform; HOME on the waveform opens Settings. Hold SEL on the waveform and play a chop key to audition its ending, then loop from the beginning while held, without recording it. Merged clips occupy the first keys as whole sections, followed by automatic slices in the remaining slots.
 
 To update an existing merged bank that only has one chop per section, reopen the original audio clips in the loader, Apply the song again, save a backup, and send the resulting bank. Reapplying replaces that song’s chop layout; export any custom chop work first. A firmware reflash alone does not regenerate the bank’s chops.
 
-The [v0.4 tutorial](PIGEON_V04_GUIDE.md) covers queues, scratch decks, per-note timing, sequence tools, fills, screen-reader support and MIDI routing. Back up before updating: v0.4 projects are not readable by public v0.3.1.
+The [0.5 tutorial](PIGEON_V05_GUIDE.md) covers USB sampling, selected-chop
+retention, reclamation, playback settings, patterns and complete sessions.
+Scratch is excluded; per-chop reverse remains. Back up before updating: public
+0.3.1 cannot read the 115-parameter projects used by 0.4 and 0.5.

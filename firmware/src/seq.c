@@ -1520,6 +1520,11 @@ static void ko_end_capture(track_t *t)
     }
     ko_seq[p].pending=t->xf_on || t->xp_n;
 }
+static int ko_end_boundary(const track_t *t,uint32_t n){
+ uint32_t p=(uint32_t)(t-trk);if(t->seq_pos>=0x7fffffffu || t->seq_idx+1u!=(uint32_t)t->p[P_SLEN] || ko_seq[p].pending)return 0;
+ int tracked=0;for(uint32_t i=0;i<NVOICE;i++)if(ko_seq[p].age[i]){tracked=1;const voice_t *v=&t->v[i];if(v->active && v->age==ko_seq[p].age[i] && (!ko_song(t)||v->s[6]!=2))return 0;}
+ return tracked || t->seq_pos+n>=step_samples(t,div_samples((uint32_t)t->p[P_SDIV]),t->seq_idx);
+}
 static void ko_end_tick(track_t *t, uint32_t n)
 {
     if (!song.playing) return;

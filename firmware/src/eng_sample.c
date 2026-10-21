@@ -112,6 +112,9 @@ static int smp_ko_pair_valid(void)
  * every zone of it empty (n 0: a voice still on it ends), never a half-checked one */
 static void smp_user_scan(uint32_t k)
 {
+#if FELUCCA_KO_MAINT
+    if(!k && ko_reclaim_boot()<0){ko_bank_active=0;return;}
+#endif
 #if FELUCCA_KO_STORAGE
     if (*(const uint32_t *)smp_user_xip(0) == KO_BANK_MAGIC) {
         if (!k) ko_bank_scan();

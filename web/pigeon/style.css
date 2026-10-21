@@ -387,3 +387,5 @@ footer .support-row{text-align:left;margin:0 0 20px;padding:0}.song .wave-help{f
 
 .timeline-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.timeline-actions>.control-group:first-child{grid-column:1/-1}.timeline-actions>.control-group:first-child button{flex:1 1 90px}footer>.support-row{grid-column:1/-1;display:block;width:auto;justify-self:start}footer .coffee-link{white-space:nowrap}.workspace-drawer>section{margin:0;border:0;padding:0}
 @media(max-width:600px){.timeline-actions{grid-template-columns:1fr}.timeline-actions>.control-group:first-child{grid-column:auto}}
+
+.session-preview{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line,#39452f);padding:1rem;font:inherit;font-size:.85rem;line-height:1.6}.session-preview:empty{display:none}

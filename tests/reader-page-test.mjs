@@ -6,10 +6,10 @@ const mime={'.js':'text/javascript','.wasm':'application/wasm','.html':'text/htm
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost'),name=url.pathname;
  if(name==='/api/trials'){res.setHeader('Content-Type','application/json');res.end('{"total":0}');return;}
- let relative=name.startsWith('/webapp/emu/')?'build/emu/'+name.slice(12):name.startsWith('/webapp/pigeon/')?'web/pigeon/'+name.slice(15):name.startsWith('/webapp/')?'web/'+name.slice(8):'web/'+name.slice(1);
+ let relative=name.startsWith('/webapp/emu/')?(process.env.PIGEON_EMULATOR_DIR||'build/emu')+'/'+name.slice(12):name.startsWith('/webapp/pigeon/')?'web/pigeon/'+name.slice(15):name.startsWith('/webapp/')?'web/'+name.slice(8):'web/'+name.slice(1);
  if(relative.endsWith('/'))relative+='index.html';let file=path.resolve(base,relative);
  if(!file.startsWith(base+'/'))throw Error('path');
- let data;try{data=await fs.readFile(file);}catch(e){if(!fallback)throw e;file=path.join(fallback,path.basename(name));data=await fs.readFile(file);}
+ let data;try{data=await fs.readFile(file);}catch(e){if(!fallback)throw e;file=path.join(fallback,name.replace(/^\//,''));data=await fs.readFile(file);}
  res.setHeader('Content-Type',mime[path.extname(file)]||'application/octet-stream');res.end(data);
  }catch{res.writeHead(404);res.end();}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -36,6 +36,23 @@ try{
  await page.waitForFunction(()=>/Knob 4, reverb/i.test(document.getElementById('reader-live').textContent));
  assert.match(await page.locator('#reader-live').textContent(),/Knob 1, filter/i);
  assert(!/Edit resets effects/i.test(await page.locator('#reader-transcript').textContent()));
+ // Screen readers dispatch click without pointer or keyboard events.
+ await page.getByRole('button',{name:'SEQ',exact:true}).evaluate(element=>element.click());
+ await page.waitForFunction(()=>/sequenc|grid/i.test(document.getElementById('reader-transcript').textContent));
+ await page.locator('#reader-again').click();
+ assert(await page.locator('#reader-again').isEnabled());
+ const key=page.getByRole('button',{name:'F3',exact:true});
+ await key.focus();await page.keyboard.down('Enter');
+ assert(await page.locator('g.held .face.key').count()>0);
+ await page.keyboard.up('Enter');
+ await page.waitForFunction(()=>!document.querySelector('g.held .face.key'));
+ await key.evaluate(element=>element.click());
+ assert(await page.locator('g.held .face.key').count()>0);
+ await page.waitForFunction(()=>!document.querySelector('g.held .face.key'));
+ await page.reload();
+ assert(await page.locator('#reader-enable').isChecked(),'announcement preference persists');
+ await page.locator('#go').click();await page.locator('#start').waitFor({state:'hidden'});
+ await page.waitForFunction(()=>/No song loaded/i.test(document.getElementById('reader-transcript').textContent));
  await page.locator('#reader-enable').uncheck();assert(await page.locator('#reader-where').isDisabled());
  assert.deepEqual(errors,[]);console.log('PIGEON reader page: real AudioWorklet, local dictionary, live regions, page announcements, WHERE and opt-out passed.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

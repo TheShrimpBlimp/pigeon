@@ -2,7 +2,8 @@
 
 Build PIGEON with `PYTHON=.venv/bin/python ./build-sampler.sh`.
 The product profile is mandatory: `FELUCCA_SAMPLER_ONLY=1`, dual songs,
-shared sample storage, and no serial console. The version is defined in `firmware/src/project_identity.h`.
+shared sample storage, USB sampling and maintenance, Scratch disabled, and no
+serial console. The version is defined in `firmware/src/project_identity.h`.
 
 PIGEON has its own page registry, waveform reader, and sampler screens.
 The inherited graph renderers (including synth editors, scope, piano roll,

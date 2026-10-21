@@ -56,7 +56,9 @@ typedef struct {
     } u;
 } phys_slot_t;
 
+#if !FELUCCA_SAMPLER_ONLY
 ENG_MEM_FITS("PHYS", sizeof(phys_slot_t) * PHYS_POLY);   /* (it sets ENG_MEM_PART) */
+#endif
 
 static const char *const N_PHYS_MODEL[] = {"MODAL", "STRNG", "MEMB", "SYMP"};
 static const char *const N_PHYS_CHORD[] = {"OCT", "5TH", "4TH", "MAJ", "MIN", "SUS", "7TH", "ROOT", 0};

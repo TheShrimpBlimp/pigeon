@@ -40,7 +40,8 @@ OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_
 if os.environ.get("FELUCCA_SAMPLER_ONLY") == "1":
     FUNCS = FUNCS[FUNCS.index("slice_render"):]
     FUNCS.insert(0, "sample_render")
-    FUNCS.extend(["ko_scratch_render", "ko_scratch_read"])
+    if os.environ.get("FELUCCA_KO_SCRATCH") != "0":
+        FUNCS.extend(["ko_scratch_render", "ko_scratch_read"])
 TOL = 0.10                      # exact (no noise): small edits pass, a grown render loop does not
 DIV_W = 8                       # a divide weighs 1 + 8 instructions
 NEST = 4                        # an instruction in a loop inside a loop weighs 4, two deep 16, ...
@@ -101,6 +102,11 @@ def main():
     if not os.path.exists(dis):
         print(f"target: skip ({dis} missing: run ./build.sh)")
         return 0
+    if os.environ.get("FELUCCA_KO_SCRATCH") == "0":
+        text = open(dis).read()
+        if re.search(r"^ko_scratch_(?:render|read):", text, re.M):
+            print("target: FAIL Scratch code remains in the no-Scratch product")
+            return 1
     fns = functions(dis)
     res = {n: cost(fns[n]) for n in FUNCS if fns.get(n)}
     missing = [n for n in FUNCS if n not in res and n not in OPTIONAL]

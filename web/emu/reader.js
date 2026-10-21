@@ -6,7 +6,7 @@ export const readerFrame=(cmd)=>[0xf0,0x7d,0x53,0x52,cmd,...(cmd===1?[1]:[]),0xf
 export class PigeonReader {
   constructor({send,onText=()=>{},fetcher=globalThis.fetch,speech=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance}={}) {
     this.send=send;this.onText=onText;this.fetcher=fetcher;this.speech=speech;this.Utterance=Utterance;
-    this.enabled=false;this.words=[];this.pending=[];this.queue=[];this.mode='screen-reader';this.helloId='';
+    this.last=null;this.enabled=false;this.words=[];this.pending=[];this.queue=[];this.mode='screen-reader';this.helloId='';
   }
   enable(on){
     this.enabled=on;
@@ -33,7 +33,9 @@ export class PigeonReader {
     }
     if(d[4]===16){if(this.loading)this.pending.push([text,d[5]]);else this.say(text,d[5]);}
   }
+  repeat(){if(this.enabled && this.last)this.say(this.last.text,this.last.flags|1);}
   say(text,flags){
+    this.last={text,flags};
     const words=spoken(text,this.words);if(!words)return;
     this.onText(words,!!(flags&2),flags);
     if(this.mode!=='voice'||!this.speech||!this.Utterance)return;
@@ -50,10 +52,16 @@ export class PigeonReader {
 }
 export function attachReader({send,root=document}){
   const toggle=root.getElementById('reader-enable'),mode=root.getElementById('reader-output'),read=root.getElementById('reader-where');
-  const transcript=root.getElementById('reader-transcript');
+  const transcript=root.getElementById('reader-transcript'),again=root.getElementById('reader-again');
+  try {
+    const preferences=JSON.parse(localStorage.getItem('pigeon-emulator-reader')||'null');
+    if(preferences){toggle.checked=preferences.enabled===true;if(['voice','screen-reader'].includes(preferences.mode))mode.value=preferences.mode;}
+  } catch { /* Storage may be unavailable. */ }
+  const save=()=>{try{localStorage.setItem('pigeon-emulator-reader',JSON.stringify({enabled:toggle.checked,mode:mode.value}));}catch{}};
   let pending=[],timer;
   const clear=()=>{clearTimeout(timer);timer=null;pending=[];};
   const reader=new PigeonReader({send,onText(text,keep,flags=0){
+    if(again)again.disabled=false;
     // WHERE arrives as several protocol frames: expose one coherent live-region
     // update, rather than rapidly replacing and losing individual controls.
     if(flags&1 || keep)clear();
@@ -73,7 +81,10 @@ export function attachReader({send,root=document}){
       }
     },100);
   }});
-  toggle.onchange=()=>{clear();reader.enable(toggle.checked);read.disabled=!toggle.checked;};
-  mode.onchange=()=>{clear();reader.mode=mode.value;reader.queue=[];reader.speech?.cancel();reader.busy=false;reader.protected=false;};read.onclick=()=>reader.where();
+  toggle.onchange=()=>{clear();reader.enable(toggle.checked);read.disabled=!toggle.checked;if(again)again.disabled=!toggle.checked||!reader.last;root.getElementById('reader-live').textContent='';root.getElementById('reader-alert').textContent='';save();};
+  mode.onchange=()=>{clear();reader.mode=mode.value;reader.queue=[];reader.speech?.cancel();reader.busy=false;reader.protected=false;save();if(reader.enabled)reader.where();};read.onclick=()=>reader.where();
+  if(again)again.onclick=()=>reader.repeat();
+  reader.mode=mode.value;
+  if(toggle.checked)toggle.onchange();
   window.addEventListener('pagehide',()=>{clear();reader.close();});return reader;
 }

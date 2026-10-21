@@ -1,5 +1,7 @@
 # PIGEON v0.4 release checklist
 
+Historical 0.4 documentation. For the 0.5 candidate use the [current tutorial](PIGEON_V05_GUIDE.md) and [acceptance record](PIGEON_V05_ACCEPTANCE.md).
+
 PIGEON v0.4 passed automated release validation and the owner’s hardware smoke
 test. The exact package was flashed successfully; the complete sample bank and
 all ten project/settings objects matched the pre-flash archive byte for byte.
@@ -30,8 +32,10 @@ The [tutorial](PIGEON_V04_GUIDE.md), [controls](PIGEON_CONTROLS.md),
 ## Update and compatibility
 
 Export a **complete recovery archive** before installing. Keep the file outside
-the browser. From another custom firmware, first restore official M-VAVE **V15**
-using that firmware's documented stock-return procedure. Then install PIGEON
+the browser. From another custom firmware, use
+[TransitFM1](https://quixotic7.github.io/TransitFM1/) as the stopover, following
+its supported-source instructions. Its current release is host-tested only;
+follow its documented alternatives if your source firmware is refused. Then install PIGEON
 with a direct USB data cable and a fully charged instrument.
 
 The package retains the existing USB/update identity and recovery boot stub.

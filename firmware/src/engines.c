@@ -12,14 +12,27 @@
  * that runs on across notes and switches stays outside (WHEEL's wheels, GRAIN's random numbers).
  * Sized by the largest, PHYS (3 x SYMP's slot); an engine that needs more than ENG_MEM_PART grows it for
  * every part (x NPART of the pool). Zero-initialised pool section: main.c fm1_cstart clears it. */
+#if FELUCCA_SAMPLER_ONLY
+/* Full eight-voice MP3 caches plus crossfade metadata; no PHYS workspace. */
+#define ENG_MEM_PART 12448u
+#else
 #define ENG_MEM_PART 12888u
+#endif
 #define ENG_MEM_PARTS (FELUCCA_SAMPLER_ONLY ? SAMPLER_PARTS : NPART)
-static union {
-    uint64_t align;
-    uint8_t b[ENG_MEM_PART];
-} eng_mem[ENG_MEM_PARTS] __attribute__((section(".pool")));
-static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in the region, 0 = none (zeros) */
-#define ENG_MEM(p) ((void *)eng_mem[p].b)  /* part p's region (p < NPART) */
+typedef union {uint64_t align;uint8_t b[ENG_MEM_PART];} eng_mem_t;
+#if FELUCCA_SAMPLER_ONLY
+/* MP3 and crossfade caches belong only to song tracks. Retain reverse windows
+ * for a legacy SLICE kit, although the normal kit uses memory-free SAMPLE. */
+#define ENG_KIT_MEM 1024u
+static eng_mem_t eng_mem[1u+FELUCCA_KO_DUAL] __attribute__((section(".pool")));
+static union {uint64_t align;uint8_t b[ENG_KIT_MEM];} eng_kit_mem __attribute__((section(".pool")));
+static void *eng_mem_ptr(uint32_t p){return p>=ENG_MEM_PARTS?0:p==1?eng_kit_mem.b:eng_mem[p==2].b;}
+#define ENG_MEM(p) eng_mem_ptr(p)
+#else
+static eng_mem_t eng_mem[ENG_MEM_PARTS] __attribute__((section(".pool")));
+#define ENG_MEM(p) ((void *)eng_mem[p].b)
+#endif
+static uint8_t eng_mem_owner[NPART];
 #define ENG_MEM_FITS(name, size) _Static_assert((size) <= ENG_MEM_PART, name " state over ENG_MEM_PART")
 
 #include "eng_analog.c"
@@ -102,6 +115,10 @@ static void eng_mem_claim(const track_t *t)
         return;
     e = eng_idx(t->engine);
     n = ENGINES[e]->mem;
+#if FELUCCA_SAMPLER_ONLY
+    /* SLICE advertises full song caches, but the kit only owns reverse windows. */
+    if(p==1 && n>ENG_KIT_MEM)n=ENG_KIT_MEM;
+#endif
     if (!n || eng_mem_owner[p] == e + 1u)
         return;
     w = (uint32_t *)ENG_MEM(p);

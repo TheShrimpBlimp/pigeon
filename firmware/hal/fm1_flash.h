@@ -55,7 +55,7 @@ static inline void *fl_far(void *p) { void *volatile q = p; return q; }
                              FL_IN(off, n, FL_AUTO_LO, FL_VBANK_HI) || \
                              (FELUCCA_KO_STORAGE && (FL_IN(off, n, KO_APP_HI, KO_APP_DATA_HI) || \
                                                     FL_IN(off, n, KO_TOP_LO, KO_TOP_HI) || \
-                                                    FL_IN(off, n, KO_EXTRA_LO, KO_EXTRA_HI))))
+                                                    FL_IN(off, n, KO_GROW_LO, KO_EXTRA_HI))))
 /* Where the RAM driver may erase / program. The app build allows only its own
  * data regions; the update loader (firmware/loader) defines its own window. */
 #ifndef FL_RANGE_OK
@@ -140,10 +140,14 @@ RAMINL void fl_inval(uint32_t off, uint32_t len)
         fl_cache_idle();
     }
 }
-RAMINL int fl_wait_ready(uint32_t max_us, uint32_t *took_us)
+#ifndef FL_PROGRAM_POLL
+#define FL_PROGRAM_POLL() ((void)0)
+#endif
+RAMINL int fl_wait_ready(uint32_t max_us, uint32_t *took_us, int program)
 {
     uint32_t t0 = T4_CNT, dt;
     for (;;) {
+        if (program) FL_PROGRAM_POLL();
         dt = (T4_CNT - t0) / 24u;
         if (!(fl_rdsr(0x05) & 1u)) { *took_us = dt; return 0; }
         if (dt > max_us) { *took_us = dt; return -4; }
@@ -183,7 +187,7 @@ static RAMFN int fl_erase4k_ram(uint32_t off, uint32_t *took_us)
     else {
         fl_cs(0); fl_tx(0x20); fl_addr(off); fl_cs(1);
         fl_inval(off, 4096u);
-        rc = fl_wait_ready(500000u, took_us);     /* generic NOR max 400 ms */
+        rc = fl_wait_ready(500000u, took_us, 0);     /* generic NOR max 400 ms */
     }
     fl_exit(&s);
     return rc;
@@ -202,7 +206,7 @@ static RAMFN int fl_prog_ram(uint32_t off, const uint8_t *src, uint32_t n, uint3
         for (i = 0; i < n; i++) fl_tx(src[i]);
         fl_cs(1);
         fl_inval(off, n);
-        rc = fl_wait_ready(10000u, took_us);      /* generic NOR max 3 ms */
+        rc = fl_wait_ready(10000u, took_us, 1);      /* generic NOR max 3 ms */
     }
     fl_exit(&s);
     return rc;
@@ -226,12 +230,12 @@ static RAMFN int fl_read_ram(uint32_t off, uint8_t *dst, uint32_t n)   /* 0x0B f
 static void fl_plain_window_init(void)
 {
     SFCENC_CON &= (uint8_t)~2u;
-    SFCENC_UNENC_L = FL_XIP(FELUCCA_KO_STORAGE ? KO_EXTRA_LO : 0x93000u);
+    SFCENC_UNENC_L = FL_XIP(FELUCCA_KO_STORAGE ? KO_GROW_LO : 0x93000u);
     SFCENC_UNENC_H = 0x07FFFFFFu;
     SFCENC_CON |= 2u;
     __asm__ volatile("cli" ::: "memory");
-    fl_inval(FELUCCA_KO_STORAGE ? KO_EXTRA_LO : 0x93000u,
-             0x100000u - (FELUCCA_KO_STORAGE ? KO_EXTRA_LO : 0x93000u));
+    fl_inval(FELUCCA_KO_STORAGE ? KO_GROW_LO : 0x93000u,
+             0x100000u - (FELUCCA_KO_STORAGE ? KO_GROW_LO : 0x93000u));
     __asm__ volatile("csync\n\tsti" ::: "memory");
 }
 

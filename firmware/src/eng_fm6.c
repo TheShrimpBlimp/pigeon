@@ -55,7 +55,9 @@ static struct {                                  /* the patch through the macros
 } fm6_eff[NTRK];
 static fm6_lfo_t fm6_lfo[NTRK];
 static int32_t fm6_lfo_v[NTRK], fm6_lfo_d[NTRK]; /* this block's LFO value and delay (Q24) */
+#if !FELUCCA_SAMPLER_ONLY
 ENG_MEM_FITS("FM6", sizeof(fm6_note_t) * FM6_POLY);
+#endif
 /* the voice bank (fm6_vbank.c; in the pool, zeroed at boot: no bank without the store) */
 static uint32_t fm6_bank_used __attribute__((section(".pool")));   /* bit k: B k+1 holds a voice */
 static int (*fm6_bank_read)(uint32_t k, uint8_t *pk) __attribute__((section(".pool")));   /* voice k -> pk, 0 = read */
