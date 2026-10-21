@@ -10,8 +10,8 @@ export PIGEON_RELEASE_VERSION
 import os,re
 from pathlib import Path
 version=os.environ['PIGEON_RELEASE_VERSION']
-if not re.fullmatch(r'\d+\.\d+\.\d+',version):
-    raise SystemExit('Release version must be X.Y.Z (without v).')
+if not re.fullmatch(r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?',version):
+    raise SystemExit('Release version must be X.Y.Z or X.Y.Z-beta.N (alpha/rc also supported), without v.')
 source=Path('firmware/src/project_identity.h').read_text()
 match=re.search(r'^#define FW_DISPLAY_VERSION "v([^"\n]+)"$',source,re.M)
 if not match or match[1]!=version:

@@ -4,9 +4,8 @@ PIGEON turns the **M-VAVE FM1** into an audio performance sampler: two song
 tracks, a 16-pad drum kit, chopping, sequencing and USB sampling. Created and
 directed by **The Shrimp Blimp**, built on Felucca 1.5.1 and shared under GPL-3.0-only.
 
-This branch contains the **v0.5 development candidate**. Software checks pass;
-final FM1 acceptance is pending. The public site remains on the previous release
-until acceptance. Start with the [0.5 tutorial](docs/PIGEON_V05_GUIDE.md),
+This branch contains **0.5.0-beta.1 — THE FINAL BETA**. Software checks pass;
+the maintainer reports the hardware checklist complete. Start with the [0.5 tutorial](docs/PIGEON_V05_GUIDE.md),
 [quick controls](docs/PIGEON_CONTROLS.md) and [hardware checklist](docs/PIGEON_V05_HARDWARE_TEST.md).
 
 ## What it does
@@ -88,6 +87,7 @@ layout can be installed. See [flash layout](docs/PIGEON_FLASH_LAYOUT.md).
 
 ## Guides
 
+- [Complete feature list](docs/PIGEON_V05_FEATURES.md)
 - [0.5 start-to-finish tutorial](docs/PIGEON_V05_GUIDE.md)
 - [Quick controls](docs/PIGEON_CONTROLS.md) and [sample workflow](docs/KO_MODE.md)
 - [Sample loader guide](web/pigeon/README.md)

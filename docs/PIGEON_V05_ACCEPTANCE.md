@@ -1,4 +1,4 @@
-# PIGEON 0.5-dev candidate validation
+# PIGEON 0.5 final beta validation
 
 THE FINAL BETA, prepared for publication 2026-10-21. The maintainer reports all
 remaining hardware checks passed: recording, persistence, expanded flash tail,
@@ -7,7 +7,15 @@ These are maintainer-reported hardware results; automated evidence is listed bel
 The subsequent SEL label-only rebuild is covered by software checks. Source remains
 on the development branch; this is a beta, not the final 0.5 release.
 
-## Current flash-expansion candidate
+## Signed GitHub build
+
+Publication tag: `v0.5.0-beta.1`. The tagged source changes version and splash
+labels only after the maintainer hardware report. The canonical download will
+be the exact GitHub-built release asset, verified with the shared workflow
+attestation. Its SHA-256 is published in the release SHA256SUMS; local builds
+are not substitutes for that artifact.
+
+## Previous locally flashed candidate
 
 Use `build/pigeon.fwsc` (611106 bytes), not the historical USB candidates
 below. SHA-256: `3e25f9644fddaffcabcd2b6ae32a4d9e35248d95395756a4582254c4b007179d`.

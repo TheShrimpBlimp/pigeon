@@ -12,7 +12,7 @@ set -e
 cd "$(dirname "$0")/../.."
 [ -f build/gen/felucca_tables.h ] || { echo "emu: run ./build.sh once first (build/gen)"; exit 1; }
 command -v emcc >/dev/null 2>&1 || { echo "emu: no emcc (Emscripten)"; exit 1; }
-VERSION=PIGEON-0.5-dev
+VERSION=PIGEON-$(sed -n 's/^#define FW_DISPLAY_VERSION "v\([^"]*\)"$/\1/p' firmware/src/project_identity.h)
 "${PYTHON:-python3}" tools/gen_words.py firmware/words.tsv web/words build/gen/ann_words.h
 mkdir -p build/emu/fonts
 rm -f build/emu/fonts/DotGothic16-subset.woff build/emu/fonts/OFL.txt
