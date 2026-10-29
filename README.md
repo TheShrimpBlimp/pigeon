@@ -1,8 +1,11 @@
 # PIGEON — sampler firmware for the M-VAVE FM1
 
-PIGEON turns the **M-VAVE FM1** into an audio performance sampler: two song
-tracks, a 16-pad drum kit, chopping, sequencing and USB sampling. Created and
+PIGEON is free, open-source sampler firmware for the **M-VAVE FM1 (FM-1)**,
+with **500 KiB of usable shared sample storage** across two song tracks and
+16 drum pads. The [official PIGEON website](https://theshrimpblimp.com/pigeon/)
+hosts the browser emulator, sample loader and firmware installer. Created and
 directed by **The Shrimp Blimp**, built on Felucca 1.5.1 and shared under GPL-3.0-only.
+Chop, sequence, perform and record samples over USB.
 
 This branch contains **0.5.0-beta.1 — THE FINAL BETA**. Software checks pass;
 the maintainer reports the hardware checklist complete. Start with the [0.5 tutorial](docs/PIGEON_V05_GUIDE.md),
