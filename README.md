@@ -172,3 +172,5 @@ FM1 X0X code and the Felucca adaptation by Leo Kuroshita and Hügelton Instrumen
 Standard firmware includes the FM-1 Screen Reader protocol. The emulator offers
 browser speech and live-region announcements; both start disabled. See
 [setup and controls](docs/SCREEN_READER.md).
+
+You can also try PIGEON in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
